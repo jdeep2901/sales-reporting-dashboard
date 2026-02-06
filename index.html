@@ -3457,8 +3457,52 @@
       setInsight('insight-compare', lines);
     }
 
-    function sellerFromMovementRow(row) {
-      return String((row && row.seller) || 'Unknown').trim() || 'Unknown';
+    function canonicalDealKey(deal, month) {
+      return `${String(deal || '').trim().toLowerCase()}||${String(month || '').trim().toLowerCase()}`;
+    }
+
+    function canonicalDealStageKey(deal, month, stage) {
+      return `${canonicalDealKey(deal, month)}||${String(stage || '').trim().toLowerCase()}`;
+    }
+
+    function buildSellerLookupFromDataset(dataset) {
+      const out = { byStage: {}, byDealMonth: {} };
+      const sellersObj = (dataset && dataset.scorecard && dataset.scorecard.sellers) || {};
+      Object.entries(sellersObj).forEach(([seller, metric]) => {
+        if (seller === 'All (unique deals)') return;
+        const details = (metric && metric.kpi_details) || {};
+        const rows = [...(details.stage_1_6 || []), ...(details.stage_7_8 || [])];
+        rows.forEach((r) => {
+          const deal = r && r.deal;
+          const month = r && r.created_month;
+          const stage = r && r.stage;
+          if (!deal || !month) return;
+          out.byDealMonth[canonicalDealKey(deal, month)] = seller;
+          if (stage) out.byStage[canonicalDealStageKey(deal, month, stage)] = seller;
+        });
+      });
+      return out;
+    }
+
+    function sellerFromMovementRow(row, leftLookup, rightLookup) {
+      const raw = String((row && row.seller) || '').trim();
+      const rawLower = raw.toLowerCase();
+      if (raw && rawLower !== 'all (unique deals)' && rawLower !== 'unknown') return raw;
+      const deal = row && row.deal;
+      const month = (row && row.intro_month) || (row && row.created_month);
+      if (!deal || !month) return raw || 'Unknown';
+      const stageRight = row && (row.right_stage || row.stage);
+      const stageLeft = row && (row.left_stage || row.stage);
+      const tryMaps = [
+        [rightLookup && rightLookup.byStage, canonicalDealStageKey(deal, month, stageRight)],
+        [leftLookup && leftLookup.byStage, canonicalDealStageKey(deal, month, stageLeft)],
+        [rightLookup && rightLookup.byDealMonth, canonicalDealKey(deal, month)],
+        [leftLookup && leftLookup.byDealMonth, canonicalDealKey(deal, month)],
+      ];
+      for (const [map, key] of tryMaps) {
+        if (map && key && map[key]) return map[key];
+      }
+      return raw || 'Unknown';
     }
 
     function momentumStageInScope(stage, scope) {
@@ -3500,7 +3544,7 @@
       sellerSelect.value = [...sellerSelect.options].some((x) => x.value === current) ? current : 'Overall';
     }
 
-    function buildMomentumRows(payload, scope, knownSellers) {
+    function buildMomentumRows(payload, scope, knownSellers, leftLookup, rightLookup) {
       const movement = payload.movement || {};
       const stageDeltas = payload.stage_deltas || [];
       const stuckDeltas = payload.stuck_deltas || [];
@@ -3525,7 +3569,7 @@
       (knownSellers || []).forEach((s) => init(s));
 
       (movement.stage_changed || []).forEach((r) => {
-        const seller = sellerFromMovementRow(r);
+        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
         const leftN = stageNumber(r.left_stage);
         const rightN = stageNumber(r.right_stage);
         if (leftN == null || rightN == null) return;
@@ -3539,7 +3583,7 @@
 
       (movement.added || []).forEach((r) => {
         if (!momentumStageInScope(r.stage, scope)) return;
-        const seller = sellerFromMovementRow(r);
+        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
         const row = init(seller);
         row.additions += 1;
         row.additionPoints += momentumAdditionPoints(r.stage, scope);
@@ -3547,7 +3591,7 @@
 
       (movement.unchanged || []).forEach((r) => {
         if (!momentumStageInScope(r.stage, scope)) return;
-        const seller = sellerFromMovementRow(r);
+        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
         const row = init(seller);
         row.unchanged += 1;
       });
@@ -3635,14 +3679,14 @@
       });
     }
 
-    function renderMomentumView(payload, data) {
+    function renderMomentumView(payload, data, leftLookup, rightLookup) {
       const body = document.getElementById('momentum-body');
       const sellerFilter = document.getElementById('momentum-seller');
       const scopeSel = document.getElementById('momentum-scope');
       if (!body || !sellerFilter || !scopeSel) return;
       const scope = scopeSel.value || 'core';
       const knownSellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
-      const allRows = buildMomentumRows(payload, scope, knownSellers);
+      const allRows = buildMomentumRows(payload, scope, knownSellers, leftLookup, rightLookup);
       const pick = sellerFilter.value || 'Overall';
       const rows = pick === 'Overall' ? allRows : allRows.filter((x) => x.seller === pick);
 
@@ -4829,8 +4873,14 @@
             return;
           }
           try {
-            const payload = await fetchVersionCompare(leftId, rightId);
-            renderMomentumView(payload || {}, data);
+            const [payload, leftVer, rightVer] = await Promise.all([
+              fetchVersionCompare(leftId, rightId),
+              fetchVersionData(leftId),
+              fetchVersionData(rightId),
+            ]);
+            const leftLookup = buildSellerLookupFromDataset(leftVer && leftVer.dataset);
+            const rightLookup = buildSellerLookupFromDataset(rightVer && rightVer.dataset);
+            renderMomentumView(payload || {}, data, leftLookup, rightLookup);
           } catch (e) {
             setInsight('insight-momentum', [e.message || 'Failed to load momentum analysis.']);
           }
