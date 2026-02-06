@@ -1036,18 +1036,54 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .likelihood-lines {
-      max-height: 210px;
-      overflow: auto;
-      padding: 8px 10px;
-      font-size: 11px;
-      color: #1e345a;
-      font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      word-break: break-word;
+    .likelihood-table-wrap {
       border-top: 1px solid #e7edf7;
       background: #fcfdff;
+    }
+
+    .likelihood-mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 12px;
+      color: #1e345a;
+    }
+
+    .likelihood-mini-table th, .likelihood-mini-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #e8eef8;
+      vertical-align: top;
+    }
+
+    .likelihood-mini-table th {
+      background: #f3f7ff;
+      color: #274777;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .likelihood-mini-table td:nth-child(1), .likelihood-mini-table th:nth-child(1) {
+      width: 58%;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.35;
+      font-weight: 600;
+    }
+
+    .likelihood-mini-table td:nth-child(2), .likelihood-mini-table th:nth-child(2) {
+      width: 25%;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.35;
+      color: #335484;
+    }
+
+    .likelihood-mini-table td:nth-child(3), .likelihood-mini-table th:nth-child(3) {
+      width: 17%;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     .target-controls {
@@ -2242,10 +2278,15 @@
       return out;
     }
 
-    function renderLikelihoodDealLines(el, rows) {
-      if (!el) return;
+    function renderLikelihoodDealLines(bodyEl, rows) {
+      if (!bodyEl) return;
+      bodyEl.innerHTML = '';
       if (!rows.length) {
-        el.textContent = 'No deals tagged';
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals tagged'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        bodyEl.appendChild(tr);
         return;
       }
       const sorted = [...rows].sort((a, b) => {
@@ -2254,11 +2295,13 @@
         if (ad !== bd) return ad.localeCompare(bd);
         return String(a.stage || '').localeCompare(String(b.stage || ''));
       });
-      const lines = ['Deal | Stage | Deal Size'];
       sorted.forEach((r) => {
-        lines.push(`${r.deal || '-'} | ${r.stage || '-'} | ${fmtDealSize(r.deal_size)}`);
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal || '-'));
+        tr.appendChild(makeCell('td', r.stage || '-'));
+        tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
+        bodyEl.appendChild(tr);
       });
-      el.textContent = lines.join('\n');
     }
 
     function updateLikelihoodSummaryForSeller(seller) {
@@ -3112,11 +3155,22 @@
           head2.appendChild(t);
           head2.appendChild(meta2);
           shell.appendChild(head2);
-          const lines = document.createElement('div');
-          lines.className = 'likelihood-lines';
-          lines.textContent = 'No deals tagged';
-          shell.appendChild(lines);
-          return { shell, meta: meta2, lines };
+          const wrap2 = document.createElement('div');
+          wrap2.className = 'likelihood-table-wrap';
+          const table2 = document.createElement('table');
+          table2.className = 'likelihood-mini-table';
+          const thead2 = document.createElement('thead');
+          const hr = document.createElement('tr');
+          hr.appendChild(makeCell('th', 'Deal'));
+          hr.appendChild(makeCell('th', 'Stage'));
+          hr.appendChild(makeCell('th', 'Size'));
+          thead2.appendChild(hr);
+          table2.appendChild(thead2);
+          const body2 = document.createElement('tbody');
+          table2.appendChild(body2);
+          wrap2.appendChild(table2);
+          shell.appendChild(wrap2);
+          return { shell, meta: meta2, lines: body2 };
         }
 
         const thisCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.current}`);
