@@ -1036,27 +1036,88 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .likelihood-table-wrap {
+    .likelihood-lines {
       max-height: 210px;
       overflow: auto;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #1e345a;
+      font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-top: 1px solid #e7edf7;
+      background: #fcfdff;
     }
 
-    .likelihood-table {
+    .target-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      align-items: end;
+    }
+
+    .target-grid input, .target-grid select {
       width: 100%;
-      border-collapse: collapse;
+      min-width: 0;
+      padding: 10px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      font-size: 14px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .target-grid button {
+      border: 1px solid #0b5fff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #0b5fff;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      height: 40px;
+    }
+
+    .target-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 12px;
     }
 
-    .likelihood-table th, .likelihood-table td {
-      padding: 7px 10px;
-      border-bottom: 1px solid #e7edf7;
+    .target-table th, .target-table td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 7px 9px;
       text-align: left;
       white-space: nowrap;
     }
 
-    .likelihood-table th:nth-child(3), .likelihood-table td:nth-child(3) {
+    .target-table th:first-child, .target-table td:first-child {
+      border-left: 1px solid var(--line);
+    }
+
+    .target-table thead th {
+      border-top: 1px solid var(--line);
+      background: #f6f9ff;
+      color: #1f3f75;
+    }
+
+    .target-table td:nth-child(3), .target-table td:nth-child(4) {
       text-align: right;
       font-variant-numeric: tabular-nums;
+    }
+
+    .target-table button {
+      border: 1px solid #d3dcec;
+      border-radius: 6px;
+      background: #fff;
+      color: #264069;
+      font-size: 11px;
+      padding: 4px 7px;
+      cursor: pointer;
     }
 
     .footnote {
@@ -1275,6 +1336,10 @@
 
     @media (max-width: 980px) {
       .admin-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .target-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1596,6 +1661,43 @@
               </table>
             </div>
           </div>
+          <div class="admin-card">
+            <label style="margin-bottom:8px;">Quarter Targets (Per Seller)</label>
+            <form id="admin-target-form" class="target-grid" autocomplete="off">
+              <div>
+                <label for="admin-target-seller">Seller</label>
+                <select id="admin-target-seller"></select>
+              </div>
+              <div>
+                <label for="admin-target-quarter">Quarter</label>
+                <input id="admin-target-quarter" type="text" placeholder="Q4'26" required />
+              </div>
+              <div>
+                <label for="admin-target-deals">Deal Target</label>
+                <input id="admin-target-deals" type="number" min="0" step="1" placeholder="0" />
+              </div>
+              <div>
+                <label for="admin-target-revenue">Revenue Target ($)</label>
+                <input id="admin-target-revenue" type="number" min="0" step="1" placeholder="0" />
+              </div>
+              <button type="submit">Save Target</button>
+            </form>
+            <div id="admin-target-msg" class="auth-error"></div>
+            <div class="admin-table-wrap">
+              <table class="target-table">
+                <thead>
+                  <tr>
+                    <th>Seller</th>
+                    <th>Quarter</th>
+                    <th>Deal Target</th>
+                    <th>Revenue Target</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-targets-body"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1682,13 +1784,16 @@
       '6. Commercial Proposal'
     ]);
     const DEAL_LIKELIHOOD_KEY = 'sales_dashboard_deal_likelihood_v1';
+    const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
     let likelihoodState = {};
+    let quarterTargetsState = {};
     let activeQuarterLabels = { current: 'Current Quarter', next: 'Next Quarter' };
     let scorecardStateBySeller = {};
     let scorecardSummaryEls = {};
+    let scorecardSellerLabels = [];
     const AUTH_USERS_KEY = 'sales_dashboard_users_v1';
     const AUTH_SESSION_KEY = 'sales_dashboard_session_v1';
     let currentUser = null;
@@ -1726,6 +1831,141 @@
 
     function saveLikelihoodState() {
       localStorage.setItem(DEAL_LIKELIHOOD_KEY, JSON.stringify(likelihoodState));
+    }
+
+    function loadQuarterTargetsState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(QUARTER_TARGETS_KEY) || '{}');
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (_) {}
+      return {};
+    }
+
+    function saveQuarterTargetsState() {
+      localStorage.setItem(QUARTER_TARGETS_KEY, JSON.stringify(quarterTargetsState));
+    }
+
+    function normalizeQuarterLabel(raw) {
+      const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+      const m = s.match(/^Q([1-4])'?(\d{2})$/);
+      if (!m) return null;
+      return `Q${m[1]}'${m[2]}`;
+    }
+
+    function quarterTargetKey(seller, quarter) {
+      return `${normalizeUsername(seller)}||${String(quarter || '').trim().toUpperCase()}`;
+    }
+
+    function getQuarterTarget(seller, quarter) {
+      const key = quarterTargetKey(seller, quarter);
+      const x = quarterTargetsState[key] || {};
+      return {
+        deals: Number.isFinite(Number(x.deals)) ? Number(x.deals) : 0,
+        revenue: Number.isFinite(Number(x.revenue)) ? Number(x.revenue) : 0,
+      };
+    }
+
+    function upsertQuarterTarget(seller, quarter, deals, revenue) {
+      const q = normalizeQuarterLabel(quarter);
+      if (!q) throw new Error("Quarter must be in format Q4'26.");
+      const s = String(seller || '').trim();
+      if (!s) throw new Error('Seller is required.');
+      const dealsN = Math.max(0, Number(deals || 0));
+      const revenueN = Math.max(0, Number(revenue || 0));
+      quarterTargetsState[quarterTargetKey(s, q)] = {
+        seller: s,
+        quarter: q,
+        deals: Number.isFinite(dealsN) ? dealsN : 0,
+        revenue: Number.isFinite(revenueN) ? revenueN : 0,
+      };
+      saveQuarterTargetsState();
+      return q;
+    }
+
+    function removeQuarterTarget(seller, quarter) {
+      delete quarterTargetsState[quarterTargetKey(seller, quarter)];
+      saveQuarterTargetsState();
+    }
+
+    function showAdminTargetMessage(message) {
+      const el = document.getElementById('admin-target-msg');
+      if (!el) return;
+      el.textContent = message || '';
+    }
+
+    function renderAdminTargets() {
+      const sellerSelect = document.getElementById('admin-target-seller');
+      const body = document.getElementById('admin-targets-body');
+      if (!sellerSelect || !body) return;
+      sellerSelect.innerHTML = '';
+      scorecardSellerLabels.forEach((seller) => {
+        const o = document.createElement('option');
+        o.value = seller;
+        o.textContent = seller;
+        sellerSelect.appendChild(o);
+      });
+      const qInput = document.getElementById('admin-target-quarter');
+      if (qInput && !qInput.value && activeQuarterLabels.current) {
+        qInput.value = activeQuarterLabels.current;
+      }
+
+      const entries = Object.values(quarterTargetsState || {})
+        .filter((x) => x && x.seller && x.quarter)
+        .sort((a, b) => {
+          const s = String(a.seller).localeCompare(String(b.seller));
+          if (s !== 0) return s;
+          return String(a.quarter).localeCompare(String(b.quarter));
+        });
+      body.innerHTML = '';
+      if (!entries.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No targets configured'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+      entries.forEach((x) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', x.seller));
+        tr.appendChild(makeCell('td', x.quarter));
+        tr.appendChild(makeCell('td', money.format(Number(x.deals || 0))));
+        tr.appendChild(makeCell('td', fmtDealSize(Number(x.revenue || 0))));
+        const tdAction = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', () => {
+          document.getElementById('admin-target-seller').value = x.seller;
+          document.getElementById('admin-target-quarter').value = x.quarter;
+          document.getElementById('admin-target-deals').value = Number(x.deals || 0);
+          document.getElementById('admin-target-revenue').value = Number(x.revenue || 0);
+          showAdminTargetMessage(`Editing ${x.seller} ${x.quarter}.`);
+        });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.textContent = 'Delete';
+        delBtn.style.marginLeft = '6px';
+        delBtn.addEventListener('click', () => {
+          removeQuarterTarget(x.seller, x.quarter);
+          renderAdminTargets();
+          if (window.__salesData) renderScorecard(window.__salesData);
+          showAdminTargetMessage(`Deleted target ${x.seller} ${x.quarter}.`);
+        });
+        tdAction.appendChild(editBtn);
+        tdAction.appendChild(delBtn);
+        tr.appendChild(tdAction);
+        body.appendChild(tr);
+      });
+    }
+
+    function pctText(actual, target) {
+      const t = Number(target || 0);
+      const a = Number(actual || 0);
+      if (t <= 0) return 'n/a';
+      return `${((a / t) * 100).toFixed(1)}%`;
     }
 
     function stageNumber(stage) {
@@ -1822,14 +2062,10 @@
       return out;
     }
 
-    function renderLikelihoodDealTable(bodyEl, rows) {
-      bodyEl.innerHTML = '';
+    function renderLikelihoodDealLines(el, rows) {
+      if (!el) return;
       if (!rows.length) {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', 'No deals tagged'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        bodyEl.appendChild(tr);
+        el.textContent = 'No deals tagged';
         return;
       }
       const sorted = [...rows].sort((a, b) => {
@@ -1838,13 +2074,11 @@
         if (ad !== bd) return ad.localeCompare(bd);
         return String(a.stage || '').localeCompare(String(b.stage || ''));
       });
+      const lines = ['Deal | Stage | Deal Size'];
       sorted.forEach((r) => {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', r.deal || '-'));
-        tr.appendChild(makeCell('td', r.stage || '-'));
-        tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
-        bodyEl.appendChild(tr);
+        lines.push(`${r.deal || '-'} | ${r.stage || '-'} | ${fmtDealSize(r.deal_size)}`);
       });
+      el.textContent = lines.join('\n');
     }
 
     function updateLikelihoodSummaryForSeller(seller) {
@@ -1852,18 +2086,24 @@
       const refs = scorecardSummaryEls[seller];
       if (!metric || !refs) return;
       const x = classifyLikelihoodForSeller(metric);
-      refs.thisQuarterCount.textContent = money.format(x.thisQuarterDeals.length);
-      refs.thisQuarterRevenue.textContent = fmtDealSize(x.thisQuarterRevenue);
-      refs.nextQuarterCount.textContent = money.format(x.nextQuarterDeals.length);
-      refs.nextQuarterRevenue.textContent = fmtDealSize(x.nextQuarterRevenue);
+      const tThis = getQuarterTarget(seller, activeQuarterLabels.current);
+      const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
+      refs.thisQuarterCount.textContent = tThis.deals > 0
+        ? `${money.format(x.thisQuarterDeals.length)} / ${money.format(tThis.deals)}`
+        : money.format(x.thisQuarterDeals.length);
+      refs.thisQuarterRevenue.textContent = `A ${fmtDealSize(x.thisQuarterRevenue)} | T ${fmtDealSize(tThis.revenue)} (${pctText(x.thisQuarterRevenue, tThis.revenue)})`;
+      refs.nextQuarterCount.textContent = tNext.deals > 0
+        ? `${money.format(x.nextQuarterDeals.length)} / ${money.format(tNext.deals)}`
+        : money.format(x.nextQuarterDeals.length);
+      refs.nextQuarterRevenue.textContent = `A ${fmtDealSize(x.nextQuarterRevenue)} | T ${fmtDealSize(tNext.revenue)} (${pctText(x.nextQuarterRevenue, tNext.revenue)})`;
       refs.helpNeededCount.textContent = money.format(x.helpNeededDeals.length);
       refs.pending.textContent = money.format(x.pendingStage3Plus);
-      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals | ${fmtDealSize(x.thisQuarterRevenue)}`;
-      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals | ${fmtDealSize(x.nextQuarterRevenue)}`;
+      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals (T ${money.format(tThis.deals)} | ${pctText(x.thisQuarterDeals.length, tThis.deals)}) | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)})`;
+      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals (T ${money.format(tNext.deals)} | ${pctText(x.nextQuarterDeals.length, tNext.deals)}) | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)})`;
       refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals`;
-      renderLikelihoodDealTable(refs.thisQuarterBody, x.thisQuarterDeals);
-      renderLikelihoodDealTable(refs.nextQuarterBody, x.nextQuarterDeals);
-      renderLikelihoodDealTable(refs.helpBody, x.helpNeededDeals);
+      renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals);
+      renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals);
+      renderLikelihoodDealLines(refs.helpLines, x.helpNeededDeals);
     }
 
     function loadAuthStore() {
@@ -2014,9 +2254,12 @@
       setAdminVisibility(isAdmin);
       if (isAdmin) {
         renderAdminUsers();
+        renderAdminTargets();
       } else {
         const body = document.getElementById('admin-users-body');
         if (body) body.innerHTML = '';
+        const tbody = document.getElementById('admin-targets-body');
+        if (tbody) tbody.innerHTML = '';
       }
     }
 
@@ -2511,6 +2754,7 @@
     function renderScorecard(data) {
       const score = data.scorecard || {};
       const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+      scorecardSellerLabels = [...sellers];
       const wrap = document.getElementById('score-wrap');
       wrap.innerHTML = '';
       activeQuarterLabels = buildQuarterLabels(score.as_of_date);
@@ -2666,22 +2910,11 @@
           head2.appendChild(t);
           head2.appendChild(meta2);
           shell.appendChild(head2);
-          const wrap2 = document.createElement('div');
-          wrap2.className = 'likelihood-table-wrap';
-          const table2 = document.createElement('table');
-          table2.className = 'likelihood-table';
-          const thead2 = document.createElement('thead');
-          const hr2 = document.createElement('tr');
-          hr2.appendChild(makeCell('th', 'Deal'));
-          hr2.appendChild(makeCell('th', 'Stage'));
-          hr2.appendChild(makeCell('th', 'Deal Size'));
-          thead2.appendChild(hr2);
-          table2.appendChild(thead2);
-          const body2 = document.createElement('tbody');
-          table2.appendChild(body2);
-          wrap2.appendChild(table2);
-          shell.appendChild(wrap2);
-          return { shell, meta: meta2, body: body2 };
+          const lines = document.createElement('div');
+          lines.className = 'likelihood-lines';
+          lines.textContent = 'No deals tagged';
+          shell.appendChild(lines);
+          return { shell, meta: meta2, lines };
         }
 
         const thisCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.current}`);
@@ -2701,9 +2934,9 @@
           thisQuarterMeta: thisCard.meta,
           nextQuarterMeta: nextCard.meta,
           helpMeta: helpCard.meta,
-          thisQuarterBody: thisCard.body,
-          nextQuarterBody: nextCard.body,
-          helpBody: helpCard.body,
+          thisQuarterLines: thisCard.lines,
+          nextQuarterLines: nextCard.lines,
+          helpLines: helpCard.lines,
         };
 
         wrap.appendChild(card);
@@ -3163,6 +3396,7 @@
         const setupForm = document.getElementById('auth-setup-form');
         const logoutBtn = document.getElementById('auth-logout');
         const adminUserForm = document.getElementById('admin-user-form');
+        const adminTargetForm = document.getElementById('admin-target-form');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -3170,6 +3404,8 @@
         const funnelMonths = [...(data.months || [])];
         let funnelMinMonth = funnelMonths[0] || null;
         likelihoodState = loadLikelihoodState();
+        quarterTargetsState = loadQuarterTargetsState();
+        window.__salesData = data;
 
         function updateFromCheckboxes() {
           selectedStages.clear();
@@ -3296,6 +3532,7 @@
         setFunnelCore();
         updateFunnelMonth();
         renderScorecard(data);
+        renderAdminTargets();
         renderIndustryAction(data);
         renderWinLoss(data, wlSellerSelect.value);
         renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
@@ -3367,6 +3604,28 @@
             document.getElementById('admin-new-pass').value = '';
           } catch (e) {
             showAdminMessage(e.message || 'Unable to save user.');
+          }
+        });
+
+        adminTargetForm.addEventListener('submit', (evt) => {
+          evt.preventDefault();
+          showAdminTargetMessage('');
+          if (!currentUser || currentUser.role !== 'admin') {
+            showAdminTargetMessage('Only admin users can configure targets.');
+            return;
+          }
+          const seller = document.getElementById('admin-target-seller').value;
+          const quarter = document.getElementById('admin-target-quarter').value;
+          const deals = document.getElementById('admin-target-deals').value;
+          const revenue = document.getElementById('admin-target-revenue').value;
+          try {
+            const q = upsertQuarterTarget(seller, quarter, deals, revenue);
+            renderAdminTargets();
+            if (window.__salesData) renderScorecard(window.__salesData);
+            showAdminTargetMessage(`Saved target for ${seller} ${q}.`);
+            document.getElementById('admin-target-quarter').value = q;
+          } catch (e) {
+            showAdminTargetMessage(e.message || 'Unable to save target.');
           }
         });
 
