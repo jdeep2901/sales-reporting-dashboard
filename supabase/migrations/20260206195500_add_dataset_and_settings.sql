@@ -3,6 +3,8 @@ alter table public.dashboard_state
   add column if not exists dataset jsonb,
   add column if not exists dataset_refreshed_at timestamptz;
 
+drop function if exists public.get_dashboard_state(text, text);
+
 create or replace function public.get_dashboard_state(p_username text, p_password text)
 returns table (
   users jsonb,
