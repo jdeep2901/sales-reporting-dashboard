@@ -1598,6 +1598,106 @@
       cursor: pointer;
     }
 
+    .momentum-wrap {
+      padding: 12px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .momentum-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .momentum-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .momentum-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .momentum-seller {
+      font-size: 15px;
+      font-weight: 700;
+      color: #16386a;
+    }
+
+    .momentum-status {
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .momentum-status.positive {
+      background: #e9fbef;
+      border: 1px solid #b9e8c7;
+      color: #1e7a3f;
+    }
+
+    .momentum-status.negative {
+      background: #ffefef;
+      border: 1px solid #f2c5c5;
+      color: #ad2d2d;
+    }
+
+    .momentum-status.stalled {
+      background: #f4f6fb;
+      border: 1px solid #dce3f0;
+      color: #3d4f70;
+    }
+
+    .momentum-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(90px, 1fr));
+      gap: 6px;
+    }
+
+    .momentum-kpi {
+      border: 1px solid #dbe4f3;
+      border-radius: 8px;
+      background: #fbfdff;
+      padding: 6px 8px;
+    }
+
+    .momentum-kpi-label {
+      color: #587097;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+
+    .momentum-kpi-value {
+      color: #1c3f70;
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .momentum-definition {
+      border: 1px solid #dbe7ff;
+      background: linear-gradient(180deg, #f9fbff, #f3f7ff);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #1f3558;
+      line-height: 1.45;
+    }
+
+    .momentum-definition strong {
+      color: #173f77;
+    }
+
     @media (max-width: 980px) {
       .admin-grid {
         grid-template-columns: 1fr;
@@ -1609,6 +1709,14 @@
 
       .likelihood-grid {
         grid-template-columns: 1fr;
+      }
+
+      .momentum-cards {
+        grid-template-columns: 1fr;
+      }
+
+      .momentum-kpis {
+        grid-template-columns: repeat(2, minmax(100px, 1fr));
       }
     }
   </style>
@@ -1674,6 +1782,7 @@
         <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
         <button id="tab-introtrend" class="tab-btn" type="button">Intro Calls Trend</button>
         <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
+        <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
 
@@ -1950,6 +2059,78 @@
         </div>
       </div>
 
+      <div id="view-momentum" class="view">
+        <div class="head">
+          <div>
+            <h1>Funnel Momentum</h1>
+            <div class="sub">Seller-level view of positive, negative, or stalled funnel movement between two refresh versions.</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="momentum-left">From Version</label>
+              <select id="momentum-left"></select>
+            </div>
+            <div>
+              <label for="momentum-right">To Version</label>
+              <select id="momentum-right"></select>
+            </div>
+            <div>
+              <label for="momentum-seller">Seller</label>
+              <select id="momentum-seller"></select>
+            </div>
+            <div>
+              <label for="momentum-scope">Stage Scope</label>
+              <select id="momentum-scope">
+                <option value="core">1-6 only</option>
+                <option value="all">1-8</option>
+              </select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="momentum-prev" type="button">Compare vs Previous</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="momentum-run" type="button">Run Momentum</button>
+            </div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Momentum Summary</div>
+          <ul id="insight-momentum" class="insight-list"></ul>
+        </div>
+        <div class="momentum-wrap">
+          <div id="momentum-cards" class="momentum-cards"></div>
+          <div class="table-wrap">
+            <table id="momentum-table">
+              <thead>
+                <tr>
+                  <th>Seller</th>
+                  <th>Status</th>
+                  <th>Momentum Score</th>
+                  <th>Forward Points</th>
+                  <th>Backward Points</th>
+                  <th>New Additions</th>
+                  <th>Unchanged</th>
+                  <th>Stuck Delta</th>
+                  <th>Stage 5-6 Delta</th>
+                </tr>
+              </thead>
+              <tbody id="momentum-body"></tbody>
+            </table>
+          </div>
+          <div class="momentum-definition">
+            <strong>Definitions:</strong><br/>
+            <strong>Forward Points</strong> = total stage jumps forward for stage-changed deals (e.g., 2→4 = +2).<br/>
+            <strong>Backward Points</strong> = total stage jumps backward (e.g., 5→3 = +2 backward).<br/>
+            <strong>New Additions</strong> = deals that were not in the older version and appear in the newer version (in selected stage scope).<br/>
+            <strong>Stuck Delta</strong> = change in stuck/help-needed count (positive means worse).<br/>
+            <strong>Momentum Score</strong> = Forward − Backward + Additions bonus − Stuck penalty.<br/>
+            <strong>Status:</strong> Positive if score &gt; 2, Negative if score &lt; -2, otherwise Stalled.
+          </div>
+        </div>
+      </div>
+
       <div id="view-admin" class="view">
         <div class="head">
           <div>
@@ -2144,6 +2325,8 @@
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
+    const MOMENTUM_CORE_STAGE_MAX = 6;
+    const MOMENTUM_ALL_STAGE_MAX = 8;
     let likelihoodState = {};
     let liveLikelihoodState = {};
     let quarterTargetsState = {};
@@ -3169,7 +3352,9 @@
       const main = document.getElementById('version-select');
       const left = document.getElementById('compare-left');
       const right = document.getElementById('compare-right');
-      if (!main || !left || !right) return;
+      const momentumLeft = document.getElementById('momentum-left');
+      const momentumRight = document.getElementById('momentum-right');
+      if (!main || !left || !right || !momentumLeft || !momentumRight) return;
       const options = Array.isArray(versionsMetaState) ? versionsMetaState : [];
       const fill = (sel) => {
         sel.innerHTML = '';
@@ -3183,11 +3368,16 @@
       fill(main);
       fill(left);
       fill(right);
+      fill(momentumLeft);
+      fill(momentumRight);
       const selected = viewedVersionIdState || activeVersionIdState || latestVersionIdState || (options[0] && String(options[0].id));
       if (selected) main.value = selected;
       if (selected) right.value = selected;
+      if (selected) momentumRight.value = selected;
       if (!left.value && options[1]) left.value = String(options[1].id);
       if (!left.value && options[0]) left.value = String(options[0].id);
+      if (!momentumLeft.value && options[1]) momentumLeft.value = String(options[1].id);
+      if (!momentumLeft.value && options[0]) momentumLeft.value = String(options[0].id);
     }
 
     function choosePreviousVersionId(versionId) {
@@ -3265,6 +3455,238 @@
       if (topStuck) lines.push(`Largest stuck delta: ${topStuck.seller} (${money.format(Number(topStuck.delta || 0))}).`);
       if (topIntro) lines.push(`Largest intro-total delta: ${topIntro.seller} (${money.format(Number(topIntro.delta_total || 0))}).`);
       setInsight('insight-compare', lines);
+    }
+
+    function sellerFromMovementRow(row) {
+      return String((row && row.seller) || 'Unknown').trim() || 'Unknown';
+    }
+
+    function momentumStageInScope(stage, scope) {
+      const num = stageNumber(stage);
+      if (num == null) return false;
+      const maxStage = scope === 'all' ? MOMENTUM_ALL_STAGE_MAX : MOMENTUM_CORE_STAGE_MAX;
+      return num >= 1 && num <= maxStage;
+    }
+
+    function momentumAdditionPoints(stage, scope) {
+      const num = stageNumber(stage);
+      if (num == null) return 0;
+      if (scope === 'core' && num > MOMENTUM_CORE_STAGE_MAX) return 0;
+      if (scope === 'all' && num > MOMENTUM_ALL_STAGE_MAX) return 0;
+      if (num <= 2) return 1.0;
+      if (num <= 4) return 1.5;
+      if (num <= 6) return 1.2;
+      return 0.6;
+    }
+
+    function momentumStatus(score) {
+      if (score > 2) return 'Positive';
+      if (score < -2) return 'Negative';
+      return 'Stalled';
+    }
+
+    function renderMomentumSellerFilter(data) {
+      const sellerSelect = document.getElementById('momentum-seller');
+      if (!sellerSelect) return;
+      const current = sellerSelect.value || 'Overall';
+      const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      sellerSelect.innerHTML = '';
+      ['Overall', ...sellers].forEach((seller) => {
+        const o = document.createElement('option');
+        o.value = seller;
+        o.textContent = seller;
+        sellerSelect.appendChild(o);
+      });
+      sellerSelect.value = [...sellerSelect.options].some((x) => x.value === current) ? current : 'Overall';
+    }
+
+    function buildMomentumRows(payload, scope, knownSellers) {
+      const movement = payload.movement || {};
+      const stageDeltas = payload.stage_deltas || [];
+      const stuckDeltas = payload.stuck_deltas || [];
+      const rowsBySeller = {};
+      const init = (seller) => {
+        if (rowsBySeller[seller]) return rowsBySeller[seller];
+        rowsBySeller[seller] = {
+          seller,
+          forwardPoints: 0,
+          backwardPoints: 0,
+          additions: 0,
+          additionPoints: 0,
+          unchanged: 0,
+          stuckDelta: 0,
+          stage56Delta: 0,
+          score: 0,
+          status: 'Stalled',
+        };
+        return rowsBySeller[seller];
+      };
+
+      (knownSellers || []).forEach((s) => init(s));
+
+      (movement.stage_changed || []).forEach((r) => {
+        const seller = sellerFromMovementRow(r);
+        const leftN = stageNumber(r.left_stage);
+        const rightN = stageNumber(r.right_stage);
+        if (leftN == null || rightN == null) return;
+        const maxStage = scope === 'all' ? MOMENTUM_ALL_STAGE_MAX : MOMENTUM_CORE_STAGE_MAX;
+        if (leftN > maxStage || rightN > maxStage) return;
+        const row = init(seller);
+        const diff = rightN - leftN;
+        if (diff > 0) row.forwardPoints += diff;
+        else if (diff < 0) row.backwardPoints += Math.abs(diff);
+      });
+
+      (movement.added || []).forEach((r) => {
+        if (!momentumStageInScope(r.stage, scope)) return;
+        const seller = sellerFromMovementRow(r);
+        const row = init(seller);
+        row.additions += 1;
+        row.additionPoints += momentumAdditionPoints(r.stage, scope);
+      });
+
+      (movement.unchanged || []).forEach((r) => {
+        if (!momentumStageInScope(r.stage, scope)) return;
+        const seller = sellerFromMovementRow(r);
+        const row = init(seller);
+        row.unchanged += 1;
+      });
+
+      stuckDeltas.forEach((r) => {
+        const seller = String(r.seller || '').trim();
+        if (!seller) return;
+        const row = init(seller);
+        row.stuckDelta = Number(r.delta || 0);
+      });
+
+      stageDeltas.forEach((sellerBlock) => {
+        const seller = String(sellerBlock.seller || '').trim();
+        if (!seller) return;
+        const row = init(seller);
+        const late = (sellerBlock.rows || []).filter((x) => {
+          const n = stageNumber(x.stage);
+          return n != null && n >= 5 && n <= 6;
+        });
+        row.stage56Delta = late.reduce((acc, x) => acc + Number(x.delta || 0), 0);
+      });
+
+      const rows = Object.values(rowsBySeller).map((r) => {
+        const stuckPenalty = r.stuckDelta > 0 ? (r.stuckDelta * 2) : (r.stuckDelta * 1.2);
+        const score = r.forwardPoints - r.backwardPoints + r.additionPoints - stuckPenalty;
+        return {
+          ...r,
+          score,
+          status: momentumStatus(score),
+        };
+      });
+      rows.sort((a, b) => b.score - a.score || a.seller.localeCompare(b.seller));
+      return rows;
+    }
+
+    function renderMomentumCards(rows) {
+      const cards = document.getElementById('momentum-cards');
+      if (!cards) return;
+      cards.innerHTML = '';
+      if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'momentum-card';
+        empty.textContent = 'No momentum records for selected view.';
+        cards.appendChild(empty);
+        return;
+      }
+      rows.forEach((r) => {
+        const card = document.createElement('div');
+        card.className = 'momentum-card';
+        const head = document.createElement('div');
+        head.className = 'momentum-card-head';
+        const seller = document.createElement('div');
+        seller.className = 'momentum-seller';
+        seller.textContent = r.seller;
+        const status = document.createElement('div');
+        status.className = `momentum-status ${r.status.toLowerCase()}`;
+        status.textContent = r.status;
+        head.appendChild(seller);
+        head.appendChild(status);
+        card.appendChild(head);
+
+        const kpis = document.createElement('div');
+        kpis.className = 'momentum-kpis';
+        const items = [
+          ['Score', r.score.toFixed(1)],
+          ['Forward', money.format(r.forwardPoints)],
+          ['Backward', money.format(r.backwardPoints)],
+          ['New', money.format(r.additions)],
+        ];
+        items.forEach(([label, value]) => {
+          const box = document.createElement('div');
+          box.className = 'momentum-kpi';
+          const l = document.createElement('div');
+          l.className = 'momentum-kpi-label';
+          l.textContent = label;
+          const v = document.createElement('div');
+          v.className = 'momentum-kpi-value';
+          v.textContent = value;
+          box.appendChild(l);
+          box.appendChild(v);
+          kpis.appendChild(box);
+        });
+        card.appendChild(kpis);
+        cards.appendChild(card);
+      });
+    }
+
+    function renderMomentumView(payload, data) {
+      const body = document.getElementById('momentum-body');
+      const sellerFilter = document.getElementById('momentum-seller');
+      const scopeSel = document.getElementById('momentum-scope');
+      if (!body || !sellerFilter || !scopeSel) return;
+      const scope = scopeSel.value || 'core';
+      const knownSellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      const allRows = buildMomentumRows(payload, scope, knownSellers);
+      const pick = sellerFilter.value || 'Overall';
+      const rows = pick === 'Overall' ? allRows : allRows.filter((x) => x.seller === pick);
+
+      body.innerHTML = '';
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.seller));
+        tr.appendChild(makeCell('td', r.status));
+        tr.appendChild(makeCell('td', r.score.toFixed(1)));
+        tr.appendChild(makeCell('td', money.format(r.forwardPoints)));
+        tr.appendChild(makeCell('td', money.format(r.backwardPoints)));
+        tr.appendChild(makeCell('td', money.format(r.additions)));
+        tr.appendChild(makeCell('td', money.format(r.unchanged)));
+        tr.appendChild(makeCell('td', (r.stuckDelta > 0 ? '+' : '') + money.format(r.stuckDelta)));
+        tr.appendChild(makeCell('td', (r.stage56Delta > 0 ? '+' : '') + money.format(r.stage56Delta)));
+        body.appendChild(tr);
+      });
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No rows'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+      }
+
+      renderMomentumCards(rows);
+      const positives = rows.filter((r) => r.status === 'Positive').length;
+      const negatives = rows.filter((r) => r.status === 'Negative').length;
+      const stalled = rows.filter((r) => r.status === 'Stalled').length;
+      const top = [...rows].sort((a, b) => b.score - a.score)[0];
+      const bottom = [...rows].sort((a, b) => a.score - b.score)[0];
+      const scopeLabel = scope === 'all' ? '1-8' : '1-6';
+      const lines = [
+        `Scope ${scopeLabel}: Positive ${money.format(positives)}, Stalled ${money.format(stalled)}, Negative ${money.format(negatives)}.`,
+      ];
+      if (top) lines.push(`Best momentum: ${top.seller} (score ${top.score.toFixed(1)}, forward ${money.format(top.forwardPoints)}, new ${money.format(top.additions)}).`);
+      if (bottom) lines.push(`Weakest momentum: ${bottom.seller} (score ${bottom.score.toFixed(1)}, backward ${money.format(bottom.backwardPoints)}, stuck delta ${(bottom.stuckDelta > 0 ? '+' : '') + money.format(bottom.stuckDelta)}).`);
+      setInsight('insight-momentum', lines);
     }
 
     function renderDetailTable(title, records) {
@@ -3534,6 +3956,7 @@
       const tabWinLoss = document.getElementById('tab-winloss');
       const tabIntroTrend = document.getElementById('tab-introtrend');
       const tabCompare = document.getElementById('tab-compare');
+      const tabMomentum = document.getElementById('tab-momentum');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
       const viewFunnel = document.getElementById('view-funnel');
@@ -3542,6 +3965,7 @@
       const viewWinLoss = document.getElementById('view-winloss');
       const viewIntroTrend = document.getElementById('view-introtrend');
       const viewCompare = document.getElementById('view-compare');
+      const viewMomentum = document.getElementById('view-momentum');
       const viewAdmin = document.getElementById('view-admin');
 
       function activate(name) {
@@ -3552,6 +3976,7 @@
         tabWinLoss.classList.toggle('active', name === 'winloss');
         tabIntroTrend.classList.toggle('active', name === 'introtrend');
         tabCompare.classList.toggle('active', name === 'compare');
+        tabMomentum.classList.toggle('active', name === 'momentum');
         tabAdmin.classList.toggle('active', name === 'admin');
         viewCross.classList.toggle('active', name === 'crosstab');
         viewFunnel.classList.toggle('active', name === 'funnel');
@@ -3560,6 +3985,7 @@
         viewWinLoss.classList.toggle('active', name === 'winloss');
         viewIntroTrend.classList.toggle('active', name === 'introtrend');
         viewCompare.classList.toggle('active', name === 'compare');
+        viewMomentum.classList.toggle('active', name === 'momentum');
         viewAdmin.classList.toggle('active', name === 'admin');
       }
 
@@ -3572,6 +3998,7 @@
       tabWinLoss.addEventListener('click', () => activate('winloss'));
       tabIntroTrend.addEventListener('click', () => activate('introtrend'));
       tabCompare.addEventListener('click', () => activate('compare'));
+      tabMomentum.addEventListener('click', () => activate('momentum'));
       tabAdmin.addEventListener('click', () => activate('admin'));
     }
 
@@ -4347,6 +4774,12 @@
         const compareRight = document.getElementById('compare-right');
         const compareRun = document.getElementById('compare-run');
         const comparePrev = document.getElementById('compare-prev');
+        const momentumLeft = document.getElementById('momentum-left');
+        const momentumRight = document.getElementById('momentum-right');
+        const momentumSeller = document.getElementById('momentum-seller');
+        const momentumScope = document.getElementById('momentum-scope');
+        const momentumRun = document.getElementById('momentum-run');
+        const momentumPrev = document.getElementById('momentum-prev');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -4359,6 +4792,7 @@
         currentAuthStore = loadAuthStore();
         window.__salesData = data;
         initChatAssistant(data);
+        renderMomentumSellerFilter(data);
 
         function rerenderAllViews() {
           render(data, sellerSelect.value, selectedStages, orderedStages);
@@ -4369,6 +4803,7 @@
           renderWinLoss(data, wlSellerSelect.value);
           renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
           renderVersionSelectors();
+          renderMomentumSellerFilter(data);
         }
 
         async function runCompare() {
@@ -4383,6 +4818,21 @@
             renderCompareView(payload || {});
           } catch (e) {
             setInsight('insight-compare', [e.message || 'Failed to load comparison.']);
+          }
+        }
+
+        async function runMomentumCompare() {
+          const leftId = momentumLeft && momentumLeft.value;
+          const rightId = momentumRight && momentumRight.value;
+          if (!leftId || !rightId) {
+            setInsight('insight-momentum', ['Select two versions to run momentum analysis.']);
+            return;
+          }
+          try {
+            const payload = await fetchVersionCompare(leftId, rightId);
+            renderMomentumView(payload || {}, data);
+          } catch (e) {
+            setInsight('insight-momentum', [e.message || 'Failed to load momentum analysis.']);
           }
         }
 
@@ -4538,6 +4988,9 @@
             const prevId = choosePreviousVersionId(viewedVersionIdState);
             if (compareRight) compareRight.value = viewedVersionIdState;
             if (compareLeft && prevId) compareLeft.value = prevId;
+            if (momentumRight) momentumRight.value = viewedVersionIdState;
+            if (momentumLeft && prevId) momentumLeft.value = prevId;
+            runMomentumCompare();
           } catch (e) {
             showError(e.message || 'Failed to switch version.');
           }
@@ -4550,6 +5003,16 @@
           if (compareLeft && leftId) compareLeft.value = leftId;
           runCompare();
         });
+        momentumRun.addEventListener('click', runMomentumCompare);
+        momentumPrev.addEventListener('click', () => {
+          const rightId = (momentumRight && momentumRight.value) || viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+          const leftId = choosePreviousVersionId(rightId);
+          if (momentumRight && rightId) momentumRight.value = rightId;
+          if (momentumLeft && leftId) momentumLeft.value = leftId;
+          runMomentumCompare();
+        });
+        momentumSeller.addEventListener('change', runMomentumCompare);
+        momentumScope.addEventListener('change', runMomentumCompare);
 
         setMatterOnly();
         setFunnelCore();
@@ -4563,6 +5026,9 @@
           compareRight.value = rightId;
           if (leftId) compareLeft.value = leftId;
           if (leftId && rightId) runCompare();
+          if (momentumRight) momentumRight.value = rightId;
+          if (leftId && momentumLeft) momentumLeft.value = leftId;
+          if (leftId && rightId) runMomentumCompare();
         }
         loginForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
@@ -4594,6 +5060,7 @@
             ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
             : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
           rerenderAllViews();
+          runMomentumCompare();
           document.getElementById('auth-login-user').value = '';
           document.getElementById('auth-login-pass').value = '';
         });
