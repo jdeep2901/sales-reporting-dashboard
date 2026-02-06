@@ -50,6 +50,13 @@ const SELLERS: Array<[string, string]> = [
 type MondayColumn = { id: string; title: string; type: string };
 type MondayItem = { id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> };
 
+async function sha256Hex(text: string): Promise<string> {
+  const enc = new TextEncoder();
+  const bytes = enc.encode(text);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function j(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -573,6 +580,7 @@ Deno.serve(async (req) => {
 
     const board = await fetchBoard(mondayToken, boardId);
     const dataset = buildDataset(board.items, board.columns, boardId, board.boardName);
+    const datasetHash = await sha256Hex(JSON.stringify(dataset));
     const settings = {
       ...(st.settings || {}),
       monday_board_id: String(boardId),
@@ -583,7 +591,21 @@ Deno.serve(async (req) => {
       monday_board_name: board.boardName,
     };
 
-    const saved = await supabase.rpc("save_dashboard_state", {
+    const inserted = await supabase.from("dashboard_versions").insert({
+      created_by: username,
+      source: "monday_sync",
+      board_id: String(boardId),
+      board_name: board.boardName,
+      dataset,
+      likelihood: st.likelihood || {},
+      dataset_hash: datasetHash,
+      item_count: Number(board.items.length || 0),
+      notes: null,
+    }).select("id").single();
+    if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
+    const versionId = inserted.data.id;
+
+    const prune = await supabase.rpc("save_dashboard_state", {
       p_username: username,
       p_password: password,
       p_likelihood: st.likelihood || {},
@@ -591,14 +613,39 @@ Deno.serve(async (req) => {
       p_users: st.users || {},
       p_settings: settings,
       p_dataset: dataset,
+      p_active_version_id: versionId,
     });
-    if (saved.error) return j({ error: saved.error.message }, 500);
-    const out = Array.isArray(saved.data) ? saved.data[0] : saved.data;
+    if (prune.error) return j({ error: prune.error.message }, 500);
+
+    const upd = await supabase.from("dashboard_state")
+      .update({ latest_version_id: versionId, active_version_id: versionId })
+      .eq("id", "main");
+    if (upd.error) return j({ error: upd.error.message }, 500);
+
+    const old = await supabase
+      .from("dashboard_versions")
+      .select("id")
+      .order("created_at", { ascending: false })
+      .range(52, 10000);
+    if (old.error) return j({ error: old.error.message }, 500);
+    const oldIds = (old.data || []).map((x: any) => x.id).filter(Boolean);
+    if (oldIds.length) {
+      const del = await supabase.from("dashboard_versions").delete().in("id", oldIds);
+      if (del.error) return j({ error: del.error.message }, 500);
+    }
+
+    const latestState = await supabase.rpc("get_dashboard_state", {
+      p_username: username,
+      p_password: password,
+    });
+    if (latestState.error) return j({ error: latestState.error.message }, 500);
+    const out = Array.isArray(latestState.data) ? latestState.data[0] : latestState.data;
     return j({
       ok: true,
       board_id: String(boardId),
       board_name: board.boardName,
       item_count: board.items.length,
+      version_id: versionId,
       state: out,
     });
   } catch (e) {

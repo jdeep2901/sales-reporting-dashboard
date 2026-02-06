@@ -1384,6 +1384,44 @@
       padding: 10px 12px 0;
     }
 
+    .app-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .app-version {
+      border: 1px solid #d3e0ff;
+      background: #eef4ff;
+      color: #1f3f75;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+
+    .version-switch {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #274777;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .version-switch select {
+      border: 1px solid #d3e0ff;
+      border-radius: 8px;
+      background: #fff;
+      color: #244777;
+      font-size: 11px;
+      padding: 4px 7px;
+      min-width: 170px;
+    }
+
     .auth-badge {
       display: none;
       align-items: center;
@@ -1614,7 +1652,14 @@
     </div>
     <div class="panel" id="app" style="display:none;">
       <div class="topbar">
-        <div class="sub">Private credentials are managed from the Admin tab.</div>
+        <div class="app-meta">
+          <div class="sub">Private credentials are managed from the Admin tab.</div>
+          <div id="app-version" class="app-version">v-</div>
+          <label class="version-switch">
+            <span>Viewing:</span>
+            <select id="version-select"></select>
+          </label>
+        </div>
         <div id="auth-badge" class="auth-badge">
           <span id="auth-user-label"></span>
           <button id="shared-refresh" type="button">Refresh Shared</button>
@@ -1628,6 +1673,7 @@
         <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
         <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
         <button id="tab-introtrend" class="tab-btn" type="button">Intro Calls Trend</button>
+        <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
 
@@ -1843,6 +1889,67 @@
         <div class="footnote">Week buckets are Monday-start weeks based on column <code>AF</code>.</div>
       </div>
 
+      <div id="view-compare" class="view">
+        <div class="head">
+          <div>
+            <h1>Version Compare</h1>
+            <div class="sub">Compare any two refresh snapshots for stage movement and stuck/help-needed deltas.</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="compare-left">Left Version</label>
+              <select id="compare-left"></select>
+            </div>
+            <div>
+              <label for="compare-right">Right Version</label>
+              <select id="compare-right"></select>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="compare-prev" type="button">Compare vs Previous</button>
+            </div>
+            <div>
+              <label>&nbsp;</label>
+              <button id="compare-run" type="button">Run Compare</button>
+            </div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Comparison Summary</div>
+          <ul id="insight-compare" class="insight-list"></ul>
+        </div>
+        <div class="table-wrap">
+          <table id="compare-stage-table">
+            <thead>
+              <tr>
+                <th>Seller</th>
+                <th>Stage</th>
+                <th>Left</th>
+                <th>Right</th>
+                <th>Delta</th>
+                <th>% Delta</th>
+              </tr>
+            </thead>
+            <tbody id="compare-stage-body"></tbody>
+          </table>
+        </div>
+        <div class="table-wrap" style="margin-top:10px;">
+          <table id="compare-move-table">
+            <thead>
+              <tr>
+                <th>Movement Type</th>
+                <th>Deal</th>
+                <th>Seller</th>
+                <th>Intro Month</th>
+                <th>From Stage</th>
+                <th>To Stage</th>
+              </tr>
+            </thead>
+            <tbody id="compare-move-body"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div id="view-admin" class="view">
         <div class="head">
           <div>
@@ -2033,10 +2140,12 @@
     const SUPABASE_URL = 'https://vqksytduqxpfcovijhko.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa3N5dGR1cXhwZmNvdmlqaGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDI0MjIsImV4cCI6MjA4NTk3ODQyMn0.wvUsJcFpCgXB10vuDcXqU_shO5sin-zI96sBIrZH3OY';
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
+    const APP_VERSION = 'v0.7.0';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
     let likelihoodState = {};
+    let liveLikelihoodState = {};
     let quarterTargetsState = {};
     let dashboardSettingsState = {};
     let sharedDatasetState = null;
@@ -2049,6 +2158,12 @@
     let sharedStorePushTimer = null;
     let sharedStorePushInFlight = false;
     let sessionPassword = null;
+    let versionsMetaState = [];
+    let activeVersionIdState = null;
+    let latestVersionIdState = null;
+    let viewedVersionIdState = null;
+    let versionLikelihoodState = {};
+    let isHistoricalView = false;
     const AUTH_USERS_KEY = 'sales_dashboard_users_v1';
     const AUTH_SESSION_KEY = 'sales_dashboard_session_v1';
     let currentUser = null;
@@ -2326,11 +2441,16 @@
       const targets = (payload && payload.quarter_targets && typeof payload.quarter_targets === 'object') ? payload.quarter_targets : {};
       const settings = (payload && payload.settings && typeof payload.settings === 'object') ? payload.settings : {};
       const dataset = (payload && payload.dataset && typeof payload.dataset === 'object') ? payload.dataset : null;
+      const versionsMeta = Array.isArray(payload && payload.versions_meta) ? payload.versions_meta : [];
       currentAuthStore = { users };
       likelihoodState = likelihood;
+      liveLikelihoodState = JSON.parse(JSON.stringify(likelihood || {}));
       quarterTargetsState = targets;
       dashboardSettingsState = settings;
       sharedDatasetState = dataset;
+      versionsMetaState = versionsMeta;
+      activeVersionIdState = payload && payload.active_version_id ? String(payload.active_version_id) : null;
+      latestVersionIdState = payload && payload.latest_version_id ? String(payload.latest_version_id) : null;
       if (dataset) saveSharedDatasetCache(dataset);
       persistLocalStateBundle();
     }
@@ -2404,6 +2524,7 @@
     }
 
     function queueSharedStorePush() {
+      if (isHistoricalView) return;
       if (sharedStorePushTimer) clearTimeout(sharedStorePushTimer);
       sharedStorePushTimer = setTimeout(() => {
         pushSharedStoreNow();
@@ -3036,6 +3157,116 @@
       }
     }
 
+    function versionLabel(v) {
+      if (!v) return '-';
+      const dt = fmtTs(v.created_at);
+      const by = v.created_by || '-';
+      const board = v.board_name || v.board_id || '-';
+      return `${dt} | ${by} | ${board}`;
+    }
+
+    function renderVersionSelectors() {
+      const main = document.getElementById('version-select');
+      const left = document.getElementById('compare-left');
+      const right = document.getElementById('compare-right');
+      if (!main || !left || !right) return;
+      const options = Array.isArray(versionsMetaState) ? versionsMetaState : [];
+      const fill = (sel) => {
+        sel.innerHTML = '';
+        options.forEach((v) => {
+          const o = document.createElement('option');
+          o.value = String(v.id);
+          o.textContent = versionLabel(v);
+          sel.appendChild(o);
+        });
+      };
+      fill(main);
+      fill(left);
+      fill(right);
+      const selected = viewedVersionIdState || activeVersionIdState || latestVersionIdState || (options[0] && String(options[0].id));
+      if (selected) main.value = selected;
+      if (selected) right.value = selected;
+      if (!left.value && options[1]) left.value = String(options[1].id);
+      if (!left.value && options[0]) left.value = String(options[0].id);
+    }
+
+    function choosePreviousVersionId(versionId) {
+      const options = Array.isArray(versionsMetaState) ? versionsMetaState : [];
+      const idx = options.findIndex((x) => String(x.id) === String(versionId));
+      if (idx < 0) return options[1] ? String(options[1].id) : null;
+      if (options[idx + 1]) return String(options[idx + 1].id);
+      return options[idx - 1] ? String(options[idx - 1].id) : null;
+    }
+
+    async function fetchVersionData(versionId) {
+      return supabaseRpc('get_dashboard_version', {
+        p_username: currentUser.username,
+        p_password: sessionPassword,
+        p_version_id: versionId,
+      });
+    }
+
+    async function fetchVersionCompare(leftVersionId, rightVersionId) {
+      return supabaseRpc('get_dashboard_compare', {
+        p_username: currentUser.username,
+        p_password: sessionPassword,
+        p_left_version_id: leftVersionId,
+        p_right_version_id: rightVersionId,
+      });
+    }
+
+    function renderCompareView(payload) {
+      const stageBody = document.getElementById('compare-stage-body');
+      const moveBody = document.getElementById('compare-move-body');
+      if (!stageBody || !moveBody) return;
+      stageBody.innerHTML = '';
+      moveBody.innerHTML = '';
+      const stageDeltas = payload.stage_deltas || [];
+      stageDeltas.forEach((sellerBlock) => {
+        (sellerBlock.rows || []).forEach((r) => {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', sellerBlock.seller || '-'));
+          tr.appendChild(makeCell('td', r.stage || '-'));
+          tr.appendChild(makeCell('td', money.format(Number(r.left || 0))));
+          tr.appendChild(makeCell('td', money.format(Number(r.right || 0))));
+          tr.appendChild(makeCell('td', money.format(Number(r.delta || 0))));
+          tr.appendChild(makeCell('td', r.pct_delta == null ? '-' : `${Number(r.pct_delta).toFixed(1)}%`));
+          stageBody.appendChild(tr);
+        });
+      });
+      const movement = payload.movement || {};
+      const addRows = (label, rows, fromKey, toKey) => {
+        (rows || []).forEach((r) => {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', label));
+          tr.appendChild(makeCell('td', r.deal || '-'));
+          tr.appendChild(makeCell('td', r.seller || '-'));
+          tr.appendChild(makeCell('td', r.intro_month || '-'));
+          tr.appendChild(makeCell('td', fromKey ? (r[fromKey] || '-') : '-'));
+          tr.appendChild(makeCell('td', toKey ? (r[toKey] || '-') : '-'));
+          moveBody.appendChild(tr);
+        });
+      };
+      addRows('Added', movement.added || [], null, 'stage');
+      addRows('Removed', movement.removed || [], 'stage', null);
+      addRows('Stage Changed', movement.stage_changed || [], 'left_stage', 'right_stage');
+
+      const leftMeta = payload.left_version || {};
+      const rightMeta = payload.right_version || {};
+      const counts = (movement.counts || {});
+      const stuckRows = payload.stuck_deltas || [];
+      const topStuck = [...stuckRows].sort((a, b) => Math.abs(Number(b.delta || 0)) - Math.abs(Number(a.delta || 0)))[0];
+      const introRows = payload.intro_deltas || [];
+      const topIntro = [...introRows].sort((a, b) => Math.abs(Number(b.delta_total || 0)) - Math.abs(Number(a.delta_total || 0)))[0];
+      const lines = [
+        `Left: ${versionLabel(leftMeta)} | Right: ${versionLabel(rightMeta)}`,
+        `Movement counts -> Added: ${money.format(Number(counts.added || 0))}, Removed: ${money.format(Number(counts.removed || 0))}, Stage changed: ${money.format(Number(counts.stage_changed || 0))}.`,
+      ];
+      if (topStuck) lines.push(`Largest stuck delta: ${topStuck.seller} (${money.format(Number(topStuck.delta || 0))}).`);
+      if (topIntro) lines.push(`Largest intro-total delta: ${topIntro.seller} (${money.format(Number(topIntro.delta_total || 0))}).`);
+      setInsight('insight-compare', lines);
+    }
+
     function renderDetailTable(title, records) {
       const detailTitle = document.getElementById('detail-title');
       const detailMeta = document.getElementById('detail-meta');
@@ -3302,6 +3533,7 @@
       const tabIndustry = document.getElementById('tab-industry');
       const tabWinLoss = document.getElementById('tab-winloss');
       const tabIntroTrend = document.getElementById('tab-introtrend');
+      const tabCompare = document.getElementById('tab-compare');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
       const viewFunnel = document.getElementById('view-funnel');
@@ -3309,6 +3541,7 @@
       const viewIndustry = document.getElementById('view-industry');
       const viewWinLoss = document.getElementById('view-winloss');
       const viewIntroTrend = document.getElementById('view-introtrend');
+      const viewCompare = document.getElementById('view-compare');
       const viewAdmin = document.getElementById('view-admin');
 
       function activate(name) {
@@ -3318,6 +3551,7 @@
         tabIndustry.classList.toggle('active', name === 'industry');
         tabWinLoss.classList.toggle('active', name === 'winloss');
         tabIntroTrend.classList.toggle('active', name === 'introtrend');
+        tabCompare.classList.toggle('active', name === 'compare');
         tabAdmin.classList.toggle('active', name === 'admin');
         viewCross.classList.toggle('active', name === 'crosstab');
         viewFunnel.classList.toggle('active', name === 'funnel');
@@ -3325,6 +3559,7 @@
         viewIndustry.classList.toggle('active', name === 'industry');
         viewWinLoss.classList.toggle('active', name === 'winloss');
         viewIntroTrend.classList.toggle('active', name === 'introtrend');
+        viewCompare.classList.toggle('active', name === 'compare');
         viewAdmin.classList.toggle('active', name === 'admin');
       }
 
@@ -3336,6 +3571,7 @@
       tabIndustry.addEventListener('click', () => activate('industry'));
       tabWinLoss.addEventListener('click', () => activate('winloss'));
       tabIntroTrend.addEventListener('click', () => activate('introtrend'));
+      tabCompare.addEventListener('click', () => activate('compare'));
       tabAdmin.addEventListener('click', () => activate('admin'));
     }
 
@@ -3398,14 +3634,19 @@
           });
           const key = likelihoodRecordKey(r);
           select.value = likelihoodState[key] || '';
-          select.addEventListener('change', () => {
-            if (select.value) likelihoodState[key] = select.value;
-            else delete likelihoodState[key];
-            persistLocalStateBundle();
-            queueSharedStorePush();
-            if (activePopupSeller) updateLikelihoodSummaryForSeller(activePopupSeller);
-            else if (r.seller) updateLikelihoodSummaryForSeller(r.seller);
-          });
+          if (isHistoricalView) {
+            select.disabled = true;
+            select.title = 'Read-only in historical version view';
+          } else {
+            select.addEventListener('change', () => {
+              if (select.value) likelihoodState[key] = select.value;
+              else delete likelihoodState[key];
+              persistLocalStateBundle();
+              queueSharedStorePush();
+              if (activePopupSeller) updateLikelihoodSummaryForSeller(activePopupSeller);
+              else if (r.seller) updateLikelihoodSummaryForSeller(r.seller);
+            });
+          }
           selTd.appendChild(select);
           tr.appendChild(selTd);
           body.appendChild(tr);
@@ -4075,6 +4316,8 @@
 
     async function boot() {
       try {
+        const appVersionEl = document.getElementById('app-version');
+        if (appVersionEl) appVersionEl.textContent = APP_VERSION;
         const cached = loadSharedDatasetCache();
         let data = cached;
         if (!data) {
@@ -4099,6 +4342,11 @@
         const adminUserForm = document.getElementById('admin-user-form');
         const adminTargetForm = document.getElementById('admin-target-form');
         const adminSyncForm = document.getElementById('admin-sync-form');
+        const versionSelect = document.getElementById('version-select');
+        const compareLeft = document.getElementById('compare-left');
+        const compareRight = document.getElementById('compare-right');
+        const compareRun = document.getElementById('compare-run');
+        const comparePrev = document.getElementById('compare-prev');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -4111,6 +4359,32 @@
         currentAuthStore = loadAuthStore();
         window.__salesData = data;
         initChatAssistant(data);
+
+        function rerenderAllViews() {
+          render(data, sellerSelect.value, selectedStages, orderedStages);
+          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
+          renderScorecard(data);
+          renderAdminTargets();
+          renderIndustryAction(data);
+          renderWinLoss(data, wlSellerSelect.value);
+          renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
+          renderVersionSelectors();
+        }
+
+        async function runCompare() {
+          const leftId = compareLeft && compareLeft.value;
+          const rightId = compareRight && compareRight.value;
+          if (!leftId || !rightId) {
+            setInsight('insight-compare', ['Select two versions to compare.']);
+            return;
+          }
+          try {
+            const payload = await fetchVersionCompare(leftId, rightId);
+            renderCompareView(payload || {});
+          } catch (e) {
+            setInsight('insight-compare', [e.message || 'Failed to load comparison.']);
+          }
+        }
 
         function updateFromCheckboxes() {
           selectedStages.clear();
@@ -4236,17 +4510,60 @@
           scorecardSelectedSeller = scorecardSellerSelect.value || 'Overall';
           renderScorecard(data);
         });
+        versionSelect.addEventListener('change', async () => {
+          const versionId = versionSelect.value;
+          if (!versionId) return;
+          try {
+            const out = await fetchVersionData(versionId);
+            if (!out || !out.dataset) return;
+            data = out.dataset;
+            window.__salesData = data;
+            viewedVersionIdState = String(out.version_id || versionId);
+            versionLikelihoodState = (out.likelihood && typeof out.likelihood === 'object') ? out.likelihood : {};
+            isHistoricalView = !!latestVersionIdState && String(viewedVersionIdState) !== String(latestVersionIdState);
+            likelihoodState = isHistoricalView
+              ? JSON.parse(JSON.stringify(versionLikelihoodState))
+              : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+            rerenderAllViews();
+            if (currentUser && currentUser.role === 'admin') {
+              try {
+                await supabaseRpc('save_dashboard_state', {
+                  p_username: currentUser.username,
+                  p_password: sessionPassword,
+                  p_active_version_id: viewedVersionIdState,
+                });
+                activeVersionIdState = viewedVersionIdState;
+              } catch (_) {}
+            }
+            const prevId = choosePreviousVersionId(viewedVersionIdState);
+            if (compareRight) compareRight.value = viewedVersionIdState;
+            if (compareLeft && prevId) compareLeft.value = prevId;
+          } catch (e) {
+            showError(e.message || 'Failed to switch version.');
+          }
+        });
+        compareRun.addEventListener('click', runCompare);
+        comparePrev.addEventListener('click', () => {
+          const rightId = (compareRight && compareRight.value) || viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+          const leftId = choosePreviousVersionId(rightId);
+          if (compareRight && rightId) compareRight.value = rightId;
+          if (compareLeft && leftId) compareLeft.value = leftId;
+          runCompare();
+        });
 
         setMatterOnly();
         setFunnelCore();
         updateFunnelMonth();
-        renderScorecard(data);
-        renderAdminTargets();
-        renderIndustryAction(data);
-        renderWinLoss(data, wlSellerSelect.value);
-        renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
+        rerenderAllViews();
         setupTabs();
         renderDetailTable('Details', []);
+        if (compareRight && (viewedVersionIdState || activeVersionIdState || latestVersionIdState)) {
+          const rightId = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+          const leftId = choosePreviousVersionId(rightId);
+          compareRight.value = rightId;
+          if (leftId) compareLeft.value = leftId;
+          if (leftId && rightId) runCompare();
+        }
         loginForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
           showAuthError('');
@@ -4260,6 +4577,23 @@
           sessionPassword = pass;
           saveSession(logged.username, pass, logged.role || 'viewer');
           applyLoggedInState(logged);
+          renderVersionSelectors();
+          viewedVersionIdState = activeVersionIdState || latestVersionIdState || viewedVersionIdState;
+          if (viewedVersionIdState) {
+            try {
+              const out = await fetchVersionData(viewedVersionIdState);
+              if (out && out.dataset) {
+                data = out.dataset;
+                window.__salesData = data;
+                versionLikelihoodState = (out.likelihood && typeof out.likelihood === 'object') ? out.likelihood : {};
+              }
+            } catch (_) {}
+          }
+          isHistoricalView = !!latestVersionIdState && String(viewedVersionIdState || '') !== String(latestVersionIdState || '');
+          likelihoodState = isHistoricalView
+            ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
+            : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+          rerenderAllViews();
           document.getElementById('auth-login-user').value = '';
           document.getElementById('auth-login-pass').value = '';
         });
@@ -4273,9 +4607,25 @@
 
         sharedRefreshBtn.addEventListener('click', async () => {
           await loadSharedStore();
-          renderScorecard(data);
-          renderAdminTargets();
           renderAdminSyncStatus();
+          renderVersionSelectors();
+          if (!viewedVersionIdState) viewedVersionIdState = activeVersionIdState || latestVersionIdState;
+          const targetVersionId = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+          if (targetVersionId) {
+            try {
+              const out = await fetchVersionData(targetVersionId);
+              if (out && out.dataset) {
+                data = out.dataset;
+                window.__salesData = data;
+                versionLikelihoodState = (out.likelihood && typeof out.likelihood === 'object') ? out.likelihood : {};
+              }
+            } catch (_) {}
+          }
+          isHistoricalView = !!latestVersionIdState && String(targetVersionId || '') !== String(latestVersionIdState || '');
+          likelihoodState = isHistoricalView
+            ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
+            : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+          rerenderAllViews();
           if (currentUser && currentUser.role === 'admin') renderAdminUsers();
           showAdminMessage('Shared data refreshed.');
         });
@@ -4393,6 +4743,23 @@
             sessionPassword = savedSession.password;
             saveSession(logged.username, sessionPassword, logged.role || 'viewer');
             applyLoggedInState(logged);
+            renderVersionSelectors();
+            viewedVersionIdState = activeVersionIdState || latestVersionIdState || viewedVersionIdState;
+            if (viewedVersionIdState) {
+              try {
+                const out = await fetchVersionData(viewedVersionIdState);
+                if (out && out.dataset) {
+                  data = out.dataset;
+                  window.__salesData = data;
+                  versionLikelihoodState = (out.likelihood && typeof out.likelihood === 'object') ? out.likelihood : {};
+                }
+              } catch (_) {}
+            }
+            isHistoricalView = !!latestVersionIdState && String(viewedVersionIdState || '') !== String(latestVersionIdState || '');
+            likelihoodState = isHistoricalView
+              ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
+              : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+            rerenderAllViews();
           } else {
             clearSession();
             showLoginOrSetup();
