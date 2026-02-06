@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Chatbot">
+  <rect width="256" height="256" fill="none"/>
+  <g fill="none" stroke="#14005f" stroke-linecap="round" stroke-width="24">
+    <path d="M128 12v78"/>
+    <path d="M18 70l58 32"/>
+    <path d="M238 70l-58 32"/>
+    <path d="M22 182l92-50"/>
+    <path d="M234 182l-92-50"/>
+    <path d="M128 244v-52"/>
+  </g>
+</svg>

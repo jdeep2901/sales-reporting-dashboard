@@ -965,9 +965,19 @@
       border: 1px solid #0b5fff;
       background: #0b5fff;
       color: #fff;
-      font-size: 22px;
       box-shadow: 0 12px 24px rgba(10, 34, 76, 0.28);
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .chat-fab img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      display: block;
     }
 
     .chat-panel {
@@ -1920,7 +1930,9 @@
       </div>
     </div>
   </div>
-  <button id="chat-fab" class="chat-fab" type="button" title="Ask about your data">AI</button>
+  <button id="chat-fab" class="chat-fab" type="button" title="Ask about your data">
+    <img src="./assets/chatbot-icon.svg" alt="Chatbot" />
+  </button>
   <div id="chat-panel" class="chat-panel" aria-hidden="true">
     <div class="chat-panel-head">
       <span>Sales Data Chat</span>
@@ -2057,6 +2069,31 @@
       div.textContent = text;
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
+      return div;
+    }
+
+    async function chatLlmAnswer(question) {
+      if (!currentUser || !sessionPassword) {
+        throw new Error('Please login again to use chat.');
+      }
+      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/chat-analyst`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          username: currentUser.username,
+          password: sessionPassword,
+          question,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || `LLM chat failed (${res.status}).`);
+      }
+      return String(body.answer || '').trim() || 'No answer returned.';
     }
 
     function chatResolveSeller(q, data) {
@@ -2192,17 +2229,29 @@
         if (open) setTimeout(() => input.focus(), 40);
       };
 
-      const ask = () => {
+      const ask = async () => {
         const q = input.value.trim();
         if (!q) return;
         chatAppend('user', q);
-        const dataNow = chatDataRef || window.__salesData;
-        if (!dataNow) {
-          chatAppend('assistant', 'Data is not loaded yet. Please refresh the dashboard first.');
-        } else {
-          chatAppend('assistant', chatAnswer(q, dataNow));
-        }
         input.value = '';
+        send.disabled = true;
+        const pending = chatAppend('assistant', 'Thinking...');
+        const dataNow = chatDataRef || window.__salesData;
+        if (!dataNow && pending) {
+          pending.textContent = 'Data is not loaded yet. Please refresh the dashboard first.';
+          send.disabled = false;
+          return;
+        }
+        try {
+          const answer = await chatLlmAnswer(q);
+          if (pending) pending.textContent = answer;
+        } catch (e) {
+          const fallback = chatAnswer(q, dataNow || {});
+          const errMsg = (e && e.message) ? e.message : 'LLM unavailable.';
+          if (pending) pending.textContent = `${fallback}\n\n[LLM unavailable: ${errMsg}]`;
+        } finally {
+          send.disabled = false;
+        }
       };
 
       fab.addEventListener('click', () => toggle(!panel.classList.contains('open')));
