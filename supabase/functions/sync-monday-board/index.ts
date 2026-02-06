@@ -578,6 +578,8 @@ Deno.serve(async (req) => {
       monday_board_id: String(boardId),
       monday_board_url: `https://themathcocrmtrial.monday.com/boards/${boardId}`,
       monday_last_sync_at: new Date().toISOString(),
+      monday_last_sync_by: username,
+      monday_last_sync_rows: board.items.length,
       monday_board_name: board.boardName,
     };
 

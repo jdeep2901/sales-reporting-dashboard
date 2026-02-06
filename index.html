@@ -1299,6 +1299,18 @@
       min-height: 16px;
     }
 
+    .sync-meta {
+      margin-top: 6px;
+      padding: 8px 10px;
+      border: 1px solid #dbe7ff;
+      border-radius: 8px;
+      background: #f7faff;
+      color: #274777;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
     .admin-wrap {
       padding: 16px;
       display: grid;
@@ -1676,6 +1688,7 @@
               <button id="admin-sync-btn" type="submit">Refresh From Monday</button>
             </form>
             <div id="admin-sync-msg" class="auth-error"></div>
+            <div id="admin-sync-meta" class="sync-meta">Last sync: -</div>
           </div>
           <div class="admin-card">
             <label style="margin-bottom:8px;">Create User</label>
@@ -2418,6 +2431,18 @@
       el.textContent = message || '';
     }
 
+    function renderAdminSyncStatus() {
+      const el = document.getElementById('admin-sync-meta');
+      if (!el) return;
+      const s = dashboardSettingsState || {};
+      const board = s.monday_board_name || s.monday_board_id || '-';
+      const at = fmtTs(s.monday_last_sync_at);
+      const by = s.monday_last_sync_by || '-';
+      const rows = Number.isFinite(Number(s.monday_last_sync_rows)) ? money.format(Number(s.monday_last_sync_rows)) : '-';
+      const src = s.monday_board_url || (s.monday_board_id ? `https://themathcocrmtrial.monday.com/boards/${s.monday_board_id}` : '-');
+      el.textContent = `Last sync: ${at}\nBoard: ${board}\nRows pulled: ${rows}\nTriggered by: ${by}\nSource: ${src}`;
+    }
+
     function parseBoardId(value) {
       const s = String(value || '').trim();
       if (!s) return null;
@@ -2456,6 +2481,7 @@
         monday_board_url: `https://themathcocrmtrial.monday.com/boards/${boardId}`,
       };
       persistLocalStateBundle();
+      renderAdminSyncStatus();
       return body;
     }
 
@@ -2517,6 +2543,7 @@
             || 'https://themathcocrmtrial.monday.com/boards/6218900009'
           );
         }
+        renderAdminSyncStatus();
         renderAdminUsers();
         renderAdminTargets();
       } else {
@@ -3830,6 +3857,7 @@
           await loadSharedStore();
           renderScorecard(data);
           renderAdminTargets();
+          renderAdminSyncStatus();
           if (currentUser && currentUser.role === 'admin') renderAdminUsers();
           showAdminMessage('Shared data refreshed.');
         });
