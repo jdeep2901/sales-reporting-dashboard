@@ -3544,6 +3544,57 @@
       sellerSelect.value = [...sellerSelect.options].some((x) => x.value === current) ? current : 'Overall';
     }
 
+    function computeSellerFlowFromStageRows(rows, scope) {
+      const maxStage = scope === 'all' ? MOMENTUM_ALL_STAGE_MAX : MOMENTUM_CORE_STAGE_MAX;
+      const normalized = (rows || [])
+        .map((r) => ({
+          stage: stageNumber(r.stage),
+          left: Number(r.left || 0),
+          right: Number(r.right || 0),
+          delta: Number(r.delta || 0),
+        }))
+        .filter((r) => r.stage != null && r.stage >= 1 && r.stage <= maxStage)
+        .sort((a, b) => a.stage - b.stage);
+      const deficits = normalized.filter((r) => r.delta < 0).map((r) => ({ stage: r.stage, qty: Math.abs(r.delta) }));
+      const surpluses = normalized.filter((r) => r.delta > 0).map((r) => ({ stage: r.stage, qty: r.delta }));
+      let forwardPoints = 0;
+      let backwardPoints = 0;
+      let matchedQty = 0;
+      deficits.forEach((d) => {
+        while (d.qty > 0) {
+          let bestIdx = -1;
+          let bestDist = Number.POSITIVE_INFINITY;
+          for (let i = 0; i < surpluses.length; i += 1) {
+            const s = surpluses[i];
+            if (!s || s.qty <= 0) continue;
+            const dist = Math.abs(s.stage - d.stage);
+            if (dist < bestDist) {
+              bestDist = dist;
+              bestIdx = i;
+            }
+          }
+          if (bestIdx < 0) break;
+          const s = surpluses[bestIdx];
+          const q = Math.min(d.qty, s.qty);
+          if (s.stage > d.stage) forwardPoints += q * (s.stage - d.stage);
+          else if (s.stage < d.stage) backwardPoints += q * (d.stage - s.stage);
+          matchedQty += q;
+          d.qty -= q;
+          s.qty -= q;
+        }
+      });
+      const additions = surpluses.reduce((acc, s) => acc + Math.max(0, Number(s.qty || 0)), 0);
+      const removals = deficits.reduce((acc, d) => acc + Math.max(0, Number(d.qty || 0)), 0);
+      const leftTotal = normalized.reduce((acc, r) => acc + r.left, 0);
+      const unchanged = Math.max(0, leftTotal - removals - matchedQty);
+      return {
+        forwardPoints,
+        backwardPoints,
+        additions,
+        unchanged,
+      };
+    }
+
     function buildMomentumRows(payload, scope, knownSellers, leftLookup, rightLookup) {
       const movement = payload.movement || {};
       const stageDeltas = payload.stage_deltas || [];
@@ -3568,32 +3619,23 @@
 
       (knownSellers || []).forEach((s) => init(s));
 
-      (movement.stage_changed || []).forEach((r) => {
-        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
-        const leftN = stageNumber(r.left_stage);
-        const rightN = stageNumber(r.right_stage);
-        if (leftN == null || rightN == null) return;
-        const maxStage = scope === 'all' ? MOMENTUM_ALL_STAGE_MAX : MOMENTUM_CORE_STAGE_MAX;
-        if (leftN > maxStage || rightN > maxStage) return;
+      stageDeltas.forEach((sellerBlock) => {
+        const seller = String(sellerBlock.seller || '').trim();
+        if (!seller) return;
         const row = init(seller);
-        const diff = rightN - leftN;
-        if (diff > 0) row.forwardPoints += diff;
-        else if (diff < 0) row.backwardPoints += Math.abs(diff);
-      });
-
-      (movement.added || []).forEach((r) => {
-        if (!momentumStageInScope(r.stage, scope)) return;
-        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
-        const row = init(seller);
-        row.additions += 1;
-        row.additionPoints += momentumAdditionPoints(r.stage, scope);
-      });
-
-      (movement.unchanged || []).forEach((r) => {
-        if (!momentumStageInScope(r.stage, scope)) return;
-        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
-        const row = init(seller);
-        row.unchanged += 1;
+        const flow = computeSellerFlowFromStageRows(sellerBlock.rows || [], scope);
+        row.forwardPoints = flow.forwardPoints;
+        row.backwardPoints = flow.backwardPoints;
+        row.additions = flow.additions;
+        row.unchanged = flow.unchanged;
+        row.additionPoints = (sellerBlock.rows || []).reduce((acc, x) => {
+          const d = Number(x.delta || 0);
+          if (d <= 0) return acc;
+          const stage = stageNumber(x.stage);
+          if (stage == null) return acc;
+          if (!momentumStageInScope(x.stage, scope)) return acc;
+          return acc + (d * momentumAdditionPoints(x.stage, scope));
+        }, 0);
       });
 
       stuckDeltas.forEach((r) => {
