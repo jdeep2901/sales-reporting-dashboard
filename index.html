@@ -949,57 +949,6 @@
       background: #fff;
     }
 
-    .likelihood-summary {
-      border: 1px solid #dfe8f8;
-      border-radius: 8px;
-      background: #f8fbff;
-      padding: 9px 10px;
-      margin-top: 8px;
-      display: grid;
-      gap: 6px;
-    }
-
-    .likelihood-summary-title {
-      font-size: 11px;
-      font-weight: 700;
-      color: #304a74;
-      text-transform: uppercase;
-      letter-spacing: 0.2px;
-    }
-
-    .likelihood-summary-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 12px;
-      color: #223758;
-    }
-
-    .likelihood-summary-row strong {
-      color: #0e2f63;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .likelihood-summary-metric {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-
-    .likelihood-summary-revenue {
-      font-size: 11px;
-      color: #36507a;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .likelihood-summary-pending {
-      border-top: 1px solid #dce7fb;
-      padding-top: 6px;
-      font-size: 11px;
-      color: #4a5f84;
-    }
-
     .likelihood-grid {
       margin-top: 8px;
       display: grid;
@@ -2311,19 +2260,9 @@
       const x = classifyLikelihoodForSeller(metric);
       const tThis = getQuarterTarget(seller, activeQuarterLabels.current);
       const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
-      refs.thisQuarterCount.textContent = tThis.deals > 0
-        ? `${money.format(x.thisQuarterDeals.length)} / ${money.format(tThis.deals)}`
-        : money.format(x.thisQuarterDeals.length);
-      refs.thisQuarterRevenue.textContent = `A ${fmtDealSize(x.thisQuarterRevenue)} | T ${fmtDealSize(tThis.revenue)} (${pctText(x.thisQuarterRevenue, tThis.revenue)})`;
-      refs.nextQuarterCount.textContent = tNext.deals > 0
-        ? `${money.format(x.nextQuarterDeals.length)} / ${money.format(tNext.deals)}`
-        : money.format(x.nextQuarterDeals.length);
-      refs.nextQuarterRevenue.textContent = `A ${fmtDealSize(x.nextQuarterRevenue)} | T ${fmtDealSize(tNext.revenue)} (${pctText(x.nextQuarterRevenue, tNext.revenue)})`;
-      refs.helpNeededCount.textContent = money.format(x.helpNeededDeals.length);
-      refs.pending.textContent = money.format(x.pendingStage3Plus);
       refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals (T ${money.format(tThis.deals)} | ${pctText(x.thisQuarterDeals.length, tThis.deals)}) | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)})`;
       refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals (T ${money.format(tNext.deals)} | ${pctText(x.nextQuarterDeals.length, tNext.deals)}) | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)})`;
-      refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals`;
+      refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals | Not updated (stage 3+): ${money.format(x.pendingStage3Plus)}`;
       renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals);
       renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals);
       renderLikelihoodDealLines(refs.helpLines, x.helpNeededDeals);
@@ -3092,52 +3031,6 @@
         mid.appendChild(shape);
         card.appendChild(mid);
 
-        const summary = document.createElement('div');
-        summary.className = 'likelihood-summary';
-        const summaryTitle = document.createElement('div');
-        summaryTitle.className = 'likelihood-summary-title';
-        summaryTitle.textContent = 'Seller-Tagged Close Likelihood';
-        summary.appendChild(summaryTitle);
-
-        const row1 = document.createElement('div');
-        row1.className = 'likelihood-summary-row';
-        row1.appendChild(makeCell('span', `1. Closures in ${activeQuarterLabels.current}`));
-        const row1Metric = document.createElement('div');
-        row1Metric.className = 'likelihood-summary-metric';
-        const row1Val = makeCell('strong', '0');
-        const row1Rev = makeCell('span', '$0', 'likelihood-summary-revenue');
-        row1Metric.appendChild(row1Val);
-        row1Metric.appendChild(row1Rev);
-        row1.appendChild(row1Metric);
-        summary.appendChild(row1);
-
-        const row2 = document.createElement('div');
-        row2.className = 'likelihood-summary-row';
-        row2.appendChild(makeCell('span', `2. Closures in ${activeQuarterLabels.next}`));
-        const row2Metric = document.createElement('div');
-        row2Metric.className = 'likelihood-summary-metric';
-        const row2Val = makeCell('strong', '0');
-        const row2Rev = makeCell('span', '$0', 'likelihood-summary-revenue');
-        row2Metric.appendChild(row2Val);
-        row2Metric.appendChild(row2Rev);
-        row2.appendChild(row2Metric);
-        summary.appendChild(row2);
-
-        const row3 = document.createElement('div');
-        row3.className = 'likelihood-summary-row';
-        row3.appendChild(makeCell('span', '3. Help Needed / Stuck'));
-        const row3Val = makeCell('strong', '0');
-        row3.appendChild(row3Val);
-        summary.appendChild(row3);
-
-        const pending = document.createElement('div');
-        pending.className = 'likelihood-summary-pending';
-        pending.appendChild(document.createTextNode('Not updated (stage 3+): '));
-        const pendingVal = makeCell('strong', '0');
-        pending.appendChild(pendingVal);
-        summary.appendChild(pending);
-        card.appendChild(summary);
-
         const likelihoodGrid = document.createElement('div');
         likelihoodGrid.className = 'likelihood-grid';
 
@@ -3181,12 +3074,6 @@
         likelihoodGrid.appendChild(helpCard.shell);
         card.appendChild(likelihoodGrid);
         scorecardSummaryEls[seller] = {
-          thisQuarterCount: row1Val,
-          thisQuarterRevenue: row1Rev,
-          nextQuarterCount: row2Val,
-          nextQuarterRevenue: row2Rev,
-          helpNeededCount: row3Val,
-          pending: pendingVal,
           thisQuarterMeta: thisCard.meta,
           nextQuarterMeta: nextCard.meta,
           helpMeta: helpCard.meta,
