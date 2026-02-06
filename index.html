@@ -1050,14 +1050,20 @@
       background: #fcfdff;
     }
 
-    .target-grid {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(5, minmax(130px, 1fr));
+    .target-controls {
+      display: flex;
       align-items: end;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
     }
 
-    .target-grid input, .target-grid select {
+    .target-controls > div {
+      min-width: 300px;
+      flex: 1 1 320px;
+    }
+
+    .target-controls input {
       width: 100%;
       min-width: 0;
       padding: 10px 11px;
@@ -1068,7 +1074,7 @@
       background: #fff;
     }
 
-    .target-grid button {
+    .target-controls button {
       border: 1px solid #0b5fff;
       border-radius: 8px;
       padding: 10px 12px;
@@ -1078,6 +1084,56 @@
       font-weight: 700;
       cursor: pointer;
       height: 40px;
+    }
+
+    .target-grid-table {
+      width: 100%;
+      min-width: 840px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .target-grid-table th, .target-grid-table td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 7px 8px;
+      text-align: left;
+      white-space: nowrap;
+      background: #fff;
+    }
+
+    .target-grid-table th:first-child, .target-grid-table td:first-child {
+      border-left: 1px solid var(--line);
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: #f9fbff;
+      font-weight: 700;
+    }
+
+    .target-grid-table thead th {
+      border-top: 1px solid var(--line);
+      background: #f6f9ff;
+      color: #1f3f75;
+      text-align: center;
+    }
+
+    .target-grid-table .target-subhead {
+      font-size: 11px;
+      font-weight: 600;
+      color: #315081;
+    }
+
+    .target-grid-table input {
+      width: 110px;
+      padding: 6px 7px;
+      border: 1px solid #d2ddf1;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #1f355b;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .target-table {
@@ -1336,10 +1392,6 @@
 
     @media (max-width: 980px) {
       .admin-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .target-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1670,38 +1722,25 @@
           </div>
           <div class="admin-card">
             <label style="margin-bottom:8px;">Quarter Targets (Per Seller)</label>
-            <form id="admin-target-form" class="target-grid" autocomplete="off">
+            <form id="admin-target-form" class="target-controls" autocomplete="off">
               <div>
-                <label for="admin-target-seller">Seller</label>
-                <select id="admin-target-seller"></select>
+                <label for="admin-target-quarters">Quarter Columns (comma separated)</label>
+                <input id="admin-target-quarters" type="text" placeholder="Q4'26, Q1'27" />
               </div>
-              <div>
-                <label for="admin-target-quarter">Quarter</label>
-                <input id="admin-target-quarter" type="text" placeholder="Q4'26" required />
-              </div>
-              <div>
-                <label for="admin-target-deals">Deal Target</label>
-                <input id="admin-target-deals" type="number" min="0" step="1" placeholder="0" />
-              </div>
-              <div>
-                <label for="admin-target-revenue">Revenue Target ($)</label>
-                <input id="admin-target-revenue" type="number" min="0" step="1" placeholder="0" />
-              </div>
-              <button type="submit">Save Target</button>
+              <button type="submit">Save All Targets</button>
             </form>
             <div id="admin-target-msg" class="auth-error"></div>
             <div class="admin-table-wrap">
-              <table class="target-table">
+              <table class="target-grid-table">
                 <thead>
-                  <tr>
+                  <tr id="admin-target-grid-head-main">
                     <th>Seller</th>
-                    <th>Quarter</th>
-                    <th>Deal Target</th>
-                    <th>Revenue Target</th>
-                    <th>Action</th>
+                  </tr>
+                  <tr id="admin-target-grid-head-sub">
+                    <th class="target-subhead">-</th>
                   </tr>
                 </thead>
-                <tbody id="admin-targets-body"></tbody>
+                <tbody id="admin-target-grid-body"></tbody>
               </table>
             </div>
           </div>
@@ -1999,70 +2038,106 @@
       el.textContent = message || '';
     }
 
+    function parseQuarterColumns(raw) {
+      const seen = new Set();
+      const out = [];
+      String(raw || '')
+        .split(',')
+        .map((x) => normalizeQuarterLabel(x))
+        .filter(Boolean)
+        .forEach((q) => {
+          if (seen.has(q)) return;
+          seen.add(q);
+          out.push(q);
+        });
+      return out;
+    }
+
+    function getTargetSellers() {
+      const labels = (scorecardSellerLabels || []).filter((s) => String(s || '').trim());
+      const out = labels.filter((s) => s !== 'Overall');
+      return out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor'];
+    }
+
     function renderAdminTargets() {
-      const sellerSelect = document.getElementById('admin-target-seller');
-      const body = document.getElementById('admin-targets-body');
-      if (!sellerSelect || !body) return;
-      sellerSelect.innerHTML = '';
-      scorecardSellerLabels.forEach((seller) => {
-        const o = document.createElement('option');
-        o.value = seller;
-        o.textContent = seller;
-        sellerSelect.appendChild(o);
-      });
-      const qInput = document.getElementById('admin-target-quarter');
-      if (qInput && !qInput.value && activeQuarterLabels.current) {
-        qInput.value = activeQuarterLabels.current;
+      const quarterInput = document.getElementById('admin-target-quarters');
+      const headMain = document.getElementById('admin-target-grid-head-main');
+      const headSub = document.getElementById('admin-target-grid-head-sub');
+      const body = document.getElementById('admin-target-grid-body');
+      if (!quarterInput || !headMain || !headSub || !body) return;
+
+      const fallback = [activeQuarterLabels.current, activeQuarterLabels.next].filter(Boolean);
+      const existing = Array.from(new Set(Object.values(quarterTargetsState || {})
+        .map((x) => normalizeQuarterLabel(x && x.quarter))
+        .filter(Boolean)))
+        .sort();
+      let quarters = parseQuarterColumns(quarterInput.value);
+      if (!quarters.length) {
+        quarters = existing.length ? existing : fallback;
+        quarterInput.value = quarters.join(', ');
+      }
+      if (!quarters.length) {
+        quarters = ["Q4'26", "Q1'27"];
+        quarterInput.value = quarters.join(', ');
       }
 
-      const entries = Object.values(quarterTargetsState || {})
-        .filter((x) => x && x.seller && x.quarter)
-        .sort((a, b) => {
-          const s = String(a.seller).localeCompare(String(b.seller));
-          if (s !== 0) return s;
-          return String(a.quarter).localeCompare(String(b.quarter));
-        });
+      const sellers = getTargetSellers();
+
+      headMain.innerHTML = '';
+      headSub.innerHTML = '';
+      const sellerMain = document.createElement('th');
+      sellerMain.rowSpan = 2;
+      sellerMain.textContent = 'Seller';
+      headMain.appendChild(sellerMain);
+      const sellerSub = document.createElement('th');
+      sellerSub.textContent = '-';
+      sellerSub.className = 'target-subhead';
+      headSub.appendChild(sellerSub);
+      quarters.forEach((q) => {
+        const th = document.createElement('th');
+        th.colSpan = 2;
+        th.textContent = q;
+        headMain.appendChild(th);
+        const d = document.createElement('th');
+        d.textContent = 'Deals';
+        d.className = 'target-subhead';
+        headSub.appendChild(d);
+        const r = document.createElement('th');
+        r.textContent = 'Revenue ($)';
+        r.className = 'target-subhead';
+        headSub.appendChild(r);
+      });
+
       body.innerHTML = '';
-      if (!entries.length) {
+      sellers.forEach((seller) => {
         const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', 'No targets configured'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        body.appendChild(tr);
-        return;
-      }
-      entries.forEach((x) => {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', x.seller));
-        tr.appendChild(makeCell('td', x.quarter));
-        tr.appendChild(makeCell('td', money.format(Number(x.deals || 0))));
-        tr.appendChild(makeCell('td', fmtDealSize(Number(x.revenue || 0))));
-        const tdAction = document.createElement('td');
-        const editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', () => {
-          document.getElementById('admin-target-seller').value = x.seller;
-          document.getElementById('admin-target-quarter').value = x.quarter;
-          document.getElementById('admin-target-deals').value = Number(x.deals || 0);
-          document.getElementById('admin-target-revenue').value = Number(x.revenue || 0);
-          showAdminTargetMessage(`Editing ${x.seller} ${x.quarter}.`);
+        tr.appendChild(makeCell('td', seller));
+        quarters.forEach((q) => {
+          const current = getQuarterTarget(seller, q);
+          const dealsTd = document.createElement('td');
+          const dealsInput = document.createElement('input');
+          dealsInput.type = 'number';
+          dealsInput.min = '0';
+          dealsInput.step = '1';
+          dealsInput.value = Number(current.deals || 0);
+          dealsInput.dataset.seller = seller;
+          dealsInput.dataset.quarter = q;
+          dealsInput.dataset.metric = 'deals';
+          dealsTd.appendChild(dealsInput);
+          tr.appendChild(dealsTd);
+
+          const revTd = document.createElement('td');
+          const revInput = document.createElement('input');
+          revInput.type = 'number';
+          revInput.min = '0';
+          revInput.step = '1';
+          revInput.value = Number(current.revenue || 0);
+          revInput.dataset.seller = seller;
+          revInput.dataset.quarter = q;
+          revInput.dataset.metric = 'revenue';
+          revTd.appendChild(revInput);
+          tr.appendChild(revTd);
         });
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.textContent = 'Delete';
-        delBtn.style.marginLeft = '6px';
-        delBtn.addEventListener('click', () => {
-          removeQuarterTarget(x.seller, x.quarter);
-          renderAdminTargets();
-          if (window.__salesData) renderScorecard(window.__salesData);
-          showAdminTargetMessage(`Deleted target ${x.seller} ${x.quarter}.`);
-        });
-        tdAction.appendChild(editBtn);
-        tdAction.appendChild(delBtn);
-        tr.appendChild(tdAction);
         body.appendChild(tr);
       });
     }
@@ -2363,7 +2438,7 @@
       } else {
         const body = document.getElementById('admin-users-body');
         if (body) body.innerHTML = '';
-        const tbody = document.getElementById('admin-targets-body');
+        const tbody = document.getElementById('admin-target-grid-body');
         if (tbody) tbody.innerHTML = '';
       }
     }
@@ -3730,6 +3805,12 @@
           }
         });
 
+        const adminTargetQuarterInput = document.getElementById('admin-target-quarters');
+        adminTargetQuarterInput.addEventListener('change', () => {
+          renderAdminTargets();
+          showAdminTargetMessage('Quarter columns updated. Edit values and click Save All Targets.');
+        });
+
         adminTargetForm.addEventListener('submit', (evt) => {
           evt.preventDefault();
           showAdminTargetMessage('');
@@ -3737,19 +3818,43 @@
             showAdminTargetMessage('Only admin users can configure targets.');
             return;
           }
-          const seller = document.getElementById('admin-target-seller').value;
-          const quarter = document.getElementById('admin-target-quarter').value;
-          const deals = document.getElementById('admin-target-deals').value;
-          const revenue = document.getElementById('admin-target-revenue').value;
-          try {
-            const q = upsertQuarterTarget(seller, quarter, deals, revenue);
+          const quarterInput = document.getElementById('admin-target-quarters');
+          const quarters = parseQuarterColumns(quarterInput.value);
+          if (!quarters.length) {
+            showAdminTargetMessage("Enter at least one quarter, e.g., Q4'26, Q1'27.");
+            return;
+          }
+          quarterInput.value = quarters.join(', ');
+          const newState = {};
+          const sellers = getTargetSellers();
+          const gridInputs = Array.from(document.querySelectorAll('#admin-target-grid-body input[data-seller][data-quarter][data-metric]'));
+          const valueFor = (seller, quarter, metric) => {
+            const match = gridInputs.find((x) => x.dataset.seller === seller && x.dataset.quarter === quarter && x.dataset.metric === metric);
+            return match ? match.value : '';
+          };
+          sellers.forEach((seller) => {
+            quarters.forEach((quarter) => {
+              const deals = Math.max(0, Number(valueFor(seller, quarter, 'deals') || 0));
+              const revenue = Math.max(0, Number(valueFor(seller, quarter, 'revenue') || 0));
+              if (deals > 0 || revenue > 0) {
+                newState[quarterTargetKey(seller, quarter)] = {
+                  seller,
+                  quarter,
+                  deals: Number.isFinite(deals) ? deals : 0,
+                  revenue: Number.isFinite(revenue) ? revenue : 0,
+                };
+              }
+            });
+          });
+          quarterTargetsState = newState;
+          persistLocalStateBundle();
+          pushSharedStoreNow({ throwOnError: true }).then(() => {
             renderAdminTargets();
             if (window.__salesData) renderScorecard(window.__salesData);
-            showAdminTargetMessage(`Saved target for ${seller} ${q}.`);
-            document.getElementById('admin-target-quarter').value = q;
-          } catch (e) {
+            showAdminTargetMessage(`Saved targets for ${money.format(sellers.length)} seller(s) across ${money.format(quarters.length)} quarter(s).`);
+          }).catch((e) => {
             showAdminTargetMessage(e.message || 'Unable to save target.');
-          }
+          });
         });
 
         const savedSession = loadSession();
