@@ -89,6 +89,19 @@ def parse_date(raw: str):
     return None
 
 
+def parse_amount(raw: str):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    cleaned = re.sub(r"[^0-9.\-]", "", raw)
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except Exception:
+        return None
+
+
 def make_table():
     return defaultdict(Counter)
 
@@ -178,6 +191,7 @@ def add_scorecard(
     created_date,
     next_step_date,
     created_month,
+    deal_size,
 ):
     bucket["stage_counts"][stage_label] += 1
     age_days = (date.today() - created_date).days if created_date is not None else None
@@ -187,6 +201,7 @@ def add_scorecard(
         "stage": stage_label,
         "created_month": created_month,
         "age_days": age_days,
+        "deal_size": deal_size,
     }
     if stage_norm in {"scheduled intro calls", "qualification"}:
         bucket["stage_1_2_count"] += 1
@@ -276,6 +291,9 @@ with zipfile.ZipFile(XLSX_PATH) as z:
         stage_raw = ""
         next_step_raw = ""
         intro_date_raw = ""
+        tcv_raw = ""
+        adj_contract_raw = ""
+        adj_contract_num_raw = ""
         industry_raw = ""
         logo_raw = ""
         function_raw = ""
@@ -299,6 +317,12 @@ with zipfile.ZipFile(XLSX_PATH) as z:
                 next_step_raw = cval(c)
             elif col == "AF":
                 intro_date_raw = cval(c)
+            elif col == "T":
+                tcv_raw = cval(c)
+            elif col == "U":
+                adj_contract_raw = cval(c)
+            elif col == "BW":
+                adj_contract_num_raw = cval(c)
 
         stage = clean_stage(stage_raw)
         if not stage or norm(stage) == "deal stage":
@@ -315,6 +339,11 @@ with zipfile.ZipFile(XLSX_PATH) as z:
         stage_label = FUNNEL_STAGE_MAP.get(stage_n, stage)
         next_step = parse_date(next_step_raw)
         intro_date = d
+        deal_size = parse_amount(adj_contract_num_raw)
+        if deal_size is None:
+            deal_size = parse_amount(adj_contract_raw)
+        if deal_size is None:
+            deal_size = parse_amount(tcv_raw)
         industry = primary_token(industry_raw)
         logo = primary_token(logo_raw)
         business_function = primary_token(function_raw)
@@ -351,6 +380,7 @@ with zipfile.ZipFile(XLSX_PATH) as z:
             d,
             next_step,
             month,
+            deal_size,
         )
 
         for label in matched_labels:
@@ -360,7 +390,7 @@ with zipfile.ZipFile(XLSX_PATH) as z:
                 inc(per_seller_carry[label], stage, month)
             if stage_n in FUNNEL_STAGE_MAP:
                 per_seller_funnel[label][FUNNEL_STAGE_MAP[stage_n]] += 1
-            add_scorecard(scorecard[label], deal_name, label, stage_n, stage_label, d, next_step, month)
+            add_scorecard(scorecard[label], deal_name, label, stage_n, stage_label, d, next_step, month, deal_size)
             if stage_n in MATTER_STAGES:
                 add_industry_action(industry_action[label], industry, logo, business_function)
 

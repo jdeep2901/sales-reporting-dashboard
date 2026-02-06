@@ -980,11 +980,83 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .likelihood-summary-metric {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .likelihood-summary-revenue {
+      font-size: 11px;
+      color: #36507a;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
     .likelihood-summary-pending {
       border-top: 1px solid #dce7fb;
       padding-top: 6px;
       font-size: 11px;
       color: #4a5f84;
+    }
+
+    .likelihood-grid {
+      margin-top: 8px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(250px, 1fr));
+    }
+
+    .likelihood-table-card {
+      border: 1px solid #e2eaf9;
+      border-radius: 9px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .likelihood-table-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e7edf7;
+      background: #f8fbff;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .likelihood-table-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1f3f75;
+    }
+
+    .likelihood-table-meta {
+      font-size: 11px;
+      color: #34507d;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .likelihood-table-wrap {
+      max-height: 210px;
+      overflow: auto;
+    }
+
+    .likelihood-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .likelihood-table th, .likelihood-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .likelihood-table th:nth-child(3), .likelihood-table td:nth-child(3) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .footnote {
@@ -1208,6 +1280,10 @@
 
       .admin-grid .span-2 {
         grid-column: span 1;
+      }
+
+      .likelihood-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1539,6 +1615,7 @@
               <th>Stage</th>
               <th>Intro Month</th>
               <th>Age (days)</th>
+              <th>Deal Size</th>
               <th>Reason</th>
               <th>Likelihood</th>
             </tr>
@@ -1551,6 +1628,11 @@
 
   <script>
     const money = new Intl.NumberFormat('en-US');
+    const moneyUsd = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    });
     const MATTER_STAGE_ORDER = [
       '1. Intro',
       '2. Qualification',
@@ -1615,6 +1697,16 @@
 
     function normalizeUsername(value) {
       return String(value || '').trim().toLowerCase();
+    }
+
+    function dealSizeValue(raw) {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function fmtDealSize(raw) {
+      if (raw == null || raw === '') return '-';
+      return moneyUsd.format(dealSizeValue(raw));
     }
 
     function fmtTs(ts) {
@@ -1700,36 +1792,78 @@
       return out;
     }
 
-    function summarizeLikelihoodForSeller(metric) {
+    function classifyLikelihoodForSeller(metric) {
       const universe = buildScorecardSellerUniverse(metric);
-      const summary = {
-        thisQuarter: 0,
-        nextQuarter: 0,
-        helpNeeded: 0,
+      const out = {
+        thisQuarterDeals: [],
+        nextQuarterDeals: [],
+        helpNeededDeals: [],
+        thisQuarterRevenue: 0,
+        nextQuarterRevenue: 0,
         pendingStage3Plus: 0,
       };
       universe.forEach((rec) => {
         const key = likelihoodRecordKey(rec);
         const selected = likelihoodState[key] || '';
-        if (selected === LIKELIHOOD_THIS_Q) summary.thisQuarter += 1;
-        else if (selected === LIKELIHOOD_NEXT_Q) summary.nextQuarter += 1;
-        else if (selected === LIKELIHOOD_HELP) summary.helpNeeded += 1;
+        const size = dealSizeValue(rec.deal_size);
+        if (selected === LIKELIHOOD_THIS_Q) {
+          out.thisQuarterDeals.push(rec);
+          out.thisQuarterRevenue += size;
+        } else if (selected === LIKELIHOOD_NEXT_Q) {
+          out.nextQuarterDeals.push(rec);
+          out.nextQuarterRevenue += size;
+        } else if (selected === LIKELIHOOD_HELP) {
+          out.helpNeededDeals.push(rec);
+        }
 
         const stageNum = stageNumber(rec.stage);
-        if (stageNum != null && stageNum >= 3 && !selected) summary.pendingStage3Plus += 1;
+        if (stageNum != null && stageNum >= 3 && stageNum <= 6 && !selected) out.pendingStage3Plus += 1;
       });
-      return summary;
+      return out;
+    }
+
+    function renderLikelihoodDealTable(bodyEl, rows) {
+      bodyEl.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals tagged'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        bodyEl.appendChild(tr);
+        return;
+      }
+      const sorted = [...rows].sort((a, b) => {
+        const ad = String(a.deal || '').toLowerCase();
+        const bd = String(b.deal || '').toLowerCase();
+        if (ad !== bd) return ad.localeCompare(bd);
+        return String(a.stage || '').localeCompare(String(b.stage || ''));
+      });
+      sorted.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal || '-'));
+        tr.appendChild(makeCell('td', r.stage || '-'));
+        tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
+        bodyEl.appendChild(tr);
+      });
     }
 
     function updateLikelihoodSummaryForSeller(seller) {
       const metric = scorecardStateBySeller[seller];
       const refs = scorecardSummaryEls[seller];
       if (!metric || !refs) return;
-      const summary = summarizeLikelihoodForSeller(metric);
-      refs.thisQuarter.textContent = money.format(summary.thisQuarter);
-      refs.nextQuarter.textContent = money.format(summary.nextQuarter);
-      refs.helpNeeded.textContent = money.format(summary.helpNeeded);
-      refs.pending.textContent = money.format(summary.pendingStage3Plus);
+      const x = classifyLikelihoodForSeller(metric);
+      refs.thisQuarterCount.textContent = money.format(x.thisQuarterDeals.length);
+      refs.thisQuarterRevenue.textContent = fmtDealSize(x.thisQuarterRevenue);
+      refs.nextQuarterCount.textContent = money.format(x.nextQuarterDeals.length);
+      refs.nextQuarterRevenue.textContent = fmtDealSize(x.nextQuarterRevenue);
+      refs.helpNeededCount.textContent = money.format(x.helpNeededDeals.length);
+      refs.pending.textContent = money.format(x.pendingStage3Plus);
+      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals | ${fmtDealSize(x.thisQuarterRevenue)}`;
+      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals | ${fmtDealSize(x.nextQuarterRevenue)}`;
+      refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals`;
+      renderLikelihoodDealTable(refs.thisQuarterBody, x.thisQuarterDeals);
+      renderLikelihoodDealTable(refs.nextQuarterBody, x.nextQuarterDeals);
+      renderLikelihoodDealTable(refs.helpBody, x.helpNeededDeals);
     }
 
     function loadAuthStore() {
@@ -2325,6 +2459,7 @@
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
         body.appendChild(tr);
       } else {
         const rows = [...records].sort((a, b) => {
@@ -2339,6 +2474,7 @@
           tr.appendChild(makeCell('td', r.stage || '-'));
           tr.appendChild(makeCell('td', r.created_month || '-'));
           tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
+          tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
           tr.appendChild(makeCell('td', r.reason || '-'));
           const selTd = document.createElement('td');
           const select = document.createElement('select');
@@ -2477,15 +2613,25 @@
         const row1 = document.createElement('div');
         row1.className = 'likelihood-summary-row';
         row1.appendChild(makeCell('span', `1. Closures in ${activeQuarterLabels.current}`));
+        const row1Metric = document.createElement('div');
+        row1Metric.className = 'likelihood-summary-metric';
         const row1Val = makeCell('strong', '0');
-        row1.appendChild(row1Val);
+        const row1Rev = makeCell('span', '$0', 'likelihood-summary-revenue');
+        row1Metric.appendChild(row1Val);
+        row1Metric.appendChild(row1Rev);
+        row1.appendChild(row1Metric);
         summary.appendChild(row1);
 
         const row2 = document.createElement('div');
         row2.className = 'likelihood-summary-row';
         row2.appendChild(makeCell('span', `2. Closures in ${activeQuarterLabels.next}`));
+        const row2Metric = document.createElement('div');
+        row2Metric.className = 'likelihood-summary-metric';
         const row2Val = makeCell('strong', '0');
-        row2.appendChild(row2Val);
+        const row2Rev = makeCell('span', '$0', 'likelihood-summary-revenue');
+        row2Metric.appendChild(row2Val);
+        row2Metric.appendChild(row2Rev);
+        row2.appendChild(row2Metric);
         summary.appendChild(row2);
 
         const row3 = document.createElement('div');
@@ -2502,41 +2648,63 @@
         pending.appendChild(pendingVal);
         summary.appendChild(pending);
         card.appendChild(summary);
-        scorecardSummaryEls[seller] = {
-          thisQuarter: row1Val,
-          nextQuarter: row2Val,
-          helpNeeded: row3Val,
-          pending: pendingVal,
-        };
 
-        const table = document.createElement('table');
-        table.className = 'score-table';
-        const thead = document.createElement('thead');
-        const hr = document.createElement('tr');
-        hr.appendChild(makeCell('th', 'Top Stuck Deals'));
-        hr.appendChild(makeCell('th', 'Age (days)'));
-        thead.appendChild(hr);
-        table.appendChild(thead);
-        const tbody = document.createElement('tbody');
-        const stuck = m.stuck_top10 || [];
-        if (!stuck.length) {
-          const tr = document.createElement('tr');
-          tr.appendChild(makeCell('td', 'No stuck deals flagged'));
-          tr.appendChild(makeCell('td', '-'));
-          tbody.appendChild(tr);
-        } else {
-          stuck.forEach((r) => {
-            const tr = document.createElement('tr');
-            const reason = [];
-            if (r.missing_next_step) reason.push('no next step');
-            if (r.over_sla) reason.push('over SLA');
-            tr.appendChild(makeCell('td', `${r.deal} (${r.stage}; ${reason.join(', ')})`));
-            tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
-            tbody.appendChild(tr);
-          });
+        const likelihoodGrid = document.createElement('div');
+        likelihoodGrid.className = 'likelihood-grid';
+
+        function makeLikelihoodCard(title) {
+          const shell = document.createElement('div');
+          shell.className = 'likelihood-table-card';
+          const head2 = document.createElement('div');
+          head2.className = 'likelihood-table-head';
+          const t = document.createElement('div');
+          t.className = 'likelihood-table-title';
+          t.textContent = title;
+          const meta2 = document.createElement('div');
+          meta2.className = 'likelihood-table-meta';
+          meta2.textContent = '0 deals';
+          head2.appendChild(t);
+          head2.appendChild(meta2);
+          shell.appendChild(head2);
+          const wrap2 = document.createElement('div');
+          wrap2.className = 'likelihood-table-wrap';
+          const table2 = document.createElement('table');
+          table2.className = 'likelihood-table';
+          const thead2 = document.createElement('thead');
+          const hr2 = document.createElement('tr');
+          hr2.appendChild(makeCell('th', 'Deal'));
+          hr2.appendChild(makeCell('th', 'Stage'));
+          hr2.appendChild(makeCell('th', 'Deal Size'));
+          thead2.appendChild(hr2);
+          table2.appendChild(thead2);
+          const body2 = document.createElement('tbody');
+          table2.appendChild(body2);
+          wrap2.appendChild(table2);
+          shell.appendChild(wrap2);
+          return { shell, meta: meta2, body: body2 };
         }
-        table.appendChild(tbody);
-        card.appendChild(table);
+
+        const thisCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.current}`);
+        const nextCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.next}`);
+        const helpCard = makeLikelihoodCard('Help Needed / Stuck');
+        likelihoodGrid.appendChild(thisCard.shell);
+        likelihoodGrid.appendChild(nextCard.shell);
+        likelihoodGrid.appendChild(helpCard.shell);
+        card.appendChild(likelihoodGrid);
+        scorecardSummaryEls[seller] = {
+          thisQuarterCount: row1Val,
+          thisQuarterRevenue: row1Rev,
+          nextQuarterCount: row2Val,
+          nextQuarterRevenue: row2Rev,
+          helpNeededCount: row3Val,
+          pending: pendingVal,
+          thisQuarterMeta: thisCard.meta,
+          nextQuarterMeta: nextCard.meta,
+          helpMeta: helpCard.meta,
+          thisQuarterBody: thisCard.body,
+          nextQuarterBody: nextCard.body,
+          helpBody: helpCard.body,
+        };
 
         wrap.appendChild(card);
         updateLikelihoodSummaryForSeller(seller);
