@@ -1,0 +1,2431 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deal Stage Crosstab</title>
+  <style>
+    :root {
+      --bg0: #f5f7fb;
+      --bg1: #e9eef7;
+      --ink: #142033;
+      --muted: #51617a;
+      --brand: #0b5fff;
+      --card: #ffffff;
+      --line: #d7dfeb;
+      --accent: #e8f0ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #dce9ff 0%, transparent 60%),
+        radial-gradient(1000px 500px at 100% 0%, #eef3ff 0%, transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1500px;
+      margin: 24px auto;
+      padding: 0 16px 28px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 10px 26px rgba(21, 41, 74, 0.08);
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f7faff;
+    }
+
+    .tab-btn {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: #fff;
+      color: #264069;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: #0b5fff;
+      color: #fff;
+      border-color: #0b5fff;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+
+    select {
+      min-width: 240px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      font-size: 14px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .stage-filter {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px 10px;
+      min-width: 290px;
+      max-width: 460px;
+    }
+
+    .stage-filter-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .stage-filter-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stage-filter-actions button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f7faff;
+      color: #264069;
+      font-size: 11px;
+      padding: 4px 7px;
+      cursor: pointer;
+    }
+
+    .stage-options {
+      max-height: 120px;
+      overflow: auto;
+      display: grid;
+      gap: 4px;
+    }
+
+    .stage-option {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #23344f;
+      font-size: 12px;
+    }
+
+    .stage-option input {
+      margin: 0;
+    }
+
+    .stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: #24324d;
+    }
+
+    .chip strong {
+      color: var(--brand);
+      margin-left: 4px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 74vh;
+    }
+
+    table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    th, td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 6px 9px;
+      white-space: nowrap;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #f7faff;
+      color: #1f2c45;
+      font-weight: 700;
+    }
+
+    th:first-child, td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #fbfdff;
+      text-align: left;
+      font-weight: 600;
+      min-width: 220px;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    thead th:first-child { z-index: 4; background: #f1f6ff; }
+
+    tbody tr:nth-child(even) td { background: #fcfdff; }
+
+    tbody tr.total-row td {
+      background: var(--accent);
+      font-weight: 700;
+    }
+
+    tfoot td {
+      background: #edf3ff;
+      font-weight: 700;
+    }
+
+    td.clickable {
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    td.clickable:hover {
+      background: #e9f1ff !important;
+    }
+
+    td.carry-in {
+      background: #fff1d6 !important;
+      color: #5f3b00;
+      font-weight: 700;
+    }
+
+    td.carry-in::after {
+      content: " *";
+      color: #8b4b00;
+      font-weight: 800;
+    }
+
+    .detail-panel {
+      margin: 14px 16px 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .detail-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #f7faff;
+    }
+
+    .detail-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .detail-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .detail-wrap {
+      max-height: 34vh;
+      overflow: auto;
+    }
+
+    .detail-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .detail-table th, .detail-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .detail-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #fbfdff;
+      color: #294066;
+    }
+
+    .row-label {
+      cursor: pointer;
+    }
+
+    .row-label:hover {
+      background: #e9f1ff !important;
+    }
+
+    .funnel-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    .funnel-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .funnel-title {
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbff;
+    }
+
+    .funnel-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .funnel-table th, .funnel-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .funnel-table th:nth-child(2), .funnel-table td:nth-child(2),
+    .funnel-table th:nth-child(3), .funnel-table td:nth-child(3) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .funnel-foot {
+      padding: 8px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      background: #fbfdff;
+    }
+
+    .funnel-controls {
+      padding: 10px 16px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .funnel-time {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px 10px;
+      min-width: 280px;
+    }
+
+    .funnel-time-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .funnel-time-value {
+      font-size: 12px;
+      color: #23406b;
+      font-weight: 700;
+    }
+
+    .funnel-time input[type="range"] {
+      width: 100%;
+    }
+
+    .funnel-filter {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px 10px;
+      min-width: 320px;
+      max-width: 520px;
+    }
+
+    .funnel-filter-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .funnel-filter-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .funnel-filter-actions button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f7faff;
+      color: #264069;
+      font-size: 11px;
+      padding: 4px 7px;
+      cursor: pointer;
+    }
+
+    .funnel-options {
+      max-height: 120px;
+      overflow: auto;
+      display: grid;
+      gap: 4px;
+    }
+
+    .funnel-option {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #23344f;
+      font-size: 12px;
+    }
+
+    .score-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    .score-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .score-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .score-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .score-kpis {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      padding: 10px 12px;
+    }
+
+    .score-mid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e7edf7;
+    }
+
+    .kpi {
+      border: 1px solid #e4ebf8;
+      border-radius: 8px;
+      padding: 7px 8px;
+      background: #fcfdff;
+    }
+
+    .kpi.clickable-kpi {
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+
+    .kpi.clickable-kpi:hover {
+      background: #eef4ff;
+      border-color: #c8d8fa;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .kpi-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: #16305b;
+      margin-top: 3px;
+    }
+
+    .funnel-shape {
+      border: 1px solid #e4ebf8;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fcfdff;
+    }
+
+    .funnel-shape-title {
+      font-size: 11px;
+      color: #4b5f81;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .funnel-shape-row {
+      display: grid;
+      grid-template-columns: 42px 1fr 36px;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .funnel-shape-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .funnel-shape-label {
+      font-size: 11px;
+      color: #3f5477;
+      font-weight: 700;
+    }
+
+    .funnel-shape-track {
+      height: 12px;
+      background: #edf2fb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .funnel-shape-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #6f96ff, #0b5fff);
+    }
+
+    .funnel-shape-value {
+      font-size: 11px;
+      color: #2e4266;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .score-table th, .score-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .score-table th:nth-child(2), .score-table td:nth-child(2) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .industry-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    .industry-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .industry-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #f9fbff;
+    }
+
+    .industry-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .industry-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .industry-table th, .industry-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .industry-table th:nth-child(2), .industry-table td:nth-child(2) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-width: 100%;
+    }
+
+    .pill {
+      border: 1px solid #dce6f8;
+      background: #f7faff;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 11px;
+      color: #23406b;
+      white-space: nowrap;
+    }
+
+    .wl-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .wl-controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
+    .wl-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .wl-table th, .wl-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .wl-table th:nth-child(n+4), .wl-table td:nth-child(n+4) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .intro-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .intro-controls {
+      display: flex;
+      align-items: end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chart-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      padding: 10px;
+    }
+
+    .chart-svg {
+      width: 100%;
+      height: 360px;
+      display: block;
+    }
+
+    .chart-axis {
+      stroke: #b7c6e3;
+      stroke-width: 1;
+    }
+
+    .chart-line {
+      fill: none;
+      stroke: #0b5fff;
+      stroke-width: 2.5;
+    }
+
+    .chart-point {
+      fill: #0b5fff;
+    }
+
+    .chart-bar {
+      fill: #6f96ff;
+      cursor: pointer;
+      transition: fill 120ms ease;
+    }
+
+    .chart-bar:hover {
+      fill: #0b5fff;
+    }
+
+    .chart-bar-current {
+      fill: #ff8a3d;
+    }
+
+    .chart-bar-current:hover {
+      fill: #ff6f1a;
+    }
+
+    .chart-label {
+      fill: #304a74;
+      font-size: 11px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+    }
+
+    .chart-target {
+      stroke: #d64545;
+      stroke-width: 2;
+      stroke-dasharray: 6 4;
+    }
+
+    .chart-target-label {
+      fill: #a02f2f;
+      font-size: 11px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-weight: 700;
+    }
+
+    .chart-tooltip {
+      position: fixed;
+      pointer-events: none;
+      z-index: 80;
+      background: #0f2347;
+      color: #fff;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 11px;
+      line-height: 1.25;
+      box-shadow: 0 8px 24px rgba(10, 19, 36, 0.28);
+      display: none;
+      white-space: nowrap;
+    }
+
+    .intro-detail {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .intro-detail-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #f7faff;
+    }
+
+    .intro-detail-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .intro-detail-wrap {
+      max-height: 34vh;
+      overflow: auto;
+    }
+
+    .intro-detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .intro-detail-table th, .intro-detail-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .focus-badge {
+      border: 1px solid #f1d8a6;
+      background: #fff3db;
+      color: #7a4b00;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .watch-badge {
+      border: 1px solid #d7def0;
+      background: #eef3ff;
+      color: #2c4675;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .popup {
+      position: fixed;
+      inset: 0;
+      background: rgba(12, 22, 38, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+
+    .popup.open {
+      display: flex;
+    }
+
+    .popup-card {
+      width: min(980px, 96vw);
+      max-height: 84vh;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(14, 27, 45, 0.28);
+    }
+
+    .popup-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #f7faff;
+    }
+
+    .popup-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .popup-close {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: #264069;
+      font-size: 12px;
+      padding: 5px 8px;
+      cursor: pointer;
+    }
+
+    .popup-wrap {
+      max-height: 72vh;
+      overflow: auto;
+    }
+
+    .popup-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .popup-table th, .popup-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .footnote {
+      padding: 10px 18px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    .error {
+      margin: 12px 0;
+      padding: 10px 12px;
+      border: 1px solid #f1c6c6;
+      border-radius: 10px;
+      background: #fff6f6;
+      color: #821d1d;
+      font-size: 13px;
+    }
+
+    .insight {
+      margin: 10px 16px 0;
+      border: 1px solid #dbe7ff;
+      background: linear-gradient(180deg, #f9fbff, #f3f7ff);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .insight-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1f3f75;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      margin-bottom: 6px;
+    }
+
+    .insight-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #213555;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="error" class="error" style="display:none;"></div>
+    <div class="panel" id="app" style="display:none;">
+      <div class="tabs">
+        <button id="tab-crosstab" class="tab-btn active" type="button">Crosstab</button>
+        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
+        <button id="tab-scorecard" class="tab-btn" type="button">Weekly Scorecard</button>
+        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
+        <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
+        <button id="tab-introtrend" class="tab-btn" type="button">Intro Calls Trend</button>
+      </div>
+
+      <div id="view-crosstab" class="view active">
+        <div class="head">
+          <div>
+            <h1>Deal Stage x Intro Month Crosstab</h1>
+            <div class="sub">Data source: <code>Deals_1770357609.xlsx</code> | Stage from <code>BF</code> | Intro date from <code>AF</code> | Intro Date cutoff: <code>&gt;= 2024-10-01</code> (column <code>AF</code>)</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="seller">Seller View</label>
+              <select id="seller"></select>
+            </div>
+            <div class="stage-filter">
+              <div class="stage-filter-head">
+                <label for="stage-options" style="margin:0;">Deal Stage Filter</label>
+                <div class="stage-filter-actions">
+                  <button type="button" id="stage-matter">Matter Stages</button>
+                  <button type="button" id="stage-all">All</button>
+                </div>
+              </div>
+              <div id="stage-options" class="stage-options"></div>
+            </div>
+            <div class="stats" id="stats"></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="pivot"></table>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-crosstab" class="insight-list"></ul>
+        </div>
+        <div class="detail-panel">
+          <div class="detail-head">
+            <div id="detail-title" class="detail-title">Details</div>
+            <div id="detail-meta" class="detail-meta">Select any crosstab cell or stage row to load deals.</div>
+          </div>
+          <div class="detail-wrap">
+            <table class="detail-table" id="detail-table">
+              <thead>
+                <tr>
+                  <th>Deal Name</th>
+                  <th>Stage</th>
+                  <th>Intro Month</th>
+                </tr>
+              </thead>
+              <tbody id="detail-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="footnote">Filtered to deals with Intro Date &gt;= 2024-10-01. "All (unique deals)" counts each deal once if any of the target sellers appears in owner. Seller-specific views count deals where owner contains that seller name.</div>
+      </div>
+
+      <div id="view-funnel" class="view">
+        <div class="head">
+          <div>
+            <h1>Current Funnel Snapshot</h1>
+            <div class="sub">All stages available | Intro Date cutoff <code>&gt;= 2024-10-01</code></div>
+          </div>
+        </div>
+        <div class="funnel-controls">
+          <div class="funnel-time">
+            <div class="funnel-time-head">
+              <label for="funnel-time-slider" style="margin:0;">Intro Cutoff</label>
+              <div id="funnel-time-value" class="funnel-time-value">-</div>
+            </div>
+            <input id="funnel-time-slider" type="range" min="0" max="0" value="0" />
+          </div>
+          <div class="funnel-filter">
+            <div class="funnel-filter-head">
+              <label for="funnel-options" style="margin:0;">Funnel Stage Filter</label>
+              <div class="funnel-filter-actions">
+                <button type="button" id="funnel-core">Core 1-6</button>
+                <button type="button" id="funnel-all">All</button>
+              </div>
+            </div>
+            <div id="funnel-options" class="funnel-options"></div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-funnel" class="insight-list"></ul>
+        </div>
+        <div id="funnel-wrap" class="funnel-wrap"></div>
+        <div class="footnote">Conversion to next stage is calculated from reached counts across selected stages: <code>Reached(next) / Reached(current)</code>.</div>
+      </div>
+
+      <div id="view-scorecard" class="view">
+        <div class="head">
+          <div>
+            <h1>Weekly Scorecard</h1>
+            <div class="sub">Same data rules as crosstab/funnel | Includes proxy stuck indicators from missing next step and SLA age</div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-scorecard" class="insight-list"></ul>
+        </div>
+        <div id="score-wrap" class="score-wrap"></div>
+        <div class="footnote">Proxy stuck logic: stages 2-6 flagged if missing next step date or older than stage SLA (Intro 21d, Qualification/Capability 30d, Problem Scoping/Contracting/Commercial Proposal 45d).</div>
+      </div>
+
+      <div id="view-industry" class="view">
+        <div class="head">
+          <div>
+            <h1>Industry Action by Seller</h1>
+            <div class="sub">Where activity is concentrated by industry, logo, and business function for each seller.</div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-industry" class="insight-list"></ul>
+        </div>
+        <div id="industry-wrap" class="industry-wrap"></div>
+        <div class="footnote">Same inclusion rules as other tabs. Top logos/functions are shown per industry row.</div>
+      </div>
+
+      <div id="view-winloss" class="view">
+        <div class="head">
+          <div>
+            <h1>Won/Lost Source Analysis</h1>
+            <div class="sub">Where wins and losses are concentrated by Industry, Logo, and Business Function.</div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-winloss" class="insight-list"></ul>
+        </div>
+        <div class="wl-wrap">
+          <div class="wl-controls">
+            <div>
+              <label for="wl-seller">Scope</label>
+              <select id="wl-seller"></select>
+            </div>
+            <div class="stats" id="wl-stats"></div>
+          </div>
+          <table class="wl-table" id="wl-table">
+            <thead>
+              <tr>
+                <th>Industry</th>
+                <th>Logo</th>
+                <th>Business Function</th>
+                <th>Won</th>
+                <th>Lost</th>
+                <th>Total</th>
+                <th>Win Rate</th>
+                <th>Focus</th>
+              </tr>
+            </thead>
+            <tbody id="wl-body"></tbody>
+          </table>
+        </div>
+        <div class="footnote">Use high-volume high-loss rows as primary strategic focus for next year; defend high-volume high-win rows as repeatable plays.</div>
+      </div>
+
+      <div id="view-introtrend" class="view">
+        <div class="head">
+          <div>
+            <h1>Weekly Intro Calls Trend</h1>
+            <div class="sub">Uses Intro Meeting Date (<code>AF</code>), excludes deals in <code>No Show/ Reschedule</code>, and follows the same inclusion filters as other tabs.</div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-introtrend" class="insight-list"></ul>
+        </div>
+        <div class="intro-wrap">
+          <div class="intro-controls">
+            <div>
+              <label for="intro-seller">Seller Scope</label>
+              <select id="intro-seller"></select>
+            </div>
+            <div>
+              <label for="intro-granularity">Granularity</label>
+              <select id="intro-granularity">
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+            </div>
+            <div class="stats" id="intro-stats"></div>
+          </div>
+          <div class="chart-card">
+            <svg id="intro-chart" class="chart-svg" viewBox="0 0 1000 360" preserveAspectRatio="none"></svg>
+          </div>
+          <div class="intro-detail">
+            <div class="intro-detail-head">
+              <div id="intro-detail-title" class="intro-detail-title">Intro Deals</div>
+              <div id="intro-detail-meta" class="detail-meta">Click a bar to load deals.</div>
+            </div>
+            <div class="intro-detail-wrap">
+              <table class="intro-detail-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th>
+                    <th>Intro Date</th>
+                    <th>Stage</th>
+                    <th>Seller</th>
+                  </tr>
+                </thead>
+                <tbody id="intro-detail-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="footnote">Week buckets are Monday-start weeks based on column <code>AF</code>.</div>
+      </div>
+    </div>
+  </div>
+  <div id="chart-tooltip" class="chart-tooltip"></div>
+  <div id="kpi-popup" class="popup" aria-hidden="true">
+    <div class="popup-card">
+      <div class="popup-head">
+        <div id="kpi-popup-title" class="popup-title">KPI Details</div>
+        <button id="kpi-popup-close" type="button" class="popup-close">Close</button>
+      </div>
+      <div class="popup-wrap">
+        <table class="popup-table">
+          <thead>
+            <tr>
+              <th>Deal</th>
+              <th>Stage</th>
+              <th>Intro Month</th>
+              <th>Age (days)</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="kpi-popup-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const money = new Intl.NumberFormat('en-US');
+    const MATTER_STAGE_ORDER = [
+      '1. Intro',
+      '2. Qualification',
+      '3. Capability',
+      '4. Problem Scoping',
+      '5. Contracting',
+      '6. Commercial Proposal',
+      '7. Win',
+      '8. Loss'
+    ];
+    const STAGE_MAP = {
+      'Scheduled Intro calls': '1. Intro',
+      'Qualification': '2. Qualification',
+      'Capabilities showcase': '3. Capability',
+      'Problem Scoping': '4. Problem Scoping',
+      'Contracting': '5. Contracting',
+      'Commercial Proposal': '6. Commercial Proposal',
+      'Latent Pool - Monthly': '7. Latent Pool - Monthly',
+      'Won': '7. Win',
+      'Lost': '8. Loss',
+      'Disqualified': '9. Disqualified',
+      'No Show/ Reschedule': '10. No Show/ Reschedule',
+      'Latent Pool - Bi-monthly': '11. Latent Pool - Bi-monthly',
+      'Latent Pool - Half yearly revisit': '12. Latent Pool - Half yearly revisit'
+    };
+    const FUNNEL_ORDER = [
+      '1. Intro',
+      '2. Qualification',
+      '3. Capability',
+      '4. Problem Scoping',
+      '5. Contracting',
+      '6. Commercial Proposal',
+      '7. Latent Pool - Monthly',
+      '7. Win',
+      '8. Loss',
+      '9. Disqualified',
+      '10. No Show/ Reschedule',
+      '11. Latent Pool - Bi-monthly',
+      '12. Latent Pool - Half yearly revisit',
+    ];
+    const FUNNEL_CORE_SET = new Set([
+      '1. Intro',
+      '2. Qualification',
+      '3. Capability',
+      '4. Problem Scoping',
+      '5. Contracting',
+      '6. Commercial Proposal'
+    ]);
+
+    function normalizeStage(stage) {
+      return STAGE_MAP[stage] || stage;
+    }
+
+    function buildGroupedTable(rawTable) {
+      const grouped = {};
+      Object.entries(rawTable || {}).forEach(([rawStage, monthMap]) => {
+        const stage = normalizeStage(rawStage);
+        if (!grouped[stage]) grouped[stage] = {};
+        Object.entries(monthMap || {}).forEach(([month, value]) => {
+          grouped[stage][month] = (grouped[stage][month] || 0) + Number(value || 0);
+        });
+      });
+      return grouped;
+    }
+
+    function buildGroupedDetails(rawDetails) {
+      const grouped = {};
+      Object.entries(rawDetails || {}).forEach(([rawStage, monthMap]) => {
+        const stage = normalizeStage(rawStage);
+        if (!grouped[stage]) grouped[stage] = {};
+        Object.entries(monthMap || {}).forEach(([month, deals]) => {
+          if (!grouped[stage][month]) grouped[stage][month] = [];
+          grouped[stage][month].push(...(deals || []));
+        });
+      });
+      Object.keys(grouped).forEach((stage) => {
+        Object.keys(grouped[stage]).forEach((month) => {
+          grouped[stage][month] = [...new Set(grouped[stage][month])].sort((a, b) => a.localeCompare(b));
+        });
+      });
+      return grouped;
+    }
+
+    function buildGroupedCarry(rawCarry) {
+      const grouped = {};
+      Object.entries(rawCarry || {}).forEach(([rawStage, monthMap]) => {
+        const stage = normalizeStage(rawStage);
+        if (!grouped[stage]) grouped[stage] = {};
+        Object.entries(monthMap || {}).forEach(([month, value]) => {
+          grouped[stage][month] = (grouped[stage][month] || 0) + Number(value || 0);
+        });
+      });
+      return grouped;
+    }
+
+    function getOrderedStages(rawStages) {
+      const groupedSet = new Set(rawStages.map(normalizeStage));
+      const ordered = MATTER_STAGE_ORDER.filter(s => groupedSet.has(s));
+      const remaining = [...groupedSet]
+        .filter(s => !MATTER_STAGE_ORDER.includes(s))
+        .sort((a, b) => a.localeCompare(b));
+      return [...ordered, ...remaining];
+    }
+
+    function getOrderedFunnelStages(rawStages) {
+      const groupedSet = new Set(rawStages.map(normalizeStage));
+      const ordered = FUNNEL_ORDER.filter(s => groupedSet.has(s));
+      const remaining = [...groupedSet]
+        .filter(s => !FUNNEL_ORDER.includes(s))
+        .sort((a, b) => a.localeCompare(b));
+      return [...ordered, ...remaining];
+    }
+
+    function showError(message) {
+      const e = document.getElementById('error');
+      e.textContent = message;
+      e.style.display = 'block';
+    }
+
+    function makeCell(tag, text, className = '') {
+      const el = document.createElement(tag);
+      el.textContent = text;
+      if (className) el.className = className;
+      return el;
+    }
+
+    function setInsight(listId, lines) {
+      const ul = document.getElementById(listId);
+      if (!ul) return;
+      ul.innerHTML = '';
+      (lines || []).forEach((line) => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        ul.appendChild(li);
+      });
+      if (!lines || !lines.length) {
+        const li = document.createElement('li');
+        li.textContent = 'No notable insight for current filter selection.';
+        ul.appendChild(li);
+      }
+    }
+
+    function renderDetailTable(title, records) {
+      const detailTitle = document.getElementById('detail-title');
+      const detailMeta = document.getElementById('detail-meta');
+      const detailBody = document.getElementById('detail-body');
+      detailTitle.textContent = title;
+      detailMeta.textContent = `${money.format(records.length)} deal(s)`;
+      detailBody.innerHTML = '';
+
+      if (!records.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals found', ''));
+        tr.appendChild(makeCell('td', '-', ''));
+        tr.appendChild(makeCell('td', '-', ''));
+        detailBody.appendChild(tr);
+        return;
+      }
+
+      records.forEach((rec) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', rec.deal));
+        tr.appendChild(makeCell('td', rec.stage));
+        tr.appendChild(makeCell('td', rec.month));
+        detailBody.appendChild(tr);
+      });
+    }
+
+    function sortedRecords(records) {
+      return [...records].sort((a, b) => {
+        if (a.deal !== b.deal) return a.deal.localeCompare(b.deal);
+        if (a.stage !== b.stage) return a.stage.localeCompare(b.stage);
+        return a.month.localeCompare(b.month);
+      });
+    }
+
+    function render(data, seller, selectedStages, orderedStages) {
+      const months = data.months;
+      const tableData = buildGroupedTable(data.tables[seller] || {});
+      const detailData = buildGroupedDetails((data.details || {})[seller] || {});
+      const carryData = buildGroupedCarry((data.carry_in || {})[seller] || {});
+      const stages = orderedStages.filter(s => selectedStages.has(s));
+
+      const table = document.getElementById('pivot');
+      table.innerHTML = '';
+
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      hr.appendChild(makeCell('th', 'Deal Stage'));
+      for (const m of months) hr.appendChild(makeCell('th', m));
+      hr.appendChild(makeCell('th', 'Total'));
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      const colTotals = Array(months.length).fill(0);
+      let grandTotal = 0;
+
+      for (const stage of stages) {
+        const tr = document.createElement('tr');
+        const stageCell = makeCell('td', stage, 'row-label');
+        tr.appendChild(stageCell);
+        const monthMap = tableData[stage] || {};
+        const monthDeals = detailData[stage] || {};
+        const monthCarry = carryData[stage] || {};
+
+        const stageRecords = [];
+        months.forEach((m) => {
+          (monthDeals[m] || []).forEach((deal) => {
+            stageRecords.push({ deal, stage, month: m });
+          });
+        });
+        stageCell.addEventListener('click', () => {
+          renderDetailTable(`${seller} | ${stage} | All Months`, sortedRecords(stageRecords));
+        });
+
+        let rowTotal = 0;
+        months.forEach((m, idx) => {
+          const v = Number(monthMap[m] || 0);
+          const carry = Number(monthCarry[m] || 0);
+          rowTotal += v;
+          colTotals[idx] += v;
+          const classes = ['clickable'];
+          if (carry > 0) classes.push('carry-in');
+          const td = makeCell('td', money.format(v), classes.join(' '));
+          if (carry > 0) {
+            td.title = `${carry} carried-in deal(s): intro date before 2024-10-01`;
+          }
+          td.addEventListener('click', () => {
+            const records = (monthDeals[m] || []).map((deal) => ({ deal, stage, month: m }));
+            renderDetailTable(`${seller} | ${stage} | ${m}`, sortedRecords(records));
+          });
+          tr.appendChild(td);
+        });
+
+        grandTotal += rowTotal;
+        const rowTotalCell = makeCell('td', money.format(rowTotal), 'clickable');
+        rowTotalCell.addEventListener('click', () => {
+          renderDetailTable(`${seller} | ${stage} | All Months`, sortedRecords(stageRecords));
+        });
+        tr.appendChild(rowTotalCell);
+        tbody.appendChild(tr);
+      }
+
+      const totalRow = document.createElement('tr');
+      totalRow.className = 'total-row';
+      totalRow.appendChild(makeCell('td', 'Total'));
+      colTotals.forEach((v, idx) => {
+        const m = months[idx];
+        const td = makeCell('td', money.format(v), 'clickable');
+        td.addEventListener('click', () => {
+          const combined = [];
+          stages.forEach((stage) => {
+            const monthDeals = (detailData[stage] || {})[m] || [];
+            monthDeals.forEach((deal) => combined.push({ deal, stage, month: m }));
+          });
+          renderDetailTable(`${seller} | All Stages | ${m}`, sortedRecords(combined));
+        });
+        totalRow.appendChild(td);
+      });
+      const grandCell = makeCell('td', money.format(grandTotal), 'clickable');
+      grandCell.addEventListener('click', () => {
+        const combined = [];
+        stages.forEach((stage) => {
+          months.forEach((m) => {
+            ((detailData[stage] || {})[m] || []).forEach((deal) => combined.push({ deal, stage, month: m }));
+          });
+        });
+        renderDetailTable(`${seller} | All Stages | All Months`, sortedRecords(combined));
+      });
+      totalRow.appendChild(grandCell);
+      tbody.appendChild(totalRow);
+      table.appendChild(tbody);
+
+      const activeMonths = colTotals.filter(v => v > 0).length;
+      const stats = document.getElementById('stats');
+      stats.innerHTML = '';
+      stats.appendChild(makeCell('div', `Stages: ${stages.length}`, 'chip'));
+      stats.appendChild(makeCell('div', `Months active: ${activeMonths}/${months.length}`, 'chip'));
+      stats.appendChild(makeCell('div', `Deals counted: ${money.format(grandTotal)}`, 'chip'));
+
+      const stageTotals = stages.map((stage) => ({
+        stage,
+        total: Object.values(tableData[stage] || {}).reduce((a, b) => a + Number(b || 0), 0),
+      })).sort((a, b) => b.total - a.total);
+      const monthTotals = months.map((m, idx) => ({ month: m, total: colTotals[idx] })).sort((a, b) => b.total - a.total);
+      const carryCount = stages.reduce((acc, stage) => {
+        return acc + Object.values(carryData[stage] || {}).reduce((a, b) => a + Number(b || 0), 0);
+      }, 0);
+      const lines = [
+        `${seller}: ${money.format(grandTotal)} total deals across ${stages.length} selected stages.`,
+        stageTotals.length ? `Highest-volume stage: ${stageTotals[0].stage} (${money.format(stageTotals[0].total)} deals).` : 'No stage volume in current selection.',
+        monthTotals.length ? `Most active create month: ${monthTotals[0].month} (${money.format(monthTotals[0].total)} deals).` : 'No month activity in current selection.',
+      ];
+      if (carryCount > 0) {
+        lines.push(`${money.format(carryCount)} carried-in stage 1-6 deal(s) are present (highlighted in amber).`);
+      }
+      setInsight('insight-crosstab', lines);
+    }
+
+    function renderFunnel(data, selectedFunnelStages, minMonth) {
+      const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
+      const matterStages = orderedFunnelStages.filter((s) => selectedFunnelStages.has(s));
+      const funnelWrap = document.getElementById('funnel-wrap');
+      funnelWrap.innerHTML = '';
+
+      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+      const sellerSummaries = [];
+      sellers.forEach((seller) => {
+        const grouped = buildGroupedTable(data.tables[seller] || {});
+        const counts = matterStages.map((stage) =>
+          Object.entries(grouped[stage] || {})
+            .filter(([m]) => !minMonth || m >= minMonth)
+            .reduce((a, [, b]) => a + Number(b || 0), 0)
+        );
+        const reached = counts.map((_, idx) => counts.slice(idx).reduce((a, b) => a + b, 0));
+
+        const card = document.createElement('div');
+        card.className = 'funnel-card';
+
+        const title = document.createElement('div');
+        title.className = 'funnel-title';
+        title.textContent = seller;
+        card.appendChild(title);
+
+        const table = document.createElement('table');
+        table.className = 'funnel-table';
+        const thead = document.createElement('thead');
+        const hrow = document.createElement('tr');
+        hrow.appendChild(makeCell('th', 'Stage'));
+        hrow.appendChild(makeCell('th', 'Count'));
+        hrow.appendChild(makeCell('th', 'Reached'));
+        hrow.appendChild(makeCell('th', 'Conv to Next'));
+        thead.appendChild(hrow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        matterStages.forEach((stage, idx) => {
+          const tr = document.createElement('tr');
+          const curr = counts[idx];
+          const reachedCurr = reached[idx] || 0;
+          const conv = idx === matterStages.length - 1 ? '-' : (reachedCurr > 0 ? `${((reached[idx + 1] / reachedCurr) * 100).toFixed(1)}%` : 'n/a');
+          tr.appendChild(makeCell('td', stage));
+          tr.appendChild(makeCell('td', money.format(curr)));
+          tr.appendChild(makeCell('td', money.format(reachedCurr)));
+          tr.appendChild(makeCell('td', conv));
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        card.appendChild(table);
+
+        const total = counts.reduce((a, b) => a + b, 0);
+        const allStagesTotal = Object.entries(grouped).reduce((acc, [, monthMap]) => {
+          const subtotal = Object.entries(monthMap || {})
+            .filter(([m]) => !minMonth || m >= minMonth)
+            .reduce((a, [, v]) => a + Number(v || 0), 0);
+          return acc + subtotal;
+        }, 0);
+        const noShowCount = Object.entries(grouped['10. No Show/ Reschedule'] || {})
+          .filter(([m]) => !minMonth || m >= minMonth)
+          .reduce((a, [, v]) => a + Number(v || 0), 0);
+        const foot = document.createElement('div');
+        foot.className = 'funnel-foot';
+        foot.innerHTML = [
+          `Total across selected stages (Intro >= ${minMonth || '-'}) : <strong>${money.format(total)}</strong>`,
+          `No Show/ Reschedule count: <strong>${money.format(noShowCount)}</strong>`,
+          `Total across all stages: <strong>${money.format(allStagesTotal)}</strong>`
+        ].join('<br/>');
+        card.appendChild(foot);
+
+        funnelWrap.appendChild(card);
+        const topIdx = counts.findIndex((v) => v === Math.max(...counts, 0));
+        let weakest = null;
+        for (let i = 0; i < matterStages.length - 1; i++) {
+          const conv = reached[i] > 0 ? (reached[i + 1] / reached[i]) : null;
+          if (conv == null) continue;
+          if (!weakest || conv < weakest.conv) {
+            weakest = { from: matterStages[i], to: matterStages[i + 1], conv };
+          }
+        }
+        sellerSummaries.push({
+          seller,
+          total,
+          topStage: topIdx >= 0 ? matterStages[topIdx] : null,
+          topCount: topIdx >= 0 ? counts[topIdx] : 0,
+          weakest,
+        });
+      });
+      const topSeller = [...sellerSummaries].sort((a, b) => b.total - a.total)[0];
+      const weakList = sellerSummaries.filter((s) => s.weakest).sort((a, b) => a.weakest.conv - b.weakest.conv).slice(0, 2);
+      const lines = [];
+      if (topSeller) {
+        lines.push(`Highest selected-stage volume: ${topSeller.seller} (${money.format(topSeller.total)} deals; top stage: ${topSeller.topStage || '-'}).`);
+      }
+      if (weakList.length) {
+        lines.push(`Weakest step-off(s): ${weakList.map((w) => `${w.seller} ${w.weakest.from} -> ${w.weakest.to} (${(w.weakest.conv * 100).toFixed(1)}%)`).join(' | ')}.`);
+      }
+      lines.push(`Current funnel cutoff in this tab: Intro >= ${minMonth || '-'} (with stage filter applied).`);
+      setInsight('insight-funnel', lines);
+    }
+
+    function setupTabs() {
+      const tabCross = document.getElementById('tab-crosstab');
+      const tabFunnel = document.getElementById('tab-funnel');
+      const tabScore = document.getElementById('tab-scorecard');
+      const tabIndustry = document.getElementById('tab-industry');
+      const tabWinLoss = document.getElementById('tab-winloss');
+      const tabIntroTrend = document.getElementById('tab-introtrend');
+      const viewCross = document.getElementById('view-crosstab');
+      const viewFunnel = document.getElementById('view-funnel');
+      const viewScore = document.getElementById('view-scorecard');
+      const viewIndustry = document.getElementById('view-industry');
+      const viewWinLoss = document.getElementById('view-winloss');
+      const viewIntroTrend = document.getElementById('view-introtrend');
+
+      function activate(name) {
+        tabCross.classList.toggle('active', name === 'crosstab');
+        tabFunnel.classList.toggle('active', name === 'funnel');
+        tabScore.classList.toggle('active', name === 'scorecard');
+        tabIndustry.classList.toggle('active', name === 'industry');
+        tabWinLoss.classList.toggle('active', name === 'winloss');
+        tabIntroTrend.classList.toggle('active', name === 'introtrend');
+        viewCross.classList.toggle('active', name === 'crosstab');
+        viewFunnel.classList.toggle('active', name === 'funnel');
+        viewScore.classList.toggle('active', name === 'scorecard');
+        viewIndustry.classList.toggle('active', name === 'industry');
+        viewWinLoss.classList.toggle('active', name === 'winloss');
+        viewIntroTrend.classList.toggle('active', name === 'introtrend');
+      }
+
+      tabCross.addEventListener('click', () => activate('crosstab'));
+      tabFunnel.addEventListener('click', () => activate('funnel'));
+      tabScore.addEventListener('click', () => activate('scorecard'));
+      tabIndustry.addEventListener('click', () => activate('industry'));
+      tabWinLoss.addEventListener('click', () => activate('winloss'));
+      tabIntroTrend.addEventListener('click', () => activate('introtrend'));
+    }
+
+    function pct(x) {
+      return `${(Number(x || 0) * 100).toFixed(1)}%`;
+    }
+
+    function closeKpiPopup() {
+      const popup = document.getElementById('kpi-popup');
+      popup.classList.remove('open');
+      popup.setAttribute('aria-hidden', 'true');
+    }
+
+    function openKpiPopup(title, records) {
+      const popup = document.getElementById('kpi-popup');
+      const body = document.getElementById('kpi-popup-body');
+      document.getElementById('kpi-popup-title').textContent = `${title} (${money.format(records.length)})`;
+      body.innerHTML = '';
+      if (!records.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals found'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+      } else {
+        const rows = [...records].sort((a, b) => {
+          const ad = (a.deal || '').toLowerCase();
+          const bd = (b.deal || '').toLowerCase();
+          if (ad !== bd) return ad.localeCompare(bd);
+          return (a.stage || '').localeCompare(b.stage || '');
+        });
+        rows.forEach((r) => {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', r.deal || '-'));
+          tr.appendChild(makeCell('td', r.stage || '-'));
+          tr.appendChild(makeCell('td', r.created_month || '-'));
+          tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
+          tr.appendChild(makeCell('td', r.reason || '-'));
+          body.appendChild(tr);
+        });
+      }
+      popup.classList.add('open');
+      popup.setAttribute('aria-hidden', 'false');
+    }
+
+    function renderScorecard(data) {
+      const score = data.scorecard || {};
+      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+      const wrap = document.getElementById('score-wrap');
+      wrap.innerHTML = '';
+
+      sellers.forEach((seller) => {
+        const m = (score.sellers || {})[seller] || {};
+        const card = document.createElement('div');
+        card.className = 'score-card';
+
+        const head = document.createElement('div');
+        head.className = 'score-head';
+        const name = document.createElement('div');
+        name.className = 'score-name';
+        name.textContent = seller;
+        const asof = document.createElement('div');
+        asof.className = 'detail-meta';
+        asof.textContent = `As of ${score.as_of_date || '-'}`;
+        head.appendChild(name);
+        head.appendChild(asof);
+        card.appendChild(head);
+
+        const mid = document.createElement('div');
+        mid.className = 'score-mid';
+
+        const kpis = document.createElement('div');
+        kpis.className = 'score-kpis';
+        const details = m.kpi_details || {};
+        const entries = [
+          ['Stage 1-6 Total', money.format(m.stage_1_6_count || 0), 'stage_1_6'],
+          ['Stage 1-2', money.format(m.stage_1_2_count || 0), 'stage_1_2'],
+          ['Stage 3-4', money.format(m.stage_3_4_count || 0), 'stage_3_4'],
+          ['Stage 5-6', money.format(m.stage_5_6_count || 0), 'stage_5_6'],
+          ['Won/Lost (7-8)', money.format(m.stage_7_8_count || 0), 'stage_7_8'],
+        ];
+        entries.forEach(([label, value, detailKey]) => {
+          const box = document.createElement('div');
+          box.className = 'kpi clickable-kpi';
+          const l = document.createElement('div');
+          l.className = 'kpi-label';
+          l.textContent = label;
+          const v = document.createElement('div');
+          v.className = 'kpi-value';
+          v.textContent = value;
+          box.appendChild(l);
+          box.appendChild(v);
+          box.addEventListener('click', () => {
+            openKpiPopup(`${seller} | ${label}`, details[detailKey] || []);
+          });
+          kpis.appendChild(box);
+        });
+        mid.appendChild(kpis);
+
+        const shape = document.createElement('div');
+        shape.className = 'funnel-shape';
+        const shapeTitle = document.createElement('div');
+        shapeTitle.className = 'funnel-shape-title';
+        shapeTitle.textContent = 'Funnel Shape (Grouped)';
+        shape.appendChild(shapeTitle);
+        const buckets = [
+          ['1-2', Number(m.stage_1_2_count || 0)],
+          ['3-4', Number(m.stage_3_4_count || 0)],
+          ['5-6', Number(m.stage_5_6_count || 0)],
+          ['7-8', Number(m.stage_7_8_count || 0)],
+        ];
+        const base = Math.max(1, buckets[0][1]);
+        buckets.forEach(([label, value]) => {
+          const row = document.createElement('div');
+          row.className = 'funnel-shape-row';
+          const l = document.createElement('div');
+          l.className = 'funnel-shape-label';
+          l.textContent = label;
+          const track = document.createElement('div');
+          track.className = 'funnel-shape-track';
+          const fill = document.createElement('div');
+          fill.className = 'funnel-shape-fill';
+          const widthPct = Math.max(4, Math.min(100, (value / base) * 100));
+          fill.style.width = `${widthPct}%`;
+          track.appendChild(fill);
+          const v = document.createElement('div');
+          v.className = 'funnel-shape-value';
+          v.textContent = money.format(value);
+          row.appendChild(l);
+          row.appendChild(track);
+          row.appendChild(v);
+          shape.appendChild(row);
+        });
+        mid.appendChild(shape);
+        card.appendChild(mid);
+
+        const table = document.createElement('table');
+        table.className = 'score-table';
+        const thead = document.createElement('thead');
+        const hr = document.createElement('tr');
+        hr.appendChild(makeCell('th', 'Top Stuck Deals'));
+        hr.appendChild(makeCell('th', 'Age (days)'));
+        thead.appendChild(hr);
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        const stuck = m.stuck_top10 || [];
+        if (!stuck.length) {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', 'No stuck deals flagged'));
+          tr.appendChild(makeCell('td', '-'));
+          tbody.appendChild(tr);
+        } else {
+          stuck.forEach((r) => {
+            const tr = document.createElement('tr');
+            const reason = [];
+            if (r.missing_next_step) reason.push('no next step');
+            if (r.over_sla) reason.push('over SLA');
+            tr.appendChild(makeCell('td', `${r.deal} (${r.stage}; ${reason.join(', ')})`));
+            tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
+            tbody.appendChild(tr);
+          });
+        }
+        table.appendChild(tbody);
+        card.appendChild(table);
+
+        wrap.appendChild(card);
+      });
+      const rows = sellers.map((seller) => ({ seller, m: (score.sellers || {})[seller] || {} }));
+      const topVol = [...rows].sort((a, b) => (b.m.stage_1_6_count || 0) - (a.m.stage_1_6_count || 0))[0];
+      const topLate = [...rows].sort((a, b) => (b.m.stage_5_6_count || 0) - (a.m.stage_5_6_count || 0))[0];
+      const topWL = [...rows].sort((a, b) => (b.m.stage_7_8_count || 0) - (a.m.stage_7_8_count || 0))[0];
+      const lines = [];
+      if (topVol) lines.push(`Largest active funnel (1-6): ${topVol.seller} with ${money.format(topVol.m.stage_1_6_count || 0)} deals.`);
+      if (topLate) lines.push(`Most late-stage volume (5-6): ${topLate.seller} with ${money.format(topLate.m.stage_5_6_count || 0)} deals.`);
+      if (topWL) lines.push(`Most won/lost outcomes (7-8): ${topWL.seller} with ${money.format(topWL.m.stage_7_8_count || 0)} deals.`);
+      setInsight('insight-scorecard', lines);
+    }
+
+    function topPills(obj, topN = 4) {
+      return Object.entries(obj || {})
+        .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+        .slice(0, topN);
+    }
+
+    function renderIndustryAction(data) {
+      const root = document.getElementById('industry-wrap');
+      root.innerHTML = '';
+      const ia = (data.industry_action || {}).sellers || {};
+      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+
+      sellers.forEach((seller) => {
+        const payload = ia[seller] || { total: 0, industries: [] };
+        const card = document.createElement('div');
+        card.className = 'industry-card';
+
+        const head = document.createElement('div');
+        head.className = 'industry-head';
+        const nm = document.createElement('div');
+        nm.className = 'industry-name';
+        nm.textContent = seller;
+        const meta = document.createElement('div');
+        meta.className = 'detail-meta';
+        meta.textContent = `${money.format(payload.total || 0)} deals`;
+        head.appendChild(nm);
+        head.appendChild(meta);
+        card.appendChild(head);
+
+        const table = document.createElement('table');
+        table.className = 'industry-table';
+        const thead = document.createElement('thead');
+        const hr = document.createElement('tr');
+        hr.appendChild(makeCell('th', 'Industry'));
+        hr.appendChild(makeCell('th', 'Deals'));
+        hr.appendChild(makeCell('th', 'Top Logos'));
+        hr.appendChild(makeCell('th', 'Top Business Functions'));
+        thead.appendChild(hr);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        const industries = payload.industries || [];
+        if (!industries.length) {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', 'No data'));
+          tr.appendChild(makeCell('td', '0'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tbody.appendChild(tr);
+        } else {
+          industries.forEach((row) => {
+            const tr = document.createElement('tr');
+            tr.appendChild(makeCell('td', row.industry || '(blank)'));
+            tr.appendChild(makeCell('td', money.format(row.total || 0)));
+
+            const logosTd = document.createElement('td');
+            const logosWrap = document.createElement('div');
+            logosWrap.className = 'pill-list';
+            topPills(row.logos, 4).forEach(([k, v]) => {
+              const span = document.createElement('span');
+              span.className = 'pill';
+              span.textContent = `${k}: ${v}`;
+              logosWrap.appendChild(span);
+            });
+            logosTd.appendChild(logosWrap);
+            tr.appendChild(logosTd);
+
+            const fnTd = document.createElement('td');
+            const fnWrap = document.createElement('div');
+            fnWrap.className = 'pill-list';
+            topPills(row.functions, 4).forEach(([k, v]) => {
+              const span = document.createElement('span');
+              span.className = 'pill';
+              span.textContent = `${k}: ${v}`;
+              fnWrap.appendChild(span);
+            });
+            fnTd.appendChild(fnWrap);
+            tr.appendChild(fnTd);
+
+            tbody.appendChild(tr);
+          });
+        }
+        table.appendChild(tbody);
+        card.appendChild(table);
+        root.appendChild(card);
+      });
+      const topBySeller = sellers.map((seller) => {
+        const payload = ia[seller] || { industries: [], total: 0 };
+        const top = (payload.industries || [])[0];
+        return { seller, total: payload.total || 0, top };
+      }).filter((x) => x.top);
+      const lines = [];
+      if (topBySeller.length) {
+        lines.push(`Top industry by seller: ${topBySeller.map((x) => `${x.seller} -> ${x.top.industry} (${x.top.total})`).join(' | ')}.`);
+      }
+      const mostActiveSeller = [...topBySeller].sort((a, b) => b.total - a.total)[0];
+      if (mostActiveSeller) {
+        lines.push(`Highest overall industry activity: ${mostActiveSeller.seller} (${money.format(mostActiveSeller.total)} deals).`);
+      }
+      setInsight('insight-industry', lines);
+    }
+
+    function renderWinLoss(data, scope) {
+      const src = data.win_loss_sources || {};
+      const payload = scope === 'Overall (unique)'
+        ? (src.overall_unique || { rows: [], won_total: 0, lost_total: 0, total: 0, overall_win_rate: 0 })
+        : ((src.sellers || {})[scope] || { rows: [], won_total: 0, lost_total: 0, total: 0, overall_win_rate: 0 });
+
+      const stats = document.getElementById('wl-stats');
+      stats.innerHTML = '';
+      stats.appendChild(makeCell('div', `Won: ${money.format(payload.won_total || 0)}`, 'chip'));
+      stats.appendChild(makeCell('div', `Lost: ${money.format(payload.lost_total || 0)}`, 'chip'));
+      stats.appendChild(makeCell('div', `Total: ${money.format(payload.total || 0)}`, 'chip'));
+      stats.appendChild(makeCell('div', `Win Rate: ${(Number(payload.overall_win_rate || 0) * 100).toFixed(1)}%`, 'chip'));
+
+      const body = document.getElementById('wl-body');
+      body.innerHTML = '';
+      const rows = (payload.rows || []).slice(0, 50);
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No won/lost deals in current scope'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '0'));
+        tr.appendChild(makeCell('td', '0'));
+        tr.appendChild(makeCell('td', '0'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.industry || '(blank)'));
+        tr.appendChild(makeCell('td', r.logo || '(blank)'));
+        tr.appendChild(makeCell('td', r.function || '(blank)'));
+        tr.appendChild(makeCell('td', money.format(r.won || 0)));
+        tr.appendChild(makeCell('td', money.format(r.lost || 0)));
+        tr.appendChild(makeCell('td', money.format(r.total || 0)));
+        tr.appendChild(makeCell('td', `${(Number(r.win_rate || 0) * 100).toFixed(1)}%`));
+        const focusTd = document.createElement('td');
+        const highVolume = (r.total || 0) >= 3;
+        const highLoss = (r.loss_rate || 0) >= 0.6;
+        const highWin = (r.win_rate || 0) >= 0.6;
+        if (highVolume && highLoss) {
+          const b = document.createElement('span');
+          b.className = 'focus-badge';
+          b.textContent = 'Fix';
+          focusTd.appendChild(b);
+        } else if (highVolume && highWin) {
+          const b = document.createElement('span');
+          b.className = 'watch-badge';
+          b.textContent = 'Scale';
+          focusTd.appendChild(b);
+        } else {
+          focusTd.textContent = '-';
+        }
+        tr.appendChild(focusTd);
+        body.appendChild(tr);
+      });
+      const topSource = rows[0];
+      const topLoss = [...rows].sort((a, b) => (b.lost || 0) - (a.lost || 0))[0];
+      const topWin = [...rows].sort((a, b) => (b.won || 0) - (a.won || 0))[0];
+      const lines = [];
+      lines.push(`${scope}: ${money.format(payload.total || 0)} won/lost outcomes in current filter window (Win rate ${(Number(payload.overall_win_rate || 0) * 100).toFixed(1)}%).`);
+      if (topSource) lines.push(`Largest source combo: ${topSource.industry} / ${topSource.logo} / ${topSource.function} (${topSource.total} outcomes).`);
+      if (topLoss) lines.push(`Highest-loss source: ${topLoss.industry} / ${topLoss.logo} / ${topLoss.function} (${topLoss.lost} lost).`);
+      if (topWin) lines.push(`Highest-win source: ${topWin.industry} / ${topWin.logo} / ${topWin.function} (${topWin.won} won).`);
+      setInsight('insight-winloss', lines);
+    }
+
+    function buildIntroSeries(data, scope, granularity) {
+      const intro = data.intro_trend || {};
+      const weeks = intro.weeks || [];
+      const seriesMap = intro.series || {};
+      const series = seriesMap[scope] || {};
+      if (granularity === 'month') {
+        const monthAgg = {};
+        weeks.forEach((w) => {
+          const m = (w || '').slice(0, 7);
+          monthAgg[m] = (monthAgg[m] || 0) + Number(series[w] || 0);
+        });
+        const labels = Object.keys(monthAgg).sort();
+        const points = labels.map((m) => Number(monthAgg[m] || 0));
+        return { labels, points, target: 16, targetLabel: 'Target 16 / month' };
+      }
+      return {
+        labels: weeks,
+        points: weeks.map((w) => Number(series[w] || 0)),
+        target: 4,
+        targetLabel: 'Target 4 / week (16 / month)',
+      };
+    }
+
+    function buildIntroDetailSeries(data, scope, granularity) {
+      const intro = data.intro_trend || {};
+      const weeks = intro.weeks || [];
+      const detailMap = (intro.details || {})[scope] || {};
+      if (granularity === 'month') {
+        const agg = {};
+        weeks.forEach((w) => {
+          const m = (w || '').slice(0, 7);
+          if (!agg[m]) agg[m] = [];
+          agg[m].push(...(detailMap[w] || []));
+        });
+        Object.keys(agg).forEach((k) => {
+          const seen = new Set();
+          agg[k] = agg[k].filter((r) => {
+            const key = `${r.deal}|${r.intro_date}|${r.stage}|${r.seller}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        });
+        return agg;
+      }
+      const out = {};
+      weeks.forEach((w) => {
+        out[w] = detailMap[w] || [];
+      });
+      return out;
+    }
+
+    function renderIntroDetailTable(title, records) {
+      const t = document.getElementById('intro-detail-title');
+      const m = document.getElementById('intro-detail-meta');
+      const b = document.getElementById('intro-detail-body');
+      t.textContent = title;
+      m.textContent = `${money.format(records.length)} deal(s)`;
+      b.innerHTML = '';
+      if (!records.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals found'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        b.appendChild(tr);
+        return;
+      }
+      const rows = [...records].sort((a, z) => {
+        const da = (a.deal || '').toLowerCase();
+        const dz = (z.deal || '').toLowerCase();
+        if (da !== dz) return da.localeCompare(dz);
+        return (a.intro_date || '').localeCompare(z.intro_date || '');
+      });
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal || '-'));
+        tr.appendChild(makeCell('td', r.intro_date || '-'));
+        tr.appendChild(makeCell('td', r.stage || '-'));
+        tr.appendChild(makeCell('td', r.seller || '-'));
+        b.appendChild(tr);
+      });
+    }
+
+    function renderIntroTrend(data, scope, granularity) {
+      const { labels, points, target, targetLabel } = buildIntroSeries(data, scope, granularity);
+      const detailSeries = buildIntroDetailSeries(data, scope, granularity);
+      const total = points.reduce((a, b) => a + b, 0);
+      const peak = points.length ? Math.max(...points) : 0;
+      const peakIdx = points.indexOf(peak);
+      const peakLabel = peakIdx >= 0 ? labels[peakIdx] : '-';
+      const avg = points.length ? total / points.length : 0;
+
+      const stats = document.getElementById('intro-stats');
+      stats.innerHTML = '';
+      stats.appendChild(makeCell('div', `${granularity === 'month' ? 'Months' : 'Weeks'}: ${money.format(labels.length)}`, 'chip'));
+      stats.appendChild(makeCell('div', `Intro calls: ${money.format(total)}`, 'chip'));
+      stats.appendChild(makeCell('div', `${granularity === 'month' ? 'Monthly' : 'Weekly'} avg: ${avg.toFixed(1)}`, 'chip'));
+      stats.appendChild(makeCell('div', `Peak: ${money.format(peak)} (${peakLabel})`, 'chip'));
+
+      const svg = document.getElementById('intro-chart');
+      svg.innerHTML = '';
+      const tooltip = document.getElementById('chart-tooltip');
+      const W = 1000, H = 360, L = 82, R = 26, T = 20, B = 92;
+      const pw = W - L - R;
+      const ph = H - T - B;
+      const yMax = Math.max(peak, target, 1);
+      const xStep = labels.length > 0 ? pw / labels.length : 0;
+      const barW = Math.max(2, xStep * 0.78);
+
+      const axisX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      axisX.setAttribute('x1', String(L));
+      axisX.setAttribute('y1', String(H - B));
+      axisX.setAttribute('x2', String(W - R));
+      axisX.setAttribute('y2', String(H - B));
+      axisX.setAttribute('class', 'chart-axis');
+      svg.appendChild(axisX);
+
+      const axisY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      axisY.setAttribute('x1', String(L));
+      axisY.setAttribute('y1', String(T));
+      axisY.setAttribute('x2', String(L));
+      axisY.setAttribute('y2', String(H - B));
+      axisY.setAttribute('class', 'chart-axis');
+      svg.appendChild(axisY);
+
+      // Y-axis ticks and labels
+      const yTicks = [0, Math.round(yMax / 2), yMax];
+      yTicks.forEach((tv) => {
+        const y = T + (ph * (1 - (tv / yMax)));
+        const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        tick.setAttribute('x1', String(L - 4));
+        tick.setAttribute('y1', String(y));
+        tick.setAttribute('x2', String(L));
+        tick.setAttribute('y2', String(y));
+        tick.setAttribute('class', 'chart-axis');
+        svg.appendChild(tick);
+
+        const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        lbl.setAttribute('x', String(L - 8));
+        lbl.setAttribute('y', String(y + 4));
+        lbl.setAttribute('text-anchor', 'end');
+        lbl.setAttribute('class', 'chart-label');
+        lbl.textContent = String(tv);
+        svg.appendChild(lbl);
+      });
+
+      const targetY = T + (ph * (1 - (target / yMax)));
+      const targetLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      targetLine.setAttribute('x1', String(L));
+      targetLine.setAttribute('y1', String(targetY));
+      targetLine.setAttribute('x2', String(W - R));
+      targetLine.setAttribute('y2', String(targetY));
+      targetLine.setAttribute('class', 'chart-target');
+      svg.appendChild(targetLine);
+
+      const targetTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      targetTxt.setAttribute('x', String(W - R - 4));
+      targetTxt.setAttribute('y', String(Math.max(T + 10, targetY - 4)));
+      targetTxt.setAttribute('text-anchor', 'end');
+      targetTxt.setAttribute('class', 'chart-target-label');
+      targetTxt.textContent = targetLabel;
+      svg.appendChild(targetTxt);
+
+      if (labels.length) {
+        points.forEach((v, i) => {
+          const x = L + (i * xStep) + ((xStep - barW) / 2);
+          const h = ph * (v / yMax);
+          const y = T + (ph - h);
+          const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          bar.setAttribute('x', String(x));
+          bar.setAttribute('y', String(y));
+          bar.setAttribute('width', String(barW));
+          bar.setAttribute('height', String(Math.max(1, h)));
+          bar.setAttribute('rx', '2');
+          const now = new Date();
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+          const yPart = weekStart.getFullYear();
+          const mPart = String(weekStart.getMonth() + 1).padStart(2, '0');
+          const dPart = String(weekStart.getDate()).padStart(2, '0');
+          const currentWeekLabel = `${yPart}-${mPart}-${dPart}`;
+          const currentMonthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const isCurrent = (granularity === 'week' && labels[i] === currentWeekLabel) || (granularity === 'month' && labels[i] === currentMonthLabel);
+          bar.setAttribute('class', isCurrent ? 'chart-bar chart-bar-current' : 'chart-bar');
+          bar.addEventListener('mouseenter', (evt) => {
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `<strong>${labels[i]}</strong><br/>Intro calls: ${money.format(v)}`;
+            const mx = evt.clientX + 12;
+            const my = evt.clientY - 10;
+            tooltip.style.left = `${mx}px`;
+            tooltip.style.top = `${my}px`;
+          });
+          bar.addEventListener('mousemove', (evt) => {
+            tooltip.style.left = `${evt.clientX + 12}px`;
+            tooltip.style.top = `${evt.clientY - 10}px`;
+          });
+          bar.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+          });
+          bar.addEventListener('click', () => {
+            const recs = detailSeries[labels[i]] || [];
+            renderIntroDetailTable(`${scope} | ${granularity === 'month' ? 'Month' : 'Week'} ${labels[i]}`, recs);
+          });
+          svg.appendChild(bar);
+        });
+
+        const tickEvery = Math.max(1, Math.ceil(labels.length / 8));
+        const tickIdxs = [];
+        for (let i = 0; i < labels.length; i += tickEvery) tickIdxs.push(i);
+        if (tickIdxs[tickIdxs.length - 1] !== labels.length - 1) tickIdxs.push(labels.length - 1);
+        tickIdxs.forEach((i) => {
+          if (i < 0 || i >= labels.length) return;
+          const x = L + (i * xStep) + (xStep / 2);
+          const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          txt.setAttribute('x', String(x));
+          txt.setAttribute('y', String(H - 28));
+          txt.setAttribute('text-anchor', 'end');
+          txt.setAttribute('transform', `rotate(-35 ${x} ${H - 28})`);
+          txt.setAttribute('class', 'chart-label');
+          txt.textContent = labels[i];
+          svg.appendChild(txt);
+        });
+      }
+
+      // Axis titles
+      const xTitle = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      xTitle.setAttribute('x', String(L + (pw / 2)));
+      xTitle.setAttribute('y', String(H - 6));
+      xTitle.setAttribute('text-anchor', 'middle');
+      xTitle.setAttribute('class', 'chart-label');
+      xTitle.textContent = granularity === 'month' ? 'Month' : 'Week';
+      svg.appendChild(xTitle);
+
+      const yTitle = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      yTitle.setAttribute('x', '12');
+      yTitle.setAttribute('y', String(T + (ph / 2)));
+      yTitle.setAttribute('text-anchor', 'middle');
+      yTitle.setAttribute('transform', `rotate(-90 12 ${T + (ph / 2)})`);
+      yTitle.setAttribute('class', 'chart-label');
+      yTitle.textContent = 'Intro Calls';
+      svg.appendChild(yTitle);
+
+      const lines = [
+        `${scope}: ${money.format(total)} intro calls across ${money.format(labels.length)} ${granularity}(s).`,
+        `Peak ${granularity}: ${peakLabel} with ${money.format(peak)} intro call(s).`,
+        `Average ${granularity} intro calls: ${avg.toFixed(1)} (target ${target} per ${granularity}).`,
+        `Intro trend window: Intro Date >= 2024-10-01.`
+      ];
+      setInsight('insight-introtrend', lines);
+      renderIntroDetailTable('Intro Deals', []);
+    }
+
+    async function boot() {
+      try {
+        const res = await fetch('./crosstab_data.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Failed to load crosstab_data.json (HTTP ${res.status})`);
+        const data = await res.json();
+
+        const sellerSelect = document.getElementById('seller');
+        const wlSellerSelect = document.getElementById('wl-seller');
+        const introSellerSelect = document.getElementById('intro-seller');
+        const introGranularity = document.getElementById('intro-granularity');
+        const stageOptions = document.getElementById('stage-options');
+        const funnelOptions = document.getElementById('funnel-options');
+        const funnelTimeSlider = document.getElementById('funnel-time-slider');
+        const funnelTimeValue = document.getElementById('funnel-time-value');
+        const orderedStages = getOrderedStages(data.stages);
+        const selectedStages = new Set(orderedStages);
+        const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
+        const selectedFunnelStages = new Set(orderedFunnelStages);
+        const funnelMonths = [...(data.months || [])];
+        let funnelMinMonth = funnelMonths[0] || null;
+
+        function updateFromCheckboxes() {
+          selectedStages.clear();
+          stageOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            if (box.checked) selectedStages.add(box.value);
+          });
+          render(data, sellerSelect.value, selectedStages, orderedStages);
+        }
+
+        function setMatterOnly() {
+          stageOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            box.checked = MATTER_STAGE_ORDER.includes(box.value);
+          });
+          updateFromCheckboxes();
+        }
+
+        function setAllStages() {
+          stageOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            box.checked = true;
+          });
+          updateFromCheckboxes();
+        }
+
+        function updateFunnelFromCheckboxes() {
+          selectedFunnelStages.clear();
+          funnelOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            if (box.checked) selectedFunnelStages.add(box.value);
+          });
+          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
+        }
+
+        function setFunnelCore() {
+          funnelOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            box.checked = FUNNEL_CORE_SET.has(box.value);
+          });
+          updateFunnelFromCheckboxes();
+        }
+
+        function setFunnelAll() {
+          funnelOptions.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+            box.checked = true;
+          });
+          updateFunnelFromCheckboxes();
+        }
+
+        function updateFunnelMonth() {
+          const idx = Number(funnelTimeSlider.value || 0);
+          funnelMinMonth = funnelMonths[idx] || funnelMonths[0] || null;
+          funnelTimeValue.textContent = funnelMinMonth || '-';
+          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
+        }
+
+        orderedStages.forEach((stage) => {
+          const label = document.createElement('label');
+          label.className = 'stage-option';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.value = stage;
+          input.checked = true;
+          input.addEventListener('change', updateFromCheckboxes);
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(stage));
+          stageOptions.appendChild(label);
+        });
+        orderedFunnelStages.forEach((stage) => {
+          const label = document.createElement('label');
+          label.className = 'funnel-option';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.value = stage;
+          input.checked = true;
+          input.addEventListener('change', updateFunnelFromCheckboxes);
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(stage));
+          funnelOptions.appendChild(label);
+        });
+        funnelTimeSlider.min = '0';
+        funnelTimeSlider.max = String(Math.max(0, funnelMonths.length - 1));
+        funnelTimeSlider.value = '0';
+        funnelTimeSlider.addEventListener('input', updateFunnelMonth);
+        funnelTimeValue.textContent = funnelMinMonth || '-';
+
+        document.getElementById('stage-matter').addEventListener('click', setMatterOnly);
+        document.getElementById('stage-all').addEventListener('click', setAllStages);
+        document.getElementById('funnel-core').addEventListener('click', setFunnelCore);
+        document.getElementById('funnel-all').addEventListener('click', setFunnelAll);
+        document.getElementById('kpi-popup-close').addEventListener('click', closeKpiPopup);
+        document.getElementById('kpi-popup').addEventListener('click', (evt) => {
+          if (evt.target.id === 'kpi-popup') closeKpiPopup();
+        });
+        document.addEventListener('keydown', (evt) => {
+          if (evt.key === 'Escape') closeKpiPopup();
+        });
+
+        data.sellers.forEach(s => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
+          sellerSelect.appendChild(o);
+        });
+        ['Overall (unique)', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
+          wlSellerSelect.appendChild(o);
+        });
+        ['Overall (unique)', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
+          introSellerSelect.appendChild(o);
+        });
+
+        sellerSelect.value = 'All (unique deals)';
+        sellerSelect.addEventListener('change', () => render(data, sellerSelect.value, selectedStages, orderedStages));
+        wlSellerSelect.value = 'Overall (unique)';
+        wlSellerSelect.addEventListener('change', () => renderWinLoss(data, wlSellerSelect.value));
+        introSellerSelect.value = 'Overall (unique)';
+        introGranularity.value = 'week';
+        introSellerSelect.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
+        introGranularity.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
+
+        setMatterOnly();
+        setFunnelCore();
+        updateFunnelMonth();
+        renderScorecard(data);
+        renderIndustryAction(data);
+        renderWinLoss(data, wlSellerSelect.value);
+        renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
+        setupTabs();
+        renderDetailTable('Details', []);
+        document.getElementById('app').style.display = 'block';
+      } catch (err) {
+        showError(err.message + '. Run a local server from this folder (for example: `python3 -m http.server 8000`).');
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>
