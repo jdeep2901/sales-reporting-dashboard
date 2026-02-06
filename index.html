@@ -1920,7 +1920,8 @@
       currentUser = fresh;
     }
 
-    async function pushSharedStoreNow() {
+    async function pushSharedStoreNow(options = {}) {
+      const throwOnError = !!options.throwOnError;
       if (!currentUser || !sessionPassword) return;
       if (sharedStorePushInFlight) return;
       sharedStorePushInFlight = true;
@@ -1935,6 +1936,7 @@
         if (out) applySharedStorePayload(out);
       } catch (e) {
         console.warn('Shared store push failed:', e.message || e);
+        if (throwOnError) throw e;
       } finally {
         sharedStorePushInFlight = false;
       }
@@ -2277,7 +2279,7 @@
         last_login_at: existing.last_login_at || null,
       };
       persistLocalStateBundle();
-      await pushSharedStoreNow();
+      await pushSharedStoreNow({ throwOnError: true });
     }
 
     async function verifyLogin(usernameInput, password) {
