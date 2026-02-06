@@ -1395,6 +1395,7 @@
         <div class="sub">Private credentials are managed from the Admin tab.</div>
         <div id="auth-badge" class="auth-badge">
           <span id="auth-user-label"></span>
+          <button id="shared-refresh" type="button">Refresh Shared</button>
           <button id="auth-logout" type="button">Logout</button>
         </div>
       </div>
@@ -1499,6 +1500,12 @@
           <div>
             <h1>Weekly Scorecard</h1>
             <div class="sub">Same data rules as crosstab/funnel | Includes proxy stuck indicators from missing next step and SLA age</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="scorecard-seller">Seller View</label>
+              <select id="scorecard-seller"></select>
+            </div>
           </div>
         </div>
         <div class="insight">
@@ -1785,6 +1792,9 @@
     ]);
     const DEAL_LIKELIHOOD_KEY = 'sales_dashboard_deal_likelihood_v1';
     const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
+    const SHARED_STORE_BASE_URL = 'https://crudcrud.com/api/95cdc8428ede417fa7b9e3ed86c3beeb';
+    const SHARED_STORE_RESOURCE = 'salesDashboardState';
+    const SHARED_STORE_DOC = 'main';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -1794,6 +1804,11 @@
     let scorecardStateBySeller = {};
     let scorecardSummaryEls = {};
     let scorecardSellerLabels = [];
+    let scorecardSelectedSeller = 'Overall';
+    let activePopupSeller = null;
+    let sharedStoreRecordId = null;
+    let sharedStorePushTimer = null;
+    let sharedStorePushInFlight = false;
     const AUTH_USERS_KEY = 'sales_dashboard_users_v1';
     const AUTH_SESSION_KEY = 'sales_dashboard_session_v1';
     let currentUser = null;
@@ -1845,6 +1860,96 @@
       localStorage.setItem(QUARTER_TARGETS_KEY, JSON.stringify(quarterTargetsState));
     }
 
+    function persistLocalStateBundle() {
+      saveAuthStore(currentAuthStore);
+      saveLikelihoodState();
+      saveQuarterTargetsState();
+    }
+
+    function buildSharedStorePayload() {
+      return {
+        doc: SHARED_STORE_DOC,
+        users: (currentAuthStore && currentAuthStore.users) ? currentAuthStore.users : {},
+        likelihood: likelihoodState || {},
+        quarter_targets: quarterTargetsState || {},
+        updated_at: new Date().toISOString(),
+      };
+    }
+
+    function applySharedStorePayload(payload) {
+      const users = (payload && payload.users && typeof payload.users === 'object') ? payload.users : {};
+      const likelihood = (payload && payload.likelihood && typeof payload.likelihood === 'object') ? payload.likelihood : {};
+      const targets = (payload && payload.quarter_targets && typeof payload.quarter_targets === 'object') ? payload.quarter_targets : {};
+      currentAuthStore = { users };
+      likelihoodState = likelihood;
+      quarterTargetsState = targets;
+      persistLocalStateBundle();
+    }
+
+    async function fetchSharedStoreRecord() {
+      const listUrl = `${SHARED_STORE_BASE_URL}/${SHARED_STORE_RESOURCE}`;
+      const res = await fetch(listUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Shared store GET failed (${res.status})`);
+      const rows = await res.json();
+      const found = Array.isArray(rows) ? rows.find((r) => r && r.doc === SHARED_STORE_DOC) : null;
+      if (found && found._id) {
+        sharedStoreRecordId = found._id;
+        return found;
+      }
+      const payload = buildSharedStorePayload();
+      const createRes = await fetch(listUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!createRes.ok) throw new Error(`Shared store create failed (${createRes.status})`);
+      const created = await createRes.json();
+      sharedStoreRecordId = created._id || null;
+      return created;
+    }
+
+    async function loadSharedStore() {
+      if (!SHARED_STORE_BASE_URL) return;
+      try {
+        const rec = await fetchSharedStoreRecord();
+        applySharedStorePayload(rec || {});
+      } catch (e) {
+        console.warn('Shared store load failed, using local state.', e);
+      }
+    }
+
+    async function pushSharedStoreNow() {
+      if (!SHARED_STORE_BASE_URL) return;
+      if (sharedStorePushInFlight) return;
+      sharedStorePushInFlight = true;
+      try {
+        if (!sharedStoreRecordId) {
+          await fetchSharedStoreRecord();
+        }
+        if (!sharedStoreRecordId) return;
+        const url = `${SHARED_STORE_BASE_URL}/${SHARED_STORE_RESOURCE}/${sharedStoreRecordId}`;
+        const payload = buildSharedStorePayload();
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(`Shared store PUT failed (${res.status})`);
+      } catch (e) {
+        console.warn('Shared store push failed.', e);
+      } finally {
+        sharedStorePushInFlight = false;
+      }
+    }
+
+    function queueSharedStorePush() {
+      if (!SHARED_STORE_BASE_URL) return;
+      if (sharedStorePushTimer) clearTimeout(sharedStorePushTimer);
+      sharedStorePushTimer = setTimeout(() => {
+        pushSharedStoreNow();
+      }, 220);
+    }
+
     function normalizeQuarterLabel(raw) {
       const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
       const m = s.match(/^Q([1-4])'?(\d{2})$/);
@@ -1878,13 +1983,15 @@
         deals: Number.isFinite(dealsN) ? dealsN : 0,
         revenue: Number.isFinite(revenueN) ? revenueN : 0,
       };
-      saveQuarterTargetsState();
+      persistLocalStateBundle();
+      queueSharedStorePush();
       return q;
     }
 
     function removeQuarterTarget(seller, quarter) {
       delete quarterTargetsState[quarterTargetKey(seller, quarter)];
-      saveQuarterTargetsState();
+      persistLocalStateBundle();
+      queueSharedStorePush();
     }
 
     function showAdminTargetMessage(message) {
@@ -2011,7 +2118,6 @@
 
     function likelihoodRecordKey(rec) {
       return [
-        normalizeUsername(rec.seller || ''),
         String(rec.deal || '').trim().toLowerCase(),
         String(rec.stage || '').trim().toLowerCase(),
         String(rec.created_month || '').trim().toLowerCase()
@@ -2171,7 +2277,8 @@
         updated_at: now,
         last_login_at: existing.last_login_at || null,
       };
-      saveAuthStore(currentAuthStore);
+      persistLocalStateBundle();
+      await pushSharedStoreNow();
     }
 
     async function verifyLogin(usernameInput, password) {
@@ -2182,7 +2289,8 @@
       if (attemptHash !== user.password_hash) return null;
       user.last_login_at = new Date().toISOString();
       currentAuthStore.users[username] = user;
-      saveAuthStore(currentAuthStore);
+      persistLocalStateBundle();
+      queueSharedStorePush();
       return user;
     }
 
@@ -2684,12 +2792,14 @@
     }
 
     function closeKpiPopup() {
+      activePopupSeller = null;
       const popup = document.getElementById('kpi-popup');
       popup.classList.remove('open');
       popup.setAttribute('aria-hidden', 'true');
     }
 
-    function openKpiPopup(title, records) {
+    function openKpiPopup(title, records, summarySeller = null) {
+      activePopupSeller = summarySeller;
       const popup = document.getElementById('kpi-popup');
       const body = document.getElementById('kpi-popup-body');
       document.getElementById('kpi-popup-title').textContent = `${title} (${money.format(records.length)})`;
@@ -2739,8 +2849,10 @@
           select.addEventListener('change', () => {
             if (select.value) likelihoodState[key] = select.value;
             else delete likelihoodState[key];
-            saveLikelihoodState();
-            if (r.seller) updateLikelihoodSummaryForSeller(r.seller);
+            persistLocalStateBundle();
+            queueSharedStorePush();
+            if (activePopupSeller) updateLikelihoodSummaryForSeller(activePopupSeller);
+            else if (r.seller) updateLikelihoodSummaryForSeller(r.seller);
           });
           selTd.appendChild(select);
           tr.appendChild(selTd);
@@ -2754,15 +2866,40 @@
     function renderScorecard(data) {
       const score = data.scorecard || {};
       const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
-      scorecardSellerLabels = [...sellers];
+      scorecardSellerLabels = ['Overall', ...sellers];
       const wrap = document.getElementById('score-wrap');
       wrap.innerHTML = '';
+      wrap.style.gridTemplateColumns = '1fr';
       activeQuarterLabels = buildQuarterLabels(score.as_of_date);
       scorecardStateBySeller = {};
       scorecardSummaryEls = {};
 
-      sellers.forEach((seller) => {
-        const m = (score.sellers || {})[seller] || {};
+      const scorecardSellerSelect = document.getElementById('scorecard-seller');
+      if (scorecardSellerSelect) {
+        const curr = scorecardSelectedSeller;
+        scorecardSellerSelect.innerHTML = '';
+        scorecardSellerLabels.forEach((name) => {
+          const o = document.createElement('option');
+          o.value = name;
+          o.textContent = name;
+          scorecardSellerSelect.appendChild(o);
+        });
+        if (scorecardSellerLabels.includes(curr)) scorecardSellerSelect.value = curr;
+        else {
+          scorecardSelectedSeller = 'Overall';
+          scorecardSellerSelect.value = 'Overall';
+        }
+      }
+
+      const picked = scorecardSelectedSeller;
+      const renderEntries = [];
+      if (picked === 'Overall') {
+        renderEntries.push({ label: 'Overall', metric: (score.sellers || {})['All (unique deals)'] || {} });
+      } else {
+        renderEntries.push({ label: picked, metric: (score.sellers || {})[picked] || {} });
+      }
+
+      renderEntries.forEach(({ label: seller, metric: m }) => {
         scorecardStateBySeller[seller] = m;
         const card = document.createElement('div');
         card.className = 'score-card';
@@ -2804,7 +2941,7 @@
           box.appendChild(l);
           box.appendChild(v);
           box.addEventListener('click', () => {
-            openKpiPopup(`${seller} | ${label}`, details[detailKey] || []);
+            openKpiPopup(`${seller} | ${label}`, details[detailKey] || [], seller);
           });
           kpis.appendChild(box);
         });
@@ -2942,14 +3079,20 @@
         wrap.appendChild(card);
         updateLikelihoodSummaryForSeller(seller);
       });
-      const rows = sellers.map((seller) => ({ seller, m: (score.sellers || {})[seller] || {} }));
-      const topVol = [...rows].sort((a, b) => (b.m.stage_1_6_count || 0) - (a.m.stage_1_6_count || 0))[0];
-      const topLate = [...rows].sort((a, b) => (b.m.stage_5_6_count || 0) - (a.m.stage_5_6_count || 0))[0];
-      const topWL = [...rows].sort((a, b) => (b.m.stage_7_8_count || 0) - (a.m.stage_7_8_count || 0))[0];
+
       const lines = [];
-      if (topVol) lines.push(`Largest active funnel (1-6): ${topVol.seller} with ${money.format(topVol.m.stage_1_6_count || 0)} deals.`);
-      if (topLate) lines.push(`Most late-stage volume (5-6): ${topLate.seller} with ${money.format(topLate.m.stage_5_6_count || 0)} deals.`);
-      if (topWL) lines.push(`Most won/lost outcomes (7-8): ${topWL.seller} with ${money.format(topWL.m.stage_7_8_count || 0)} deals.`);
+      if (picked === 'Overall') {
+        const rows = sellers.map((seller) => ({ seller, m: (score.sellers || {})[seller] || {} }));
+        const topVol = [...rows].sort((a, b) => (b.m.stage_1_6_count || 0) - (a.m.stage_1_6_count || 0))[0];
+        const topLate = [...rows].sort((a, b) => (b.m.stage_5_6_count || 0) - (a.m.stage_5_6_count || 0))[0];
+        const topWL = [...rows].sort((a, b) => (b.m.stage_7_8_count || 0) - (a.m.stage_7_8_count || 0))[0];
+        if (topVol) lines.push(`Largest active funnel (1-6): ${topVol.seller} with ${money.format(topVol.m.stage_1_6_count || 0)} deals.`);
+        if (topLate) lines.push(`Most late-stage volume (5-6): ${topLate.seller} with ${money.format(topLate.m.stage_5_6_count || 0)} deals.`);
+        if (topWL) lines.push(`Most won/lost outcomes (7-8): ${topWL.seller} with ${money.format(topWL.m.stage_7_8_count || 0)} deals.`);
+      } else {
+        const m = (score.sellers || {})[picked] || {};
+        lines.push(`${picked}: Stage 1-6 = ${money.format(m.stage_1_6_count || 0)}, Stage 5-6 = ${money.format(m.stage_5_6_count || 0)}, Won/Lost = ${money.format(m.stage_7_8_count || 0)}.`);
+      }
       setInsight('insight-scorecard', lines);
     }
 
@@ -3392,9 +3535,11 @@
         const funnelOptions = document.getElementById('funnel-options');
         const funnelTimeSlider = document.getElementById('funnel-time-slider');
         const funnelTimeValue = document.getElementById('funnel-time-value');
+        const scorecardSellerSelect = document.getElementById('scorecard-seller');
         const loginForm = document.getElementById('auth-login-form');
         const setupForm = document.getElementById('auth-setup-form');
         const logoutBtn = document.getElementById('auth-logout');
+        const sharedRefreshBtn = document.getElementById('shared-refresh');
         const adminUserForm = document.getElementById('admin-user-form');
         const adminTargetForm = document.getElementById('admin-target-form');
         const orderedStages = getOrderedStages(data.stages);
@@ -3405,7 +3550,9 @@
         let funnelMinMonth = funnelMonths[0] || null;
         likelihoodState = loadLikelihoodState();
         quarterTargetsState = loadQuarterTargetsState();
+        currentAuthStore = loadAuthStore();
         window.__salesData = data;
+        await loadSharedStore();
 
         function updateFromCheckboxes() {
           selectedStages.clear();
@@ -3527,6 +3674,10 @@
         introGranularity.value = 'week';
         introSellerSelect.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         introGranularity.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
+        scorecardSellerSelect.addEventListener('change', () => {
+          scorecardSelectedSeller = scorecardSellerSelect.value || 'Overall';
+          renderScorecard(data);
+        });
 
         setMatterOnly();
         setFunnelCore();
@@ -3538,8 +3689,6 @@
         renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
         setupTabs();
         renderDetailTable('Details', []);
-        currentAuthStore = loadAuthStore();
-
         setupForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
           showAuthError('');
@@ -3585,6 +3734,14 @@
           currentUser = null;
           document.getElementById('auth-badge').style.display = 'none';
           showLoginOrSetup();
+        });
+
+        sharedRefreshBtn.addEventListener('click', async () => {
+          await loadSharedStore();
+          renderScorecard(data);
+          renderAdminTargets();
+          if (currentUser && currentUser.role === 'admin') renderAdminUsers();
+          showAdminMessage('Shared data refreshed.');
         });
 
         adminUserForm.addEventListener('submit', async (evt) => {
