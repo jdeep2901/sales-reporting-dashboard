@@ -731,7 +731,7 @@
     .chart-card {
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #fff;
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
       overflow: hidden;
       padding: 10px;
     }
@@ -744,6 +744,11 @@
 
     .chart-axis {
       stroke: #b7c6e3;
+      stroke-width: 1;
+    }
+
+    .chart-grid {
+      stroke: #e3ebfb;
       stroke-width: 1;
     }
 
@@ -760,11 +765,13 @@
     .chart-bar {
       fill: #6f96ff;
       cursor: pointer;
-      transition: fill 120ms ease;
+      transition: fill 120ms ease, opacity 120ms ease;
+      opacity: 0.92;
     }
 
     .chart-bar:hover {
       fill: #0b5fff;
+      opacity: 1;
     }
 
     .chart-bar-current {
@@ -776,8 +783,15 @@
     }
 
     .chart-label {
-      fill: #304a74;
-      font-size: 11px;
+      fill: #3a5685;
+      font-size: 10.5px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+    }
+
+    .chart-value-label {
+      fill: #274777;
+      font-size: 10px;
+      font-weight: 700;
       font-family: "Avenir Next", "Segoe UI", sans-serif;
     }
 
@@ -3506,12 +3520,23 @@
       const svg = document.getElementById('intro-chart');
       svg.innerHTML = '';
       const tooltip = document.getElementById('chart-tooltip');
-      const W = 1000, H = 360, L = 82, R = 26, T = 20, B = 92;
+      const W = 1000, H = 360, L = 68, R = 26, T = 18, B = 78;
       const pw = W - L - R;
       const ph = H - T - B;
-      const yMax = Math.max(peak, target, 1);
+      const roughMax = Math.max(peak, target, 1);
+      const yStep = roughMax <= 10 ? 2 : roughMax <= 30 ? 5 : roughMax <= 60 ? 10 : Math.ceil((roughMax / 6) / 5) * 5;
+      const yMax = Math.max(yStep, Math.ceil(roughMax / yStep) * yStep);
       const xStep = labels.length > 0 ? pw / labels.length : 0;
-      const barW = Math.max(2, xStep * 0.78);
+      const barW = Math.max(6, Math.min(34, xStep * 0.72));
+
+      const plotBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      plotBg.setAttribute('x', String(L));
+      plotBg.setAttribute('y', String(T));
+      plotBg.setAttribute('width', String(pw));
+      plotBg.setAttribute('height', String(ph));
+      plotBg.setAttribute('fill', '#fcfdff');
+      plotBg.setAttribute('rx', '8');
+      svg.appendChild(plotBg);
 
       const axisX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       axisX.setAttribute('x1', String(L));
@@ -3529,10 +3554,19 @@
       axisY.setAttribute('class', 'chart-axis');
       svg.appendChild(axisY);
 
-      // Y-axis ticks and labels
-      const yTicks = [0, Math.round(yMax / 2), yMax];
+      // Y-axis ticks, labels, and horizontal gridlines
+      const yTicks = [];
+      for (let v = 0; v <= yMax; v += yStep) yTicks.push(v);
       yTicks.forEach((tv) => {
         const y = T + (ph * (1 - (tv / yMax)));
+        const grid = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        grid.setAttribute('x1', String(L));
+        grid.setAttribute('y1', String(y));
+        grid.setAttribute('x2', String(W - R));
+        grid.setAttribute('y2', String(y));
+        grid.setAttribute('class', 'chart-grid');
+        svg.appendChild(grid);
+
         const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         tick.setAttribute('x1', String(L - 4));
         tick.setAttribute('y1', String(y));
@@ -3608,22 +3642,43 @@
             renderIntroDetailTable(`${scope} | ${granularity === 'month' ? 'Month' : 'Week'} ${labels[i]}`, recs);
           });
           svg.appendChild(bar);
+
+          const showValues = labels.length <= 24 || granularity === 'month';
+          if (showValues && v > 0) {
+            const vLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            vLabel.setAttribute('x', String(x + (barW / 2)));
+            vLabel.setAttribute('y', String(Math.max(T + 10, y - 5)));
+            vLabel.setAttribute('text-anchor', 'middle');
+            vLabel.setAttribute('class', 'chart-value-label');
+            vLabel.textContent = String(v);
+            svg.appendChild(vLabel);
+          }
         });
 
-        const tickEvery = Math.max(1, Math.ceil(labels.length / 8));
+        const maxXTicks = granularity === 'month' ? 10 : 12;
+        const tickEvery = Math.max(1, Math.ceil(labels.length / maxXTicks));
         const tickIdxs = [];
         for (let i = 0; i < labels.length; i += tickEvery) tickIdxs.push(i);
         if (tickIdxs[tickIdxs.length - 1] !== labels.length - 1) tickIdxs.push(labels.length - 1);
+        const rotate = labels.length > maxXTicks || xStep < 42;
+        const labelFormatter = (raw) => {
+          if (granularity === 'month') {
+            const d = new Date(`${raw}-01T00:00:00`);
+            return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+          }
+          const d = new Date(`${raw}T00:00:00`);
+          return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' });
+        };
         tickIdxs.forEach((i) => {
           if (i < 0 || i >= labels.length) return;
           const x = L + (i * xStep) + (xStep / 2);
           const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           txt.setAttribute('x', String(x));
-          txt.setAttribute('y', String(H - 28));
-          txt.setAttribute('text-anchor', 'end');
-          txt.setAttribute('transform', `rotate(-35 ${x} ${H - 28})`);
+          txt.setAttribute('y', String(H - (rotate ? 22 : 16)));
+          txt.setAttribute('text-anchor', rotate ? 'end' : 'middle');
+          if (rotate) txt.setAttribute('transform', `rotate(-28 ${x} ${H - 22})`);
           txt.setAttribute('class', 'chart-label');
-          txt.textContent = labels[i];
+          txt.textContent = labelFormatter(labels[i]);
           svg.appendChild(txt);
         });
       }
