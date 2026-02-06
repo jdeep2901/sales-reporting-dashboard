@@ -1662,10 +1662,21 @@
         <div class="head">
           <div>
             <h1>Admin: User Credentials</h1>
-            <div class="sub">Create login credentials for additional users.</div>
+            <div class="sub">Create credentials, configure targets, and refresh board data from Monday.com.</div>
           </div>
         </div>
         <div class="admin-wrap">
+          <div class="admin-card">
+            <label style="margin-bottom:8px;">Data Refresh (Monday.com)</label>
+            <form id="admin-sync-form" class="admin-grid" autocomplete="off">
+              <div class="span-2">
+                <label for="admin-monday-board">Board URL / ID</label>
+                <input id="admin-monday-board" type="text" placeholder="https://themathcocrmtrial.monday.com/boards/6218900009" />
+              </div>
+              <button id="admin-sync-btn" type="submit">Refresh From Monday</button>
+            </form>
+            <div id="admin-sync-msg" class="auth-error"></div>
+          </div>
           <div class="admin-card">
             <label style="margin-bottom:8px;">Create User</label>
             <form id="admin-user-form" class="admin-grid" autocomplete="off">
@@ -1816,13 +1827,18 @@
     ]);
     const DEAL_LIKELIHOOD_KEY = 'sales_dashboard_deal_likelihood_v1';
     const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
+    const SHARED_SETTINGS_KEY = 'sales_dashboard_settings_v1';
+    const SHARED_DATASET_CACHE_KEY = 'sales_dashboard_dataset_cache_v1';
     const SUPABASE_URL = 'https://vqksytduqxpfcovijhko.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa3N5dGR1cXhwZmNvdmlqaGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDI0MjIsImV4cCI6MjA4NTk3ODQyMn0.wvUsJcFpCgXB10vuDcXqU_shO5sin-zI96sBIrZH3OY';
+    const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
     let likelihoodState = {};
     let quarterTargetsState = {};
+    let dashboardSettingsState = {};
+    let sharedDatasetState = null;
     let activeQuarterLabels = { current: 'Current Quarter', next: 'Next Quarter' };
     let scorecardStateBySeller = {};
     let scorecardSummaryEls = {};
@@ -1883,19 +1899,50 @@
       localStorage.setItem(QUARTER_TARGETS_KEY, JSON.stringify(quarterTargetsState));
     }
 
+    function loadDashboardSettingsState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(SHARED_SETTINGS_KEY) || '{}');
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (_) {}
+      return {};
+    }
+
+    function saveDashboardSettingsState() {
+      localStorage.setItem(SHARED_SETTINGS_KEY, JSON.stringify(dashboardSettingsState || {}));
+    }
+
+    function loadSharedDatasetCache() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(SHARED_DATASET_CACHE_KEY) || 'null');
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (_) {}
+      return null;
+    }
+
+    function saveSharedDatasetCache(dataset) {
+      if (!dataset || typeof dataset !== 'object') return;
+      localStorage.setItem(SHARED_DATASET_CACHE_KEY, JSON.stringify(dataset));
+    }
+
     function persistLocalStateBundle() {
       saveAuthStore(currentAuthStore);
       saveLikelihoodState();
       saveQuarterTargetsState();
+      saveDashboardSettingsState();
     }
 
     function applySharedStorePayload(payload) {
       const users = (payload && payload.users && typeof payload.users === 'object') ? payload.users : {};
       const likelihood = (payload && payload.likelihood && typeof payload.likelihood === 'object') ? payload.likelihood : {};
       const targets = (payload && payload.quarter_targets && typeof payload.quarter_targets === 'object') ? payload.quarter_targets : {};
+      const settings = (payload && payload.settings && typeof payload.settings === 'object') ? payload.settings : {};
+      const dataset = (payload && payload.dataset && typeof payload.dataset === 'object') ? payload.dataset : null;
       currentAuthStore = { users };
       likelihoodState = likelihood;
       quarterTargetsState = targets;
+      dashboardSettingsState = settings;
+      sharedDatasetState = dataset;
+      if (dataset) saveSharedDatasetCache(dataset);
       persistLocalStateBundle();
     }
 
@@ -1956,6 +2003,7 @@
           p_likelihood: likelihoodState,
           p_quarter_targets: quarterTargetsState,
           p_users: (currentUser.role === 'admin') ? (currentAuthStore.users || {}) : null,
+          p_settings: (currentUser.role === 'admin') ? (dashboardSettingsState || {}) : null,
         });
         if (out) applySharedStorePayload(out);
       } catch (e) {
@@ -2364,6 +2412,53 @@
       el.textContent = message || '';
     }
 
+    function showAdminSyncMessage(message) {
+      const el = document.getElementById('admin-sync-msg');
+      if (!el) return;
+      el.textContent = message || '';
+    }
+
+    function parseBoardId(value) {
+      const s = String(value || '').trim();
+      if (!s) return null;
+      const m = s.match(/boards\/(\d+)/i);
+      if (m) return m[1];
+      if (/^\d+$/.test(s)) return s;
+      return null;
+    }
+
+    async function refreshFromMonday(boardValue) {
+      if (!currentUser || !sessionPassword) throw new Error('Please login again.');
+      const boardId = parseBoardId(boardValue);
+      if (!boardId) throw new Error('Enter a valid Monday board URL or numeric board ID.');
+      const url = `${SUPABASE_FUNCTIONS_URL}/sync-monday-board`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          username: currentUser.username,
+          password: sessionPassword,
+          board_id: boardId,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || `Monday sync failed (${res.status}).`);
+      }
+      if (body.state) applySharedStorePayload(body.state);
+      dashboardSettingsState = {
+        ...(dashboardSettingsState || {}),
+        monday_board_id: boardId,
+        monday_board_url: `https://themathcocrmtrial.monday.com/boards/${boardId}`,
+      };
+      persistLocalStateBundle();
+      return body;
+    }
+
     function renderAdminUsers() {
       const body = document.getElementById('admin-users-body');
       if (!body) return;
@@ -2415,6 +2510,13 @@
       const isAdmin = user.role === 'admin';
       setAdminVisibility(isAdmin);
       if (isAdmin) {
+        const boardInput = document.getElementById('admin-monday-board');
+        if (boardInput) {
+          boardInput.value = String(
+            (dashboardSettingsState && (dashboardSettingsState.monday_board_url || dashboardSettingsState.monday_board_id))
+            || 'https://themathcocrmtrial.monday.com/boards/6218900009'
+          );
+        }
         renderAdminUsers();
         renderAdminTargets();
       } else {
@@ -3529,9 +3631,13 @@
 
     async function boot() {
       try {
-        const res = await fetch('./crosstab_data.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`Failed to load crosstab_data.json (HTTP ${res.status})`);
-        const data = await res.json();
+        const cached = loadSharedDatasetCache();
+        let data = cached;
+        if (!data) {
+          const res = await fetch('./crosstab_data.json', { cache: 'no-store' });
+          if (!res.ok) throw new Error(`Failed to load crosstab_data.json (HTTP ${res.status})`);
+          data = await res.json();
+        }
 
         const sellerSelect = document.getElementById('seller');
         const wlSellerSelect = document.getElementById('wl-seller');
@@ -3548,6 +3654,7 @@
         const sharedRefreshBtn = document.getElementById('shared-refresh');
         const adminUserForm = document.getElementById('admin-user-form');
         const adminTargetForm = document.getElementById('admin-target-form');
+        const adminSyncForm = document.getElementById('admin-sync-form');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -3556,6 +3663,7 @@
         let funnelMinMonth = funnelMonths[0] || null;
         likelihoodState = loadLikelihoodState();
         quarterTargetsState = loadQuarterTargetsState();
+        dashboardSettingsState = loadDashboardSettingsState();
         currentAuthStore = loadAuthStore();
         window.__salesData = data;
 
@@ -3743,6 +3851,40 @@
             document.getElementById('admin-new-pass').value = '';
           } catch (e) {
             showAdminMessage(e.message || 'Unable to save user.');
+          }
+        });
+
+        adminSyncForm.addEventListener('submit', async (evt) => {
+          evt.preventDefault();
+          showAdminSyncMessage('');
+          if (!currentUser || currentUser.role !== 'admin') {
+            showAdminSyncMessage('Only admin users can refresh Monday data.');
+            return;
+          }
+          const btn = document.getElementById('admin-sync-btn');
+          const boardInput = document.getElementById('admin-monday-board');
+          const boardRaw = boardInput ? boardInput.value : '';
+          const boardId = parseBoardId(boardRaw);
+          if (!boardId) {
+            showAdminSyncMessage('Enter a valid Monday board URL/ID.');
+            return;
+          }
+          dashboardSettingsState = {
+            ...(dashboardSettingsState || {}),
+            monday_board_id: boardId,
+            monday_board_url: `https://themathcocrmtrial.monday.com/boards/${boardId}`,
+          };
+          persistLocalStateBundle();
+          try {
+            if (btn) btn.disabled = true;
+            showAdminSyncMessage('Refreshing from Monday.com...');
+            const out = await refreshFromMonday(boardRaw);
+            showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}. Reloading...`);
+            setTimeout(() => window.location.reload(), 600);
+          } catch (e) {
+            showAdminSyncMessage(e.message || 'Sync failed.');
+          } finally {
+            if (btn) btn.disabled = false;
           }
         });
 
