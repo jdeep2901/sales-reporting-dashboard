@@ -2072,30 +2072,6 @@
       return div;
     }
 
-    async function chatLlmAnswer(question) {
-      if (!currentUser || !sessionPassword) {
-        throw new Error('Please login again to use chat.');
-      }
-      const res = await fetch(`${SUPABASE_FUNCTIONS_URL}/chat-analyst`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          username: currentUser.username,
-          password: sessionPassword,
-          question,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        throw new Error(body.error || `LLM chat failed (${res.status}).`);
-      }
-      return String(body.answer || '').trim() || 'No answer returned.';
-    }
-
     function chatResolveSeller(q, data) {
       const s = String(q || '').toLowerCase();
       if (s.includes('overall') || s.includes('all sellers') || s.includes('all teams')) return 'All (unique deals)';
@@ -2229,29 +2205,18 @@
         if (open) setTimeout(() => input.focus(), 40);
       };
 
-      const ask = async () => {
+      const ask = () => {
         const q = input.value.trim();
         if (!q) return;
         chatAppend('user', q);
-        input.value = '';
-        send.disabled = true;
-        const pending = chatAppend('assistant', 'Thinking...');
         const dataNow = chatDataRef || window.__salesData;
-        if (!dataNow && pending) {
-          pending.textContent = 'Data is not loaded yet. Please refresh the dashboard first.';
-          send.disabled = false;
+        if (!dataNow) {
+          chatAppend('assistant', 'Data is not loaded yet. Please refresh the dashboard first.');
+          input.value = '';
           return;
         }
-        try {
-          const answer = await chatLlmAnswer(q);
-          if (pending) pending.textContent = answer;
-        } catch (e) {
-          const fallback = chatAnswer(q, dataNow || {});
-          const errMsg = (e && e.message) ? e.message : 'LLM unavailable.';
-          if (pending) pending.textContent = `${fallback}\n\n[LLM unavailable: ${errMsg}]`;
-        } finally {
-          send.disabled = false;
-        }
+        chatAppend('assistant', chatAnswer(q, dataNow));
+        input.value = '';
       };
 
       fab.addEventListener('click', () => toggle(!panel.classList.contains('open')));
