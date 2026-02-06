@@ -864,6 +864,155 @@
       white-space: nowrap;
     }
 
+    .chat-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .chat-shell {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      max-height: 54vh;
+      overflow: auto;
+      padding: 12px;
+      background: #f8fbff;
+      display: grid;
+      gap: 10px;
+    }
+
+    .chat-msg {
+      max-width: min(860px, 92%);
+      border: 1px solid #dce7fb;
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .chat-msg.user {
+      margin-left: auto;
+      background: #eaf1ff;
+      color: #15345f;
+    }
+
+    .chat-msg.assistant {
+      margin-right: auto;
+      background: #fff;
+      color: #1d3358;
+    }
+
+    .chat-input-row {
+      border-top: 1px solid #dce7fb;
+      background: #fff;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .chat-input-row input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cfdcf4;
+      border-radius: 9px;
+      font-size: 13px;
+      color: #19345d;
+    }
+
+    .chat-input-row button {
+      border: 1px solid #0b5fff;
+      background: #0b5fff;
+      color: #fff;
+      border-radius: 9px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .chat-suggest {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chat-suggest button {
+      border: 1px solid #d4def2;
+      background: #fff;
+      color: #214376;
+      border-radius: 999px;
+      font-size: 12px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .chat-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 70;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      border: 1px solid #0b5fff;
+      background: #0b5fff;
+      color: #fff;
+      font-size: 22px;
+      box-shadow: 0 12px 24px rgba(10, 34, 76, 0.28);
+      cursor: pointer;
+    }
+
+    .chat-panel {
+      position: fixed;
+      right: 18px;
+      bottom: 82px;
+      width: min(480px, calc(100vw - 24px));
+      max-height: min(72vh, 720px);
+      display: none;
+      flex-direction: column;
+      z-index: 75;
+      border: 1px solid #d9e6ff;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 20px 44px rgba(8, 25, 53, 0.28);
+    }
+
+    .chat-panel.open {
+      display: flex;
+    }
+
+    .chat-panel-head {
+      padding: 10px 12px;
+      background: #f6f9ff;
+      border-bottom: 1px solid #dce7fb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f3f75;
+    }
+
+    .chat-panel-head button {
+      border: 1px solid #cddbf5;
+      border-radius: 7px;
+      background: #fff;
+      color: #1f3f75;
+      font-size: 12px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
     .focus-badge {
       border: 1px solid #f1d8a6;
       background: #fff3db;
@@ -1771,6 +1920,19 @@
       </div>
     </div>
   </div>
+  <button id="chat-fab" class="chat-fab" type="button" title="Ask about your data">AI</button>
+  <div id="chat-panel" class="chat-panel" aria-hidden="true">
+    <div class="chat-panel-head">
+      <span>Sales Data Chat</span>
+      <button id="chat-close" type="button">Close</button>
+    </div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <div class="chat-input-row">
+      <input id="chat-input" type="text" placeholder="Ask: How many deals are in contracting for Somya?" />
+      <button id="chat-send" type="button">Ask</button>
+    </div>
+    <div id="chat-suggest" class="chat-suggest" style="padding: 0 10px 10px;"></div>
+  </div>
   <div id="chart-tooltip" class="chart-tooltip"></div>
   <div id="kpi-popup" class="popup" aria-hidden="true">
     <div class="popup-card">
@@ -1880,9 +2042,195 @@
     let currentUser = null;
     let currentAuthStore = { users: {} };
     let activateTab = null;
+    let chatInitialized = false;
+    let chatDataRef = null;
 
     function normalizeUsername(value) {
       return String(value || '').trim().toLowerCase();
+    }
+
+    function chatAppend(role, text) {
+      const box = document.getElementById('chat-messages');
+      if (!box) return;
+      const div = document.createElement('div');
+      div.className = `chat-msg ${role}`;
+      div.textContent = text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function chatResolveSeller(q, data) {
+      const s = String(q || '').toLowerCase();
+      if (s.includes('overall') || s.includes('all sellers') || s.includes('all teams')) return 'All (unique deals)';
+      const sellers = (data && data.sellers) || [];
+      for (const seller of sellers) {
+        if (seller === 'All (unique deals)') continue;
+        const low = seller.toLowerCase();
+        if (s.includes(low)) return seller;
+        const first = low.split(' ')[0];
+        if (first && s.includes(first)) return seller;
+      }
+      return 'All (unique deals)';
+    }
+
+    function chatResolveStage(q) {
+      const s = String(q || '').toLowerCase();
+      if (s.includes('intro')) return '1. Intro';
+      if (s.includes('qualification')) return '2. Qualification';
+      if (s.includes('capab')) return '3. Capability';
+      if (s.includes('problem scoping') || s.includes('scoping')) return '4. Problem Scoping';
+      if (s.includes('contract')) return '5. Contracting';
+      if (s.includes('commercial proposal') || s.includes('proposal')) return '6. Commercial Proposal';
+      if (s.includes('win')) return '7. Win';
+      if (s.includes('loss') || s.includes('lost')) return '8. Loss';
+      if (s.includes('no show') || s.includes('reschedule')) return '10. No Show/ Reschedule';
+      return null;
+    }
+
+    function chatResolveMonth(q) {
+      const m = String(q || '').match(/\b(20\d{2})[-\/](0[1-9]|1[0-2])\b/);
+      return m ? `${m[1]}-${m[2]}` : null;
+    }
+
+    function chatCollectDeals(data, seller, stage, month) {
+      const details = buildGroupedDetails(((data.details || {})[seller]) || {});
+      const stageMap = details[stage] || {};
+      const out = [];
+      if (month) {
+        (stageMap[month] || []).forEach((d) => out.push({ deal: d, stage, month }));
+      } else {
+        Object.entries(stageMap).forEach(([m, deals]) => {
+          deals.forEach((d) => out.push({ deal: d, stage, month: m }));
+        });
+      }
+      return out.sort((a, b) => a.deal.localeCompare(b.deal));
+    }
+
+    function chatAnswer(question, data) {
+      const q = String(question || '').trim();
+      const s = q.toLowerCase();
+      if (!q) return 'Ask a question about funnel counts, stage-wise deals, stuck deals, win/loss sources, or intro trends.';
+      const seller = chatResolveSeller(s, data);
+      const stage = chatResolveStage(s);
+      const month = chatResolveMonth(s);
+
+      if (s.includes('stuck') || s.includes('help needed')) {
+        const bucketKey = seller === 'All (unique deals)' ? 'All (unique deals)' : seller;
+        const kpi = (((data.scorecard || {}).sellers || {})[bucketKey] || {}).kpi_details || {};
+        const stuck = kpi.stuck_proxy_2_6 || [];
+        if (!stuck.length) return `${bucketKey}: no stuck/help-needed deals in current filtered data window.`;
+        const top = stuck.slice(0, 12).map((r) => `${r.deal} | ${r.stage} | age ${r.age_days == null ? '-' : r.age_days}d`).join('\n');
+        return `${bucketKey}: ${money.format(stuck.length)} stuck/help-needed deals.\nTop deals:\n${top}`;
+      }
+
+      if (s.includes('won') && s.includes('lost') && (s.includes('source') || s.includes('from') || s.includes('where'))) {
+        const src = data.win_loss_sources || {};
+        const payload = seller === 'All (unique deals)'
+          ? (src.overall_unique || {})
+          : ((src.sellers || {})[seller] || {});
+        const rows = payload.rows || [];
+        if (!rows.length) return `${seller}: no won/lost source rows available in current window.`;
+        const top = rows.slice(0, 8).map((r) => `${r.industry} | ${r.logo} | ${r.function} -> Won ${r.won}, Lost ${r.lost}`).join('\n');
+        return `${seller}: Won ${money.format(payload.won_total || 0)}, Lost ${money.format(payload.lost_total || 0)}, Win rate ${((Number(payload.overall_win_rate || 0)) * 100).toFixed(1)}%.\nTop sources:\n${top}`;
+      }
+
+      if (stage && (s.includes('which deals') || s.includes('list') || s.includes('show deals'))) {
+        const deals = chatCollectDeals(data, seller, stage, month);
+        if (!deals.length) return `${seller}: no deals found for ${stage}${month ? ` in ${month}` : ''}.`;
+        const lines = deals.slice(0, 25).map((r) => `${r.deal} | ${r.month}`);
+        return `${seller}: ${money.format(deals.length)} deal(s) in ${stage}${month ? ` for ${month}` : ''}.\n${lines.join('\n')}${deals.length > 25 ? `\n...and ${money.format(deals.length - 25)} more.` : ''}`;
+      }
+
+      if (stage || s.includes('count') || s.includes('how many')) {
+        const grouped = buildGroupedTable((data.tables || {})[seller] || {});
+        if (stage) {
+          const monthMap = grouped[stage] || {};
+          const count = month ? Number(monthMap[month] || 0) : Object.values(monthMap).reduce((a, b) => a + Number(b || 0), 0);
+          return `${seller}: ${money.format(count)} deal(s) in ${stage}${month ? ` for ${month}` : ''}.`;
+        }
+        const total = Object.values(grouped).reduce((acc, monthMap) => {
+          return acc + Object.values(monthMap || {}).reduce((a, b) => a + Number(b || 0), 0);
+        }, 0);
+        return `${seller}: total counted deals across all stages/months = ${money.format(total)}.`;
+      }
+
+      if (s.includes('funnel')) {
+        const m = (((data.scorecard || {}).sellers || {})[seller] || {});
+        if (!Object.keys(m).length) return `${seller}: no funnel snapshot found.`;
+        return `${seller} funnel snapshot:\n1-2: ${money.format(m.stage_1_2_count || 0)}\n3-4: ${money.format(m.stage_3_4_count || 0)}\n5-6: ${money.format(m.stage_5_6_count || 0)}\n7-8: ${money.format(m.stage_7_8_count || 0)}\n1-6 total: ${money.format(m.stage_1_6_count || 0)}`;
+      }
+
+      if (s.includes('intro') && (s.includes('trend') || s.includes('peak') || s.includes('average'))) {
+        const trend = data.intro_trend || {};
+        const series = ((trend.series || {})[seller === 'All (unique deals)' ? 'Overall (unique)' : seller]) || {};
+        const vals = Object.values(series).map((v) => Number(v || 0));
+        if (!vals.length) return `${seller}: no intro trend data found.`;
+        const total = vals.reduce((a, b) => a + b, 0);
+        const peak = Math.max(...vals);
+        const weeks = Object.keys(series);
+        const idx = vals.indexOf(peak);
+        return `${seller}: intro total ${money.format(total)}, average ${(total / vals.length).toFixed(1)} per bucket, peak ${money.format(peak)} at ${weeks[idx] || '-'}.`;
+      }
+
+      return `I can answer counts/lists by seller, stage, and month, plus stuck deals, funnel snapshot, intro trend, and won/lost source questions.\nTry: "Which deals are in contracting for Somya?"`;
+    }
+
+    function initChatAssistant(data) {
+      chatDataRef = data;
+      if (chatInitialized) return;
+      chatInitialized = true;
+      const fab = document.getElementById('chat-fab');
+      const panel = document.getElementById('chat-panel');
+      const close = document.getElementById('chat-close');
+      const input = document.getElementById('chat-input');
+      const send = document.getElementById('chat-send');
+      const suggest = document.getElementById('chat-suggest');
+
+      const toggle = (open) => {
+        panel.classList.toggle('open', !!open);
+        panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        if (open) setTimeout(() => input.focus(), 40);
+      };
+
+      const ask = () => {
+        const q = input.value.trim();
+        if (!q) return;
+        chatAppend('user', q);
+        const dataNow = chatDataRef || window.__salesData;
+        if (!dataNow) {
+          chatAppend('assistant', 'Data is not loaded yet. Please refresh the dashboard first.');
+        } else {
+          chatAppend('assistant', chatAnswer(q, dataNow));
+        }
+        input.value = '';
+      };
+
+      fab.addEventListener('click', () => toggle(!panel.classList.contains('open')));
+      close.addEventListener('click', () => toggle(false));
+      send.addEventListener('click', ask);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') ask();
+      });
+
+      const prompts = [
+        'How many deals are in contracting for Somya?',
+        'Which deals are stuck for Akshay Iyer?',
+        'Show won/lost sources for Overall',
+        'Give me funnel snapshot for Vitor Quirino'
+      ];
+      prompts.forEach((p) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = p;
+        b.addEventListener('click', () => {
+          toggle(true);
+          input.value = p;
+          ask();
+        });
+        suggest.appendChild(b);
+      });
+
+      chatAppend('assistant', 'Ask me about stage counts, deal lists, stuck deals, funnel snapshot, intro trend, or won/lost sources.');
     }
 
     function dealSizeValue(raw) {
@@ -3748,6 +4096,7 @@
         dashboardSettingsState = loadDashboardSettingsState();
         currentAuthStore = loadAuthStore();
         window.__salesData = data;
+        initChatAssistant(data);
 
         function updateFromCheckboxes() {
           selectedStages.clear();
