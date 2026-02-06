@@ -1387,7 +1387,7 @@
       </form>
       <div id="auth-error" class="auth-error"></div>
       <div class="auth-note">
-        This runs on static GitHub Pages. It is a browser-side gate only, not true server-side security.
+        Sign-in is validated against the shared Supabase backend. First successful login bootstraps admin if no users exist yet.
       </div>
     </div>
     <div class="panel" id="app" style="display:none;">
@@ -1792,9 +1792,8 @@
     ]);
     const DEAL_LIKELIHOOD_KEY = 'sales_dashboard_deal_likelihood_v1';
     const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
-    const SHARED_STORE_BASE_URL = 'https://crudcrud.com/api/95cdc8428ede417fa7b9e3ed86c3beeb';
-    const SHARED_STORE_RESOURCE = 'salesDashboardState';
-    const SHARED_STORE_DOC = 'main';
+    const SUPABASE_URL = 'https://vqksytduqxpfcovijhko.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa3N5dGR1cXhwZmNvdmlqaGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDI0MjIsImV4cCI6MjA4NTk3ODQyMn0.wvUsJcFpCgXB10vuDcXqU_shO5sin-zI96sBIrZH3OY';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -1806,9 +1805,9 @@
     let scorecardSellerLabels = [];
     let scorecardSelectedSeller = 'Overall';
     let activePopupSeller = null;
-    let sharedStoreRecordId = null;
     let sharedStorePushTimer = null;
     let sharedStorePushInFlight = false;
+    let sessionPassword = null;
     const AUTH_USERS_KEY = 'sales_dashboard_users_v1';
     const AUTH_SESSION_KEY = 'sales_dashboard_session_v1';
     let currentUser = null;
@@ -1866,16 +1865,6 @@
       saveQuarterTargetsState();
     }
 
-    function buildSharedStorePayload() {
-      return {
-        doc: SHARED_STORE_DOC,
-        users: (currentAuthStore && currentAuthStore.users) ? currentAuthStore.users : {},
-        likelihood: likelihoodState || {},
-        quarter_targets: quarterTargetsState || {},
-        updated_at: new Date().toISOString(),
-      };
-    }
-
     function applySharedStorePayload(payload) {
       const users = (payload && payload.users && typeof payload.users === 'object') ? payload.users : {};
       const likelihood = (payload && payload.likelihood && typeof payload.likelihood === 'object') ? payload.likelihood : {};
@@ -1886,64 +1875,72 @@
       persistLocalStateBundle();
     }
 
-    async function fetchSharedStoreRecord() {
-      const listUrl = `${SHARED_STORE_BASE_URL}/${SHARED_STORE_RESOURCE}`;
-      const res = await fetch(listUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`Shared store GET failed (${res.status})`);
-      const rows = await res.json();
-      const found = Array.isArray(rows) ? rows.find((r) => r && r.doc === SHARED_STORE_DOC) : null;
-      if (found && found._id) {
-        sharedStoreRecordId = found._id;
-        return found;
-      }
-      const payload = buildSharedStorePayload();
-      const createRes = await fetch(listUrl, {
+    async function supabaseRpc(fn, payload) {
+      const url = `${SUPABASE_URL}/rest/v1/rpc/${fn}`;
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(payload || {}),
       });
-      if (!createRes.ok) throw new Error(`Shared store create failed (${createRes.status})`);
-      const created = await createRes.json();
-      sharedStoreRecordId = created._id || null;
-      return created;
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Supabase RPC ${fn} failed (${res.status}): ${text}`);
+      }
+      const data = await res.json();
+      return Array.isArray(data) ? (data[0] || null) : data;
+    }
+
+    async function remoteLogin(username, password) {
+      const out = await supabaseRpc('get_dashboard_state', {
+        p_username: username,
+        p_password: password,
+      });
+      if (!out) throw new Error('No state returned from backend login.');
+      applySharedStorePayload(out);
+      const u = normalizeUsername(username);
+      const merged = (currentAuthStore.users || {})[u] || {};
+      const role = out.role || merged.role || 'viewer';
+      const currentUserObj = {
+        username: u,
+        role,
+        last_login_at: merged.last_login_at || new Date().toISOString(),
+      };
+      currentAuthStore.users[u] = { ...merged, ...currentUserObj };
+      persistLocalStateBundle();
+      return currentUserObj;
     }
 
     async function loadSharedStore() {
-      if (!SHARED_STORE_BASE_URL) return;
-      try {
-        const rec = await fetchSharedStoreRecord();
-        applySharedStorePayload(rec || {});
-      } catch (e) {
-        console.warn('Shared store load failed, using local state.', e);
-      }
+      if (!currentUser || !sessionPassword) return;
+      const fresh = await remoteLogin(currentUser.username, sessionPassword);
+      currentUser = fresh;
     }
 
     async function pushSharedStoreNow() {
-      if (!SHARED_STORE_BASE_URL) return;
+      if (!currentUser || !sessionPassword) return;
       if (sharedStorePushInFlight) return;
       sharedStorePushInFlight = true;
       try {
-        if (!sharedStoreRecordId) {
-          await fetchSharedStoreRecord();
-        }
-        if (!sharedStoreRecordId) return;
-        const url = `${SHARED_STORE_BASE_URL}/${SHARED_STORE_RESOURCE}/${sharedStoreRecordId}`;
-        const payload = buildSharedStorePayload();
-        const res = await fetch(url, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+        const out = await supabaseRpc('save_dashboard_state', {
+          p_username: currentUser.username,
+          p_password: sessionPassword,
+          p_likelihood: likelihoodState,
+          p_quarter_targets: quarterTargetsState,
+          p_users: (currentUser.role === 'admin') ? (currentAuthStore.users || {}) : null,
         });
-        if (!res.ok) throw new Error(`Shared store PUT failed (${res.status})`);
+        if (out) applySharedStorePayload(out);
       } catch (e) {
-        console.warn('Shared store push failed.', e);
+        console.warn('Shared store push failed:', e.message || e);
       } finally {
         sharedStorePushInFlight = false;
       }
     }
 
     function queueSharedStorePush() {
-      if (!SHARED_STORE_BASE_URL) return;
       if (sharedStorePushTimer) clearTimeout(sharedStorePushTimer);
       sharedStorePushTimer = setTimeout(() => {
         pushSharedStoreNow();
@@ -2227,14 +2224,16 @@
     function loadSession() {
       try {
         const parsed = JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || '{}');
-        if (parsed && parsed.username) return parsed;
+        if (parsed && parsed.username && parsed.password) return parsed;
       } catch (_) {}
       return null;
     }
 
-    function saveSession(username) {
+    function saveSession(username, password, role = 'viewer') {
       sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
         username,
+        password,
+        role,
         at: new Date().toISOString(),
       }));
     }
@@ -2282,16 +2281,12 @@
     }
 
     async function verifyLogin(usernameInput, password) {
-      const username = normalizeUsername(usernameInput);
-      const user = currentAuthStore.users[username];
-      if (!user) return null;
-      const attemptHash = await hashPassword(password, user.salt);
-      if (attemptHash !== user.password_hash) return null;
-      user.last_login_at = new Date().toISOString();
-      currentAuthStore.users[username] = user;
-      persistLocalStateBundle();
-      queueSharedStorePush();
-      return user;
+      try {
+        const logged = await remoteLogin(usernameInput, password);
+        return logged;
+      } catch (_) {
+        return null;
+      }
     }
 
     function setAdminVisibility(isAdmin) {
@@ -2379,16 +2374,9 @@
       gate.style.display = 'block';
       document.getElementById('app').style.display = 'none';
       showAuthError('');
-      const userCount = Object.keys(currentAuthStore.users || {}).length;
-      if (userCount === 0) {
-        sub.textContent = 'No users configured yet. Create your admin account.';
-        loginForm.style.display = 'none';
-        setupForm.style.display = 'grid';
-      } else {
-        sub.textContent = 'Sign in to access the dashboard.';
-        loginForm.style.display = 'grid';
-        setupForm.style.display = 'none';
-      }
+      sub.textContent = 'Sign in to access the dashboard. If no users exist yet, your first login creates the admin user.';
+      loginForm.style.display = 'grid';
+      setupForm.style.display = 'none';
     }
 
     function normalizeStage(stage) {
@@ -3552,7 +3540,6 @@
         quarterTargetsState = loadQuarterTargetsState();
         currentAuthStore = loadAuthStore();
         window.__salesData = data;
-        await loadSharedStore();
 
         function updateFromCheckboxes() {
           selectedStages.clear();
@@ -3689,30 +3676,6 @@
         renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
         setupTabs();
         renderDetailTable('Details', []);
-        setupForm.addEventListener('submit', async (evt) => {
-          evt.preventDefault();
-          showAuthError('');
-          const user = document.getElementById('auth-setup-user').value;
-          const pass = document.getElementById('auth-setup-pass').value;
-          const pass2 = document.getElementById('auth-setup-pass2').value;
-          if (pass !== pass2) {
-            showAuthError('Passwords do not match.');
-            return;
-          }
-          try {
-            await upsertUser(user, pass, 'admin', 'bootstrap');
-            const logged = await verifyLogin(user, pass);
-            if (!logged) throw new Error('Failed to sign in after setup.');
-            saveSession(logged.username);
-            applyLoggedInState(logged);
-            document.getElementById('auth-setup-user').value = '';
-            document.getElementById('auth-setup-pass').value = '';
-            document.getElementById('auth-setup-pass2').value = '';
-          } catch (e) {
-            showAuthError(e.message || 'Unable to create admin user.');
-          }
-        });
-
         loginForm.addEventListener('submit', async (evt) => {
           evt.preventDefault();
           showAuthError('');
@@ -3723,7 +3686,8 @@
             showAuthError('Invalid username or password.');
             return;
           }
-          saveSession(logged.username);
+          sessionPassword = pass;
+          saveSession(logged.username, pass, logged.role || 'viewer');
           applyLoggedInState(logged);
           document.getElementById('auth-login-user').value = '';
           document.getElementById('auth-login-pass').value = '';
@@ -3787,10 +3751,17 @@
         });
 
         const savedSession = loadSession();
-        if (savedSession && currentAuthStore.users[savedSession.username]) {
-          applyLoggedInState(currentAuthStore.users[savedSession.username]);
+        if (savedSession) {
+          const logged = await verifyLogin(savedSession.username, savedSession.password);
+          if (logged) {
+            sessionPassword = savedSession.password;
+            saveSession(logged.username, sessionPassword, logged.role || 'viewer');
+            applyLoggedInState(logged);
+          } else {
+            clearSession();
+            showLoginOrSetup();
+          }
         } else {
-          clearSession();
           showLoginOrSetup();
         }
       } catch (err) {
