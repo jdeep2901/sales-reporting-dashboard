@@ -489,6 +489,8 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const sourceOfLead = byId(item, sourceLeadCol);
     const revenueSource = byId(item, revenueSourceCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
+    const ownerNorm = norm(owner);
+    const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
     allDealsRows.push({
       deal: dealName,
       item_id: item.id,
@@ -507,9 +509,6 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       revenue_source_mapping: revenueSource,
       channel,
     });
-
-    const ownerNorm = norm(owner);
-    const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
     if (stageNorm === "won" || stageNorm === "lost") {
       cycleTimeRows.push({
         deal: dealName,
