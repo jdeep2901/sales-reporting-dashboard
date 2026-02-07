@@ -1888,6 +1888,45 @@
       font-weight: 700;
     }
 
+    .assumptions-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .assumption-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .assumption-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f7faff;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f3f75;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .assumption-body {
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #1f3353;
+      line-height: 1.45;
+    }
+
+    .assumption-body code {
+      background: #eef4ff;
+      border: 1px solid #d7e4ff;
+      border-radius: 6px;
+      padding: 1px 5px;
+      font-size: 12px;
+    }
+
     .gap-neg {
       color: #0f6a39;
     }
@@ -1982,6 +2021,7 @@
         <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
         <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
         <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
+        <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
 
@@ -2401,6 +2441,74 @@
           </div>
         </div>
         <div class="footnote">Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%. Stage phasing follows the configured quarter splits.</div>
+      </div>
+
+      <div id="view-assumptions" class="view">
+        <div class="head">
+          <div>
+            <h1>Assumptions, Logic, and Filters</h1>
+            <div class="sub">Reference tab for all business rules and calculations used across this dashboard.</div>
+          </div>
+        </div>
+        <div class="assumptions-wrap">
+          <div class="assumption-card">
+            <div class="assumption-head">Global Data Filters</div>
+            <div class="assumption-body">
+              1. Data source is Monday board sync snapshots (versioned).<br/>
+              2. Primary date basis is Intro Meeting Date with cutoff <code>2024-10-01</code> unless a tab-specific override is shown.<br/>
+              3. Seller scope is based on Deal Owner mapping to configured seller names.<br/>
+              4. Active tab views use the currently selected snapshot version.
+            </div>
+          </div>
+
+          <div class="assumption-card">
+            <div class="assumption-head">Stage Mapping</div>
+            <div class="assumption-body">
+              <code>1. Intro</code>, <code>2. Qualification</code>, <code>3. Capability</code>, <code>4. Problem Scoping</code>, <code>5. Contracting</code>, <code>6. Commercial Proposal</code>, <code>7. Win</code>, <code>8. Loss</code>.<br/>
+              Additional non-core stages are included in funnel filters where available.
+            </div>
+          </div>
+
+          <div class="assumption-card">
+            <div class="assumption-head">Weekly Scorecard Logic</div>
+            <div class="assumption-body">
+              1. KPI groups: stage 1-6, stage 1-2, stage 3-4, stage 5-6, stage 7-8.<br/>
+              2. Stuck proxy uses missing next step and SLA-age flags by stage category.<br/>
+              3. Seller-tagged close likelihood options are this quarter / next quarter / help needed.<br/>
+              4. Deal detail tables include stage, intro month, start date, age, deal size, and reason.
+            </div>
+          </div>
+
+          <div class="assumption-card">
+            <div class="assumption-head">Version Compare & Funnel Momentum</div>
+            <div class="assumption-body">
+              1. Compare is between any two selected snapshots.<br/>
+              2. Funnel momentum status is derived from forward vs backward movement, additions, and stuck delta.<br/>
+              3. Movement drilldowns are normalized to deal-level contributions per selected quarter.
+            </div>
+          </div>
+
+          <div class="assumption-card">
+            <div class="assumption-head">Revenue Forecast Calculations</div>
+            <div class="assumption-body">
+              1. Stage EV = Deal Size × P(win | stage).<br/>
+              2. Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%.<br/>
+              3. For stages 1-4, default deal size is <code>$100,000</code>; for stages 5-6, adjusted Monday deal size is used.<br/>
+              4. Proposal and Contracting phasing is shifted to start from the deal’s start quarter when start date exists.<br/>
+              5. Won row uses 100% deal size and is spread by start date + duration (months).<br/>
+              6. Fiscal year is Apr-Mar (e.g., Jan-Mar maps to Q4 of the same fiscal year label).
+            </div>
+          </div>
+
+          <div class="assumption-card">
+            <div class="assumption-head">Targets and Gap</div>
+            <div class="assumption-body">
+              1. Targets are maintained in shared backend state by seller and quarter, including an Overall scope.<br/>
+              2. Gap is computed as <code>Target - Forecast</code> for each quarter.<br/>
+              3. Positive gap implies shortfall versus target; negative gap implies forecast above target.
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="view-admin" class="view">
@@ -4539,6 +4647,7 @@
       const tabCompare = document.getElementById('tab-compare');
       const tabMomentum = document.getElementById('tab-momentum');
       const tabForecast = document.getElementById('tab-forecast');
+      const tabAssumptions = document.getElementById('tab-assumptions');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
       const viewFunnel = document.getElementById('view-funnel');
@@ -4549,6 +4658,7 @@
       const viewCompare = document.getElementById('view-compare');
       const viewMomentum = document.getElementById('view-momentum');
       const viewForecast = document.getElementById('view-forecast');
+      const viewAssumptions = document.getElementById('view-assumptions');
       const viewAdmin = document.getElementById('view-admin');
 
       function activate(name) {
@@ -4561,6 +4671,7 @@
         tabCompare.classList.toggle('active', name === 'compare');
         tabMomentum.classList.toggle('active', name === 'momentum');
         tabForecast.classList.toggle('active', name === 'forecast');
+        tabAssumptions.classList.toggle('active', name === 'assumptions');
         tabAdmin.classList.toggle('active', name === 'admin');
         viewCross.classList.toggle('active', name === 'crosstab');
         viewFunnel.classList.toggle('active', name === 'funnel');
@@ -4571,6 +4682,7 @@
         viewCompare.classList.toggle('active', name === 'compare');
         viewMomentum.classList.toggle('active', name === 'momentum');
         viewForecast.classList.toggle('active', name === 'forecast');
+        viewAssumptions.classList.toggle('active', name === 'assumptions');
         viewAdmin.classList.toggle('active', name === 'admin');
       }
 
@@ -4585,6 +4697,7 @@
       tabCompare.addEventListener('click', () => activate('compare'));
       tabMomentum.addEventListener('click', () => activate('momentum'));
       tabForecast.addEventListener('click', () => activate('forecast'));
+      tabAssumptions.addEventListener('click', () => activate('assumptions'));
       tabAdmin.addEventListener('click', () => activate('admin'));
     }
 
