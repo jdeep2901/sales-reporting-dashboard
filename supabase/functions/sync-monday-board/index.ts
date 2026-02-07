@@ -1266,19 +1266,19 @@ Deno.serve(async (req) => {
       monday_board_url: `https://themathcocrmtrial.monday.com/boards/${boardId}`,
       monday_last_sync_at: new Date().toISOString(),
       monday_last_sync_by: username,
-      monday_last_sync_rows: board.items.length,
-      monday_board_name: board.boardName,
+      monday_last_sync_rows: items.length,
+      monday_board_name: meta.boardName,
     };
 
     const inserted = await supabase.from("dashboard_versions").insert({
       created_by: username,
       source: "monday_sync",
       board_id: String(boardId),
-      board_name: board.boardName,
+      board_name: meta.boardName,
       dataset,
       likelihood: st.likelihood || {},
       dataset_hash: datasetHash,
-      item_count: Number(board.items.length || 0),
+      item_count: Number(items.length || 0),
       notes: null,
     }).select("id").single();
     if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
@@ -1322,8 +1322,8 @@ Deno.serve(async (req) => {
     return j({
       ok: true,
       board_id: String(boardId),
-      board_name: board.boardName,
-      item_count: board.items.length,
+      board_name: meta.boardName,
+      item_count: items.length,
       version_id: versionId,
       state: out,
     });
