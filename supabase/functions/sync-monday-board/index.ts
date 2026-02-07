@@ -1221,23 +1221,23 @@ Deno.serve(async (req) => {
     const addIf = (id: string | null) => { if (id) neededCandidates.add(id); };
     const pick = (fns: any[]) => pickColumnId(columns, fns);
     const pickMany = (fns: any[]) => pickColumnIds(columns, fns);
-    const introDateCol = pick([(t: string) => t.includes(\"intro\") && t.includes(\"date\"), (t: string) => t.includes(\"scheduled intro\")]);
-    const startDateCol = pick([(t: string) => t === \"start date\", (t: string) => t.includes(\"start date\"), (t: string) => t.includes(\"deal start\")]);
-    const durationCol = pick([(t: string) => t === \"duration\", (t: string) => t.includes(\"duration\")]);
-    const stageCol = pick([(t: string) => t.includes(\"deal stage\"), (t: string) => t === \"stage\"]);
-    const ownerCol = pick([(t: string) => t.includes(\"deal owner\"), (t: string) => t.includes(\"owner\")]);
-    const nextStepCol = pick([(t: string) => t.includes(\"next step\")]);
-    const industryCol = pinnedIndustryCol || pick([(t: string) => t.includes(\"industry\")]);
-    const logoCol = pick([(t: string) => t.includes(\"logo\"), (t: string) => t.includes(\"account\") || t.includes(\"company\")]);
-    const functionCol = pick([(t: string) => t.includes(\"business function\"), (t: string) => t === \"function\"]);
-    const sourceLeadCol = pick([(t: string) => t.includes(\"source of lead\"), (t: string) => t === \"source\", (t: string) => t.includes(\"lead source\")]);
-    const revenueSourceCol = pick([(t: string) => t.includes(\"revenue source mapping\"), (t: string) => t.includes(\"revenue source\")]);
-    const adjContractNumCol = pick([(t: string) => t.includes(\"adjusted\") && t.includes(\"contract\") && (t.includes(\"num\") || t.includes(\"number\"))]);
-    const adjContractCol = pick([(t: string) => t.includes(\"adjusted\") && t.includes(\"contract\")]);
-    const tcvCol = pick([(t: string) => t.includes(\"tcv\"), (t: string) => t.includes(\"contract value\")]);
+    const introDateCol = pick([(t: string) => t.includes("intro") && t.includes("date"), (t: string) => t.includes("scheduled intro")]);
+    const startDateCol = pick([(t: string) => t === "start date", (t: string) => t.includes("start date"), (t: string) => t.includes("deal start")]);
+    const durationCol = pick([(t: string) => t === "duration", (t: string) => t.includes("duration")]);
+    const stageCol = pick([(t: string) => t.includes("deal stage"), (t: string) => t === "stage"]);
+    const ownerCol = pick([(t: string) => t.includes("deal owner"), (t: string) => t.includes("owner")]);
+    const nextStepCol = pick([(t: string) => t.includes("next step")]);
+    const industryCol = pinnedIndustryCol || pick([(t: string) => t.includes("industry")]);
+    const logoCol = pick([(t: string) => t.includes("logo"), (t: string) => t.includes("account") || t.includes("company")]);
+    const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function"]);
+    const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
+    const revenueSourceCol = pick([(t: string) => t.includes("revenue source mapping"), (t: string) => t.includes("revenue source")]);
+    const adjContractNumCol = pick([(t: string) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
+    const adjContractCol = pick([(t: string) => t.includes("adjusted") && t.includes("contract")]);
+    const tcvCol = pick([(t: string) => t.includes("tcv"), (t: string) => t.includes("contract value")]);
     const durationCandidateCols = new Set<string>([
       ...(durationCol ? [durationCol] : []),
-      ...pickMany([(t: string) => t.includes(\"duration\"), (t: string) => t.includes(\"engagement\") && t.includes(\"month\"), (t: string) => t.includes(\"term\") && t.includes(\"month\"), (t: string) => t === \"months\"]),
+      ...pickMany([(t: string) => t.includes("duration"), (t: string) => t.includes("engagement") && t.includes("month"), (t: string) => t.includes("term") && t.includes("month"), (t: string) => t === "months"]),
     ]);
     addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
     addIf(industryCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
