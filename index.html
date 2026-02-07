@@ -1799,12 +1799,12 @@
     }
 
     .forecast-table thead th {
-      background: #260046;
+      background: #1f3f75;
       color: #fff;
       font-size: 16px;
       font-weight: 800;
-      border-top: 1px solid #260046;
-      border-color: #41255e;
+      border-top: 1px solid #1f3f75;
+      border-color: #3b5f9c;
     }
 
     .forecast-table tbody tr:nth-child(odd) td {
@@ -1812,19 +1812,19 @@
     }
 
     .forecast-table .risk-row td {
-      background: #d9ecfb;
+      background: #dbeafe;
       font-weight: 800;
       font-size: 15px;
     }
 
     .forecast-table .target-row td {
-      background: #c7eadf;
+      background: #d8f2ea;
       font-weight: 800;
       font-size: 15px;
     }
 
     .forecast-table .gap-row td {
-      background: #f7f8fc;
+      background: #eef3fb;
       font-weight: 800;
       font-size: 15px;
     }
@@ -3190,6 +3190,15 @@
         current: fiscalQuarterText(currentInfo),
         next: fiscalQuarterText(nextInfo),
       };
+    }
+
+    function forecastQuarterFromStartDate(startDateIso) {
+      if (!startDateIso) return null;
+      const d = new Date(startDateIso);
+      if (Number.isNaN(d.getTime())) return null;
+      const info = fiscalQuarterLabel(d);
+      const yy = String(info.fiscalYear).slice(-2);
+      return `Q${info.quarter} FY${yy}`;
     }
 
     function likelihoodRecordKey(rec) {
@@ -5238,6 +5247,7 @@
       const sellerKey = scope === 'Overall' ? 'All (unique deals)' : scope;
       const metric = (((data.scorecard || {}).sellers || {})[sellerKey] || {});
       const stageRows = ((metric.kpi_details || {}).stage_1_6 || []);
+      const wonRows = ((metric.kpi_details || {}).stage_7_8 || []).filter((r) => String(r.stage || '') === '7. Win');
 
       const stageQuarterValues = {};
       const quarterTotals = {};
@@ -5264,6 +5274,28 @@
         FORECAST_QUARTERS.forEach((q) => tr.appendChild(makeCell('td', forecastNumberText(perQuarter[q], false))));
         body.appendChild(tr);
       });
+
+      const wonQuarterTotals = {};
+      FORECAST_QUARTERS.forEach((q) => { wonQuarterTotals[q] = 0; });
+      let wonUnphased = 0;
+      wonRows.forEach((r) => {
+        const amount = Math.max(0, Number(r.deal_size || 0));
+        if (!amount) return;
+        const fq = forecastQuarterFromStartDate(r.start_date);
+        if (fq && Object.prototype.hasOwnProperty.call(wonQuarterTotals, fq)) {
+          wonQuarterTotals[fq] += amount;
+        } else {
+          wonUnphased += amount;
+        }
+      });
+      const wonRow = document.createElement('tr');
+      wonRow.appendChild(makeCell('td', 'Won (Start Date)'));
+      FORECAST_QUARTERS.forEach((q) => {
+        const v = wonQuarterTotals[q] || 0;
+        quarterTotals[q] += v;
+        wonRow.appendChild(makeCell('td', forecastNumberText(v, false)));
+      });
+      body.appendChild(wonRow);
 
       const riskRow = document.createElement('tr');
       riskRow.className = 'risk-row';
@@ -5306,6 +5338,10 @@
       const lines = [
         `${scope}: total risk-adjusted EV across shown quarters = ${forecastNumberText(FORECAST_QUARTERS.reduce((acc, q) => acc + Number(quarterTotals[q] || 0), 0), true)}.`,
       ];
+      const wonTotalPhased = FORECAST_QUARTERS.reduce((acc, q) => acc + Number(wonQuarterTotals[q] || 0), 0);
+      if (wonTotalPhased > 0 || wonUnphased > 0) {
+        lines.push(`Won contribution (100% value): ${forecastNumberText(wonTotalPhased, true)} phased by Start Date${wonUnphased > 0 ? `; ${forecastNumberText(wonUnphased, true)} not phased (missing/out-of-range start date).` : '.'}`);
+      }
       if (strongestQuarter) {
         lines.push(`Highest EV quarter: ${strongestQuarter} (${forecastNumberText(quarterTotals[strongestQuarter], true)}).`);
       }
