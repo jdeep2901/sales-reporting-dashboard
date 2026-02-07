@@ -303,17 +303,53 @@ function extractLinkedItemIdsFromConnectValue(raw: string | null | undefined): s
   const obj = parseJsonSafe(raw);
   if (!obj || typeof obj !== "object") return [];
   const ids: Array<string | number> = [];
-  const lp = obj.linkedPulseIds || obj.linked_pulse_ids || obj.linkedItemIds || obj.linked_item_ids;
+
+  const pushId = (v: any) => {
+    if (v == null) return;
+    if (typeof v === "number" && Number.isFinite(v)) ids.push(Math.trunc(v));
+    else if (typeof v === "string") {
+      const s = v.trim();
+      if (/^\d+$/.test(s)) ids.push(s);
+    }
+  };
+
+  // Common top-level shapes.
+  const lp = (obj as any).linkedPulseIds || (obj as any).linked_pulse_ids || (obj as any).linkedItemIds || (obj as any).linked_item_ids;
   if (Array.isArray(lp)) {
     for (const x of lp) {
-      const v = (x && typeof x === "object") ? (x.linkedPulseId ?? x.linked_pulse_id ?? x.id ?? x.itemId) : x;
-      if (v != null) ids.push(v);
+      if (x && typeof x === "object") {
+        pushId((x as any).linkedPulseId ?? (x as any).linked_pulse_id ?? (x as any).id ?? (x as any).itemId ?? (x as any).item_id);
+      } else {
+        pushId(x);
+      }
     }
   }
-  const itemIds = obj.itemIds || obj.item_ids || obj.item_ids_array || obj.items;
-  if (Array.isArray(itemIds)) {
-    for (const v of itemIds) if (v != null) ids.push(v);
-  }
+
+  const itemIds = (obj as any).itemIds || (obj as any).item_ids || (obj as any).item_ids_array || (obj as any).items;
+  if (Array.isArray(itemIds)) for (const v of itemIds) pushId(v);
+
+  // Deep fallback: some Monday shapes nest linked ids.
+  const seen = new Set<any>();
+  const walk = (x: any) => {
+    if (x == null) return;
+    if (seen.has(x)) return;
+    if (typeof x === "string" || typeof x === "number") return;
+    if (typeof x !== "object") return;
+    seen.add(x);
+    if (Array.isArray(x)) {
+      for (const y of x) walk(y);
+      return;
+    }
+    for (const [k, v] of Object.entries(x)) {
+      const kk = String(k).toLowerCase();
+      if (kk === "linkedpulseid" || kk === "linked_pulse_id" || kk === "itemid" || kk === "item_id" || kk === "pulseid" || kk === "pulse_id") {
+        pushId(v);
+      }
+      walk(v);
+    }
+  };
+  walk(obj);
+
   // Dedup + normalize to string.
   const out: string[] = [];
   for (const v of ids) {
@@ -546,6 +582,11 @@ async function buildDataset(
   const accountsRelationColPinned = String(opts?.accounts_relation_col_id || "").trim() || null;
   const accountsRelationColAuto = (accountsBoardId ? findConnectColumnToBoard(columns, accountsBoardId) : null);
   const accountsRelationColId = accountsRelationColPinned || relationColFromMirror || accountsRelationColAuto;
+  const accountsRelationColMeta = accountsRelationColId ? {
+    id: accountsRelationColId,
+    title: colById[accountsRelationColId]?.title || null,
+    type: colById[accountsRelationColId]?.type || null,
+  } : { id: null, title: null, type: null };
 
   let accountsIndustryColId: string | null = accountsIndustryColPinned;
   const accountIndustryById: Record<string, string> = {};
@@ -556,6 +597,8 @@ async function buildDataset(
     account_industry_mapped: 0,
     deals_with_account_link: 0,
     deals_with_joined_industry: 0,
+    relation_nonempty_value_sample: 0,
+    relation_value_examples: [] as string[],
   };
 
   if (accountsBoardId && accountsRelationColId && opts?.monday_token) {
@@ -564,6 +607,13 @@ async function buildDataset(
     const accountIds: string[] = [];
     for (const it of items) {
       const cv = it.column_values.find((v) => v.id === accountsRelationColId);
+      const rawVal = String(cv?.value || "").trim();
+      if (rawVal) {
+        accountsJoinStats.relation_nonempty_value_sample += 1;
+        if (accountsJoinStats.relation_value_examples.length < 3) {
+          accountsJoinStats.relation_value_examples.push(rawVal.length > 500 ? `${rawVal.slice(0, 497)}...` : rawVal);
+        }
+      }
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
       for (const id of linked) if (!accountIds.includes(id)) accountIds.push(id);
       if (accountIds.length > 5000) break;
@@ -935,6 +985,7 @@ async function buildDataset(
         enabled: accountsJoinEnabled,
         accounts_board_id: accountsBoardId,
         accounts_relation_col_id: accountsRelationColId,
+        accounts_relation_col: accountsRelationColMeta,
         accounts_industry_col_id: accountsIndustryColId,
         industry_col_type: industryColType || null,
         relation_col_from_mirror: relationColFromMirror,
