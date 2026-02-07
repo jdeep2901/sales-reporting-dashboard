@@ -221,6 +221,27 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const x = item.column_values.find((v) => v.id === id);
     return (x?.text || "").trim();
   };
+  const byIdDate = (item: MondayItem, id: string | null) => {
+    if (!id) return "";
+    const x = item.column_values.find((v) => v.id === id);
+    const txt = (x?.text || "").trim();
+    if (txt) return txt;
+    const raw = x?.value;
+    if (!raw) return "";
+    try {
+      const obj = JSON.parse(raw);
+      const candidate = String(
+        obj?.date ||
+        obj?.start_date ||
+        obj?.startDate ||
+        obj?.value ||
+        ""
+      ).trim();
+      return candidate;
+    } catch (_) {
+      return "";
+    }
+  };
   const cutoffDate = parseDate(INTRO_DATE_CUTOFF)!;
   const introDateCol = pickColumnId(columns, [(t) => t.includes("intro") && t.includes("date"), (t) => t.includes("scheduled intro")]);
   const startDateCol = pickColumnId(columns, [(t) => t === "start date", (t) => t.includes("start date"), (t) => t.includes("deal start")]);
@@ -351,7 +372,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const stageRaw = byId(item, stageCol);
     const nextStepRaw = byId(item, nextStepCol);
     const introDateRaw = byId(item, introDateCol);
-    const startDateRaw = byId(item, startDateCol);
+    const startDateRaw = byIdDate(item, startDateCol);
     const stage = cleanStage(stageRaw);
     if (!stage || norm(stage) === "deal stage") continue;
     const stageNorm = norm(stage);
