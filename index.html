@@ -1669,6 +1669,25 @@
       border-radius: 8px;
       background: #fbfdff;
       padding: 6px 8px;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    .momentum-kpi:hover {
+      background: #eef4ff;
+    }
+
+    .momentum-kpi.active {
+      border-color: #9fbcf6;
+      background: #e8f0ff;
+    }
+
+    .momentum-card.clickable {
+      cursor: pointer;
+    }
+
+    .momentum-card.clickable:hover {
+      border-color: #afc6f7;
     }
 
     .momentum-kpi-label {
@@ -1696,6 +1715,57 @@
 
     .momentum-definition strong {
       color: #173f77;
+    }
+
+    .momentum-detail {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .momentum-detail-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .momentum-detail-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1d3f72;
+    }
+
+    .momentum-detail-wrap {
+      max-height: 34vh;
+      overflow: auto;
+    }
+
+    .momentum-detail-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .momentum-detail-table th, .momentum-detail-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .momentum-detail-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #fbfdff;
+      color: #294066;
+      font-weight: 700;
     }
 
     @media (max-width: 980px) {
@@ -2118,6 +2188,27 @@
               </thead>
               <tbody id="momentum-body"></tbody>
             </table>
+          </div>
+          <div class="momentum-detail">
+            <div class="momentum-detail-head">
+              <div id="momentum-detail-title" class="momentum-detail-title">Moved Deals</div>
+              <div id="momentum-detail-meta" class="detail-meta">Click any momentum card KPI to load deals.</div>
+            </div>
+            <div class="momentum-detail-wrap">
+              <table class="momentum-detail-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th>
+                    <th>Seller</th>
+                    <th>From Stage</th>
+                    <th>To Stage</th>
+                    <th>Movement</th>
+                    <th>Intro Month</th>
+                  </tr>
+                </thead>
+                <tbody id="momentum-detail-body"></tbody>
+              </table>
+            </div>
           </div>
           <div class="momentum-definition">
             <strong>Definitions:</strong><br/>
@@ -3529,6 +3620,77 @@
       return 'Stalled';
     }
 
+    function collectMomentumDealRows(payload, scope, leftLookup, rightLookup) {
+      const movement = payload && payload.movement ? payload.movement : {};
+      const rows = [];
+      (movement.stage_changed || []).forEach((r) => {
+        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
+        const leftN = stageNumber(r.left_stage);
+        const rightN = stageNumber(r.right_stage);
+        if (leftN == null || rightN == null) return;
+        const maxStage = scope === 'all' ? MOMENTUM_ALL_STAGE_MAX : MOMENTUM_CORE_STAGE_MAX;
+        if (leftN > maxStage || rightN > maxStage) return;
+        const direction = rightN > leftN ? 'Forward' : (rightN < leftN ? 'Backward' : 'Unchanged');
+        rows.push({
+          deal: r.deal || '-',
+          seller,
+          fromStage: r.left_stage || '-',
+          toStage: r.right_stage || '-',
+          movement: direction,
+          introMonth: r.intro_month || '-',
+        });
+      });
+      (movement.added || []).forEach((r) => {
+        if (!momentumStageInScope(r.stage, scope)) return;
+        const seller = sellerFromMovementRow(r, leftLookup, rightLookup);
+        rows.push({
+          deal: r.deal || '-',
+          seller,
+          fromStage: '-',
+          toStage: r.stage || '-',
+          movement: 'New',
+          introMonth: r.intro_month || '-',
+        });
+      });
+      return rows;
+    }
+
+    function renderMomentumDealDetails(title, records) {
+      const titleEl = document.getElementById('momentum-detail-title');
+      const metaEl = document.getElementById('momentum-detail-meta');
+      const body = document.getElementById('momentum-detail-body');
+      if (!titleEl || !metaEl || !body) return;
+      titleEl.textContent = title;
+      metaEl.textContent = `${money.format(records.length)} deal(s)`;
+      body.innerHTML = '';
+      if (!records.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No deals found'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+      const rows = [...records].sort((a, b) => {
+        const s = String(a.seller || '').localeCompare(String(b.seller || ''));
+        if (s !== 0) return s;
+        return String(a.deal || '').localeCompare(String(b.deal || ''));
+      });
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal || '-'));
+        tr.appendChild(makeCell('td', r.seller || '-'));
+        tr.appendChild(makeCell('td', r.fromStage || '-'));
+        tr.appendChild(makeCell('td', r.toStage || '-'));
+        tr.appendChild(makeCell('td', r.movement || '-'));
+        tr.appendChild(makeCell('td', r.introMonth || '-'));
+        body.appendChild(tr);
+      });
+    }
+
     function renderMomentumSellerFilter(data) {
       const sellerSelect = document.getElementById('momentum-seller');
       if (!sellerSelect) return;
@@ -3669,10 +3831,11 @@
       return rows;
     }
 
-    function renderMomentumCards(rows) {
+    function renderMomentumCards(rows, payload, scope, leftLookup, rightLookup) {
       const cards = document.getElementById('momentum-cards');
       if (!cards) return;
       cards.innerHTML = '';
+      const detailRows = collectMomentumDealRows(payload, scope, leftLookup, rightLookup);
       if (!rows.length) {
         const empty = document.createElement('div');
         empty.className = 'momentum-card';
@@ -3682,7 +3845,7 @@
       }
       rows.forEach((r) => {
         const card = document.createElement('div');
-        card.className = 'momentum-card';
+        card.className = 'momentum-card clickable';
         const head = document.createElement('div');
         head.className = 'momentum-card-head';
         const seller = document.createElement('div');
@@ -3698,12 +3861,20 @@
         const kpis = document.createElement('div');
         kpis.className = 'momentum-kpis';
         const items = [
-          ['Score', r.score.toFixed(1)],
-          ['Forward', money.format(r.forwardPoints)],
-          ['Backward', money.format(r.backwardPoints)],
-          ['New', money.format(r.additions)],
+          ['Score', r.score.toFixed(1), 'all'],
+          ['Forward', money.format(r.forwardPoints), 'forward'],
+          ['Backward', money.format(r.backwardPoints), 'backward'],
+          ['New', money.format(r.additions), 'new'],
         ];
-        items.forEach(([label, value]) => {
+        const sellerRows = detailRows.filter((x) => x.seller === r.seller);
+        const openDetails = (mode) => {
+          let filtered = sellerRows;
+          if (mode === 'forward') filtered = sellerRows.filter((x) => x.movement === 'Forward');
+          else if (mode === 'backward') filtered = sellerRows.filter((x) => x.movement === 'Backward');
+          else if (mode === 'new') filtered = sellerRows.filter((x) => x.movement === 'New');
+          renderMomentumDealDetails(`${r.seller} | ${mode === 'all' ? 'All moved deals' : mode} deals`, filtered);
+        };
+        items.forEach(([label, value, mode]) => {
           const box = document.createElement('div');
           box.className = 'momentum-kpi';
           const l = document.createElement('div');
@@ -3714,9 +3885,19 @@
           v.textContent = value;
           box.appendChild(l);
           box.appendChild(v);
+          box.addEventListener('click', (evt) => {
+            evt.stopPropagation();
+            cards.querySelectorAll('.momentum-kpi').forEach((el) => el.classList.remove('active'));
+            box.classList.add('active');
+            openDetails(mode);
+          });
           kpis.appendChild(box);
         });
         card.appendChild(kpis);
+        card.addEventListener('click', () => {
+          cards.querySelectorAll('.momentum-kpi').forEach((el) => el.classList.remove('active'));
+          openDetails('all');
+        });
         cards.appendChild(card);
       });
     }
@@ -3760,7 +3941,13 @@
         body.appendChild(tr);
       }
 
-      renderMomentumCards(rows);
+      renderMomentumCards(rows, payload, scope, leftLookup, rightLookup);
+      const detailRows = collectMomentumDealRows(payload, scope, leftLookup, rightLookup);
+      if (pick === 'Overall') {
+        renderMomentumDealDetails('Overall | All moved deals', detailRows);
+      } else {
+        renderMomentumDealDetails(`${pick} | All moved deals`, detailRows.filter((x) => x.seller === pick));
+      }
       const positives = rows.filter((r) => r.status === 'Positive').length;
       const negatives = rows.filter((r) => r.status === 'Negative').length;
       const stalled = rows.filter((r) => r.status === 'Stalled').length;
