@@ -1768,6 +1768,75 @@
       font-weight: 700;
     }
 
+    .forecast-wrap {
+      padding: 12px 16px 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .forecast-table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+
+    .forecast-table th, .forecast-table td {
+      border-right: 1px solid #dbe3f1;
+      border-bottom: 1px solid #dbe3f1;
+      padding: 9px 12px;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      background: #fff;
+    }
+
+    .forecast-table th:first-child, .forecast-table td:first-child {
+      text-align: left;
+      border-left: 1px solid #dbe3f1;
+      min-width: 160px;
+    }
+
+    .forecast-table thead th {
+      background: #260046;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 800;
+      border-top: 1px solid #260046;
+      border-color: #41255e;
+    }
+
+    .forecast-table tbody tr:nth-child(odd) td {
+      background: #fbfcff;
+    }
+
+    .forecast-table .risk-row td {
+      background: #d9ecfb;
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .forecast-table .target-row td {
+      background: #c7eadf;
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .forecast-table .gap-row td {
+      background: #f7f8fc;
+      font-weight: 800;
+      font-size: 15px;
+    }
+
+    .gap-neg {
+      color: #0f6a39;
+    }
+
+    .gap-pos {
+      color: #b10202;
+    }
+
     @media (max-width: 980px) {
       .admin-grid {
         grid-template-columns: 1fr;
@@ -1853,6 +1922,7 @@
         <button id="tab-introtrend" class="tab-btn" type="button">Intro Calls Trend</button>
         <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
         <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
+        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
 
@@ -2222,6 +2292,36 @@
         </div>
       </div>
 
+      <div id="view-forecast" class="view">
+        <div class="head">
+          <div>
+            <h1>Quarterly Revenue Forecast (Risk-Adjusted EV)</h1>
+            <div class="sub">EV per deal = Deal Size × P(win | stage). Stages 1-4 use $100,000 default size; stages 5-6 use adjusted deal size from Monday.</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="forecast-seller">Scope</label>
+              <select id="forecast-seller"></select>
+            </div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Forecast Summary</div>
+          <ul id="insight-forecast" class="insight-list"></ul>
+        </div>
+        <div class="forecast-wrap">
+          <div class="table-wrap">
+            <table class="forecast-table" id="forecast-table">
+              <thead>
+                <tr id="forecast-head-row"></tr>
+              </thead>
+              <tbody id="forecast-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="footnote">Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%. Stage phasing follows the configured quarter splits.</div>
+      </div>
+
       <div id="view-admin" class="view">
         <div class="head">
           <div>
@@ -2418,6 +2518,59 @@
     const LIKELIHOOD_HELP = 'help_needed';
     const MOMENTUM_CORE_STAGE_MAX = 6;
     const MOMENTUM_ALL_STAGE_MAX = 8;
+    const FORECAST_QUARTERS = ['Q4 FY26', 'Q1 FY27', 'Q2 FY27', 'Q3 FY27', 'Q4 FY27'];
+    const FORECAST_QUARTER_KEY_MAP = {
+      'Q4 FY26': "Q4'26",
+      'Q1 FY27': "Q1'27",
+      'Q2 FY27': "Q2'27",
+      'Q3 FY27': "Q3'27",
+      'Q4 FY27': "Q4'27",
+    };
+    const FORECAST_DEFAULT_OVERALL_TARGETS = {
+      'Q4 FY26': 0,
+      'Q1 FY27': 1500000,
+      'Q2 FY27': 2500000,
+      'Q3 FY27': 4000000,
+      'Q4 FY27': 4000000,
+    };
+    const FORECAST_STAGE_CONFIG = [
+      {
+        label: 'Intro',
+        stage: '1. Intro',
+        winProb: 0.05,
+        phase: { 'Q4 FY26': 0.00, 'Q1 FY27': 0.35, 'Q2 FY27': 0.45, 'Q3 FY27': 0.15, 'Q4 FY27': 0.05 },
+      },
+      {
+        label: 'Qualification',
+        stage: '2. Qualification',
+        winProb: 0.10,
+        phase: { 'Q4 FY26': 0.05, 'Q1 FY27': 0.45, 'Q2 FY27': 0.35, 'Q3 FY27': 0.12, 'Q4 FY27': 0.03 },
+      },
+      {
+        label: 'Capabilities',
+        stage: '3. Capability',
+        winProb: 0.20,
+        phase: { 'Q4 FY26': 0.15, 'Q1 FY27': 0.55, 'Q2 FY27': 0.25, 'Q3 FY27': 0.04, 'Q4 FY27': 0.01 },
+      },
+      {
+        label: 'Scoping',
+        stage: '4. Problem Scoping',
+        winProb: 0.50,
+        phase: { 'Q4 FY26': 0.35, 'Q1 FY27': 0.45, 'Q2 FY27': 0.18, 'Q3 FY27': 0.02, 'Q4 FY27': 0.00 },
+      },
+      {
+        label: 'Proposal',
+        stage: '6. Commercial Proposal',
+        winProb: 0.70,
+        phase: { 'Q4 FY26': 0.60, 'Q1 FY27': 0.28, 'Q2 FY27': 0.11, 'Q3 FY27': 0.01, 'Q4 FY27': 0.00 },
+      },
+      {
+        label: 'Contracting',
+        stage: '5. Contracting',
+        winProb: 0.80,
+        phase: { 'Q4 FY26': 0.85, 'Q1 FY27': 0.12, 'Q2 FY27': 0.03, 'Q3 FY27': 0.00, 'Q4 FY27': 0.00 },
+      },
+    ];
     let likelihoodState = {};
     let liveLikelihoodState = {};
     let quarterTargetsState = {};
@@ -2808,8 +2961,10 @@
     function normalizeQuarterLabel(raw) {
       const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
       const m = s.match(/^Q([1-4])'?(\d{2})$/);
-      if (!m) return null;
-      return `Q${m[1]}'${m[2]}`;
+      if (m) return `Q${m[1]}'${m[2]}`;
+      const fy = s.match(/^Q([1-4])FY(\d{2})$/);
+      if (fy) return `Q${fy[1]}'${fy[2]}`;
+      return null;
     }
 
     function quarterTargetKey(seller, quarter) {
@@ -2849,6 +3004,30 @@
       queueSharedStorePush();
     }
 
+    function ensureOverallForecastTargets(options = {}) {
+      const persist = !!options.persist;
+      let changed = false;
+      Object.entries(FORECAST_DEFAULT_OVERALL_TARGETS).forEach(([fyLabel, revenue]) => {
+        const qKey = FORECAST_QUARTER_KEY_MAP[fyLabel];
+        const current = getQuarterTarget('Overall', qKey);
+        if (Number(current.revenue || 0) > 0) return;
+        quarterTargetsState[quarterTargetKey('Overall', qKey)] = {
+          seller: 'Overall',
+          quarter: qKey,
+          deals: Number(current.deals || 0),
+          revenue: Number(revenue || 0),
+        };
+        changed = true;
+      });
+      if (changed) {
+        persistLocalStateBundle();
+        if (persist && currentUser && currentUser.role === 'admin' && !isHistoricalView) {
+          queueSharedStorePush();
+        }
+      }
+      return changed;
+    }
+
     function showAdminTargetMessage(message) {
       const el = document.getElementById('admin-target-msg');
       if (!el) return;
@@ -2873,7 +3052,8 @@
     function getTargetSellers() {
       const labels = (scorecardSellerLabels || []).filter((s) => String(s || '').trim());
       const out = labels.filter((s) => s !== 'Overall');
-      return out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor'];
+      const base = out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor'];
+      return ['Overall', ...base];
     }
 
     function renderAdminTargets() {
@@ -2883,7 +3063,11 @@
       const body = document.getElementById('admin-target-grid-body');
       if (!quarterInput || !headMain || !headSub || !body) return;
 
-      const fallback = [activeQuarterLabels.current, activeQuarterLabels.next].filter(Boolean);
+      const fallback = [
+        ...FORECAST_QUARTERS.map((q) => FORECAST_QUARTER_KEY_MAP[q]).filter(Boolean),
+        activeQuarterLabels.current,
+        activeQuarterLabels.next,
+      ].filter(Boolean);
       const existing = Array.from(new Set(Object.values(quarterTargetsState || {})
         .map((x) => normalizeQuarterLabel(x && x.quarter))
         .filter(Boolean)))
@@ -4230,6 +4414,7 @@
       const tabIntroTrend = document.getElementById('tab-introtrend');
       const tabCompare = document.getElementById('tab-compare');
       const tabMomentum = document.getElementById('tab-momentum');
+      const tabForecast = document.getElementById('tab-forecast');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
       const viewFunnel = document.getElementById('view-funnel');
@@ -4239,6 +4424,7 @@
       const viewIntroTrend = document.getElementById('view-introtrend');
       const viewCompare = document.getElementById('view-compare');
       const viewMomentum = document.getElementById('view-momentum');
+      const viewForecast = document.getElementById('view-forecast');
       const viewAdmin = document.getElementById('view-admin');
 
       function activate(name) {
@@ -4250,6 +4436,7 @@
         tabIntroTrend.classList.toggle('active', name === 'introtrend');
         tabCompare.classList.toggle('active', name === 'compare');
         tabMomentum.classList.toggle('active', name === 'momentum');
+        tabForecast.classList.toggle('active', name === 'forecast');
         tabAdmin.classList.toggle('active', name === 'admin');
         viewCross.classList.toggle('active', name === 'crosstab');
         viewFunnel.classList.toggle('active', name === 'funnel');
@@ -4259,6 +4446,7 @@
         viewIntroTrend.classList.toggle('active', name === 'introtrend');
         viewCompare.classList.toggle('active', name === 'compare');
         viewMomentum.classList.toggle('active', name === 'momentum');
+        viewForecast.classList.toggle('active', name === 'forecast');
         viewAdmin.classList.toggle('active', name === 'admin');
       }
 
@@ -4272,6 +4460,7 @@
       tabIntroTrend.addEventListener('click', () => activate('introtrend'));
       tabCompare.addEventListener('click', () => activate('compare'));
       tabMomentum.addEventListener('click', () => activate('momentum'));
+      tabForecast.addEventListener('click', () => activate('forecast'));
       tabAdmin.addEventListener('click', () => activate('admin'));
     }
 
@@ -5014,6 +5203,112 @@
       renderIntroDetailTable('Intro Deals', []);
     }
 
+    function forecastNumberText(value, withDollar = false) {
+      const n = Number(value || 0);
+      if (Math.abs(n) < 0.5) return '-';
+      if (withDollar) return `$ ${money.format(Math.round(n))}`;
+      return money.format(Math.round(n));
+    }
+
+    function forecastTargetForScope(scope, quarterLabel) {
+      const qKey = FORECAST_QUARTER_KEY_MAP[quarterLabel];
+      if (!qKey) return 0;
+      const target = getQuarterTarget(scope, qKey);
+      if (Number(target.revenue || 0) > 0) return Number(target.revenue || 0);
+      if (scope === 'Overall') return Number(FORECAST_DEFAULT_OVERALL_TARGETS[quarterLabel] || 0);
+      return 0;
+    }
+
+    function renderForecast(data, scope) {
+      const head = document.getElementById('forecast-head-row');
+      const body = document.getElementById('forecast-body');
+      if (!head || !body) return;
+
+      head.innerHTML = '';
+      body.innerHTML = '';
+      head.appendChild(makeCell('th', 'Stage'));
+      FORECAST_QUARTERS.forEach((q) => head.appendChild(makeCell('th', q)));
+
+      const sellerKey = scope === 'Overall' ? 'All (unique deals)' : scope;
+      const metric = (((data.scorecard || {}).sellers || {})[sellerKey] || {});
+      const stageRows = ((metric.kpi_details || {}).stage_1_6 || []);
+
+      const stageQuarterValues = {};
+      const quarterTotals = {};
+      FORECAST_QUARTERS.forEach((q) => { quarterTotals[q] = 0; });
+
+      FORECAST_STAGE_CONFIG.forEach((cfg) => {
+        const ev = stageRows
+          .filter((r) => String(r.stage || '') === cfg.stage)
+          .reduce((acc, r) => {
+            const stageNum = stageNumber(r.stage);
+            const baseAmount = (stageNum != null && stageNum <= 4) ? 100000 : dealSizeValue(r.deal_size);
+            return acc + (baseAmount * cfg.winProb);
+          }, 0);
+        const perQuarter = {};
+        FORECAST_QUARTERS.forEach((q) => {
+          const v = ev * Number((cfg.phase && cfg.phase[q]) || 0);
+          perQuarter[q] = v;
+          quarterTotals[q] += v;
+        });
+        stageQuarterValues[cfg.label] = perQuarter;
+
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', cfg.label));
+        FORECAST_QUARTERS.forEach((q) => tr.appendChild(makeCell('td', forecastNumberText(perQuarter[q], false))));
+        body.appendChild(tr);
+      });
+
+      const riskRow = document.createElement('tr');
+      riskRow.className = 'risk-row';
+      riskRow.appendChild(makeCell('td', 'RISK-ADJ EV'));
+      FORECAST_QUARTERS.forEach((q) => riskRow.appendChild(makeCell('td', forecastNumberText(quarterTotals[q], true))));
+      body.appendChild(riskRow);
+
+      const targets = {};
+      const targetRow = document.createElement('tr');
+      targetRow.className = 'target-row';
+      targetRow.appendChild(makeCell('td', 'TARGET'));
+      FORECAST_QUARTERS.forEach((q) => {
+        const t = forecastTargetForScope(scope, q);
+        targets[q] = t;
+        targetRow.appendChild(makeCell('td', forecastNumberText(t, true)));
+      });
+      body.appendChild(targetRow);
+
+      const gapRow = document.createElement('tr');
+      gapRow.className = 'gap-row';
+      gapRow.appendChild(makeCell('td', 'GAP'));
+      FORECAST_QUARTERS.forEach((q) => {
+        const gap = Number(targets[q] || 0) - Number(quarterTotals[q] || 0);
+        const td = makeCell('td', forecastNumberText(gap, true));
+        if (Math.abs(gap) < 0.5 || Number(targets[q] || 0) <= 0) {
+          td.textContent = '-';
+        } else if (gap > 0) {
+          td.classList.add('gap-pos');
+        } else {
+          td.classList.add('gap-neg');
+        }
+        gapRow.appendChild(td);
+      });
+      body.appendChild(gapRow);
+
+      const strongestQuarter = [...FORECAST_QUARTERS].sort((a, b) => Number(quarterTotals[b] || 0) - Number(quarterTotals[a] || 0))[0];
+      const widestGapQuarter = [...FORECAST_QUARTERS]
+        .map((q) => ({ q, gap: Number(targets[q] || 0) - Number(quarterTotals[q] || 0) }))
+        .sort((a, b) => b.gap - a.gap)[0];
+      const lines = [
+        `${scope}: total risk-adjusted EV across shown quarters = ${forecastNumberText(FORECAST_QUARTERS.reduce((acc, q) => acc + Number(quarterTotals[q] || 0), 0), true)}.`,
+      ];
+      if (strongestQuarter) {
+        lines.push(`Highest EV quarter: ${strongestQuarter} (${forecastNumberText(quarterTotals[strongestQuarter], true)}).`);
+      }
+      if (widestGapQuarter && Number(targets[widestGapQuarter.q] || 0) > 0) {
+        lines.push(`Largest target gap: ${widestGapQuarter.q} (${forecastNumberText(widestGapQuarter.gap, true)}).`);
+      }
+      setInsight('insight-forecast', lines);
+    }
+
     async function boot() {
       try {
         const appVersionEl = document.getElementById('app-version');
@@ -5053,6 +5348,7 @@
         const momentumScope = document.getElementById('momentum-scope');
         const momentumRun = document.getElementById('momentum-run');
         const momentumPrev = document.getElementById('momentum-prev');
+        const forecastSellerSelect = document.getElementById('forecast-seller');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -5063,6 +5359,7 @@
         quarterTargetsState = loadQuarterTargetsState();
         dashboardSettingsState = loadDashboardSettingsState();
         currentAuthStore = loadAuthStore();
+        ensureOverallForecastTargets({ persist: false });
         window.__salesData = data;
         initChatAssistant(data);
         renderMomentumSellerFilter(data);
@@ -5077,6 +5374,7 @@
           renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
           renderVersionSelectors();
           renderMomentumSellerFilter(data);
+          renderForecast(data, (forecastSellerSelect && forecastSellerSelect.value) || 'Overall');
         }
 
         async function runCompare() {
@@ -5226,6 +5524,12 @@
           o.textContent = s;
           introSellerSelect.appendChild(o);
         });
+        ['Overall', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
+          forecastSellerSelect.appendChild(o);
+        });
 
         sellerSelect.value = 'All (unique deals)';
         sellerSelect.addEventListener('change', () => render(data, sellerSelect.value, selectedStages, orderedStages));
@@ -5233,8 +5537,10 @@
         wlSellerSelect.addEventListener('change', () => renderWinLoss(data, wlSellerSelect.value));
         introSellerSelect.value = 'Overall (unique)';
         introGranularity.value = 'week';
+        forecastSellerSelect.value = 'Overall';
         introSellerSelect.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         introGranularity.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
+        forecastSellerSelect.addEventListener('change', () => renderForecast(data, forecastSellerSelect.value || 'Overall'));
         scorecardSellerSelect.addEventListener('change', () => {
           scorecardSelectedSeller = scorecardSellerSelect.value || 'Overall';
           renderScorecard(data);
@@ -5338,6 +5644,9 @@
           likelihoodState = isHistoricalView
             ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
             : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+          if (currentUser && currentUser.role === 'admin') {
+            ensureOverallForecastTargets({ persist: !isHistoricalView });
+          }
           rerenderAllViews();
           runMomentumCompare();
           document.getElementById('auth-login-user').value = '';
@@ -5371,6 +5680,9 @@
           likelihoodState = isHistoricalView
             ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
             : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+          if (currentUser && currentUser.role === 'admin') {
+            ensureOverallForecastTargets({ persist: !isHistoricalView });
+          }
           rerenderAllViews();
           if (currentUser && currentUser.role === 'admin') renderAdminUsers();
           showAdminMessage('Shared data refreshed.');
@@ -5475,7 +5787,10 @@
           persistLocalStateBundle();
           pushSharedStoreNow({ throwOnError: true }).then(() => {
             renderAdminTargets();
-            if (window.__salesData) renderScorecard(window.__salesData);
+            if (window.__salesData) {
+              renderScorecard(window.__salesData);
+              renderForecast(window.__salesData, (document.getElementById('forecast-seller') && document.getElementById('forecast-seller').value) || 'Overall');
+            }
             showAdminTargetMessage(`Saved targets for ${money.format(sellers.length)} seller(s) across ${money.format(quarters.length)} quarter(s).`);
           }).catch((e) => {
             showAdminTargetMessage(e.message || 'Unable to save target.');
@@ -5505,6 +5820,9 @@
             likelihoodState = isHistoricalView
               ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
               : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
+            if (currentUser && currentUser.role === 'admin') {
+              ensureOverallForecastTargets({ persist: !isHistoricalView });
+            }
             rerenderAllViews();
           } else {
             clearSession();
