@@ -50,6 +50,63 @@ const SELLERS: Array<[string, string]> = [
 type MondayColumn = { id: string; title: string; type: string };
 type MondayItem = { id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> };
 
+function smartTextFromMondayColumnValue(text: string | null | undefined, value: string | null | undefined): string {
+  const direct = String(text || "").trim();
+  if (direct) return direct;
+  const raw = value;
+  if (!raw) return "";
+  try {
+    const obj = JSON.parse(raw);
+    const pick = (o: any): string => {
+      if (o == null) return "";
+      if (typeof o === "string") return o.trim();
+      if (typeof o === "number" || typeof o === "boolean") return String(o);
+      if (typeof o !== "object") return "";
+      const candidates = [
+        o.display_value,
+        o.displayValue,
+        o.label,
+        o.text,
+        o.value,
+        o.name,
+        o.title,
+      ];
+      for (const c of candidates) {
+        const s = pick(c);
+        if (s) return s;
+      }
+      if (Array.isArray(o.mirrored_items)) {
+        const parts = o.mirrored_items
+          .map((mi: any) => {
+            const v = mi?.mirrored_value ?? mi?.mirroredValue ?? mi?.value;
+            if (typeof v === "string") {
+              try {
+                return pick(JSON.parse(v));
+              } catch (_) {
+                return pick(v);
+              }
+            }
+            return pick(v);
+          })
+          .filter(Boolean);
+        if (parts.length) return parts.join(", ");
+      }
+      if (Array.isArray(o.labels)) {
+        const parts = o.labels.map((z: any) => pick(z)).filter(Boolean);
+        if (parts.length) return parts.join(", ");
+      }
+      if (Array.isArray(o.ids)) {
+        const parts = o.ids.map((z: any) => pick(z)).filter(Boolean);
+        if (parts.length) return parts.join(", ");
+      }
+      return "";
+    };
+    return pick(obj).trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const enc = new TextEncoder();
   const bytes = enc.encode(text);
@@ -194,6 +251,43 @@ function pickBestColumnIdByFillRate(
   return { best, sampleCounts: counts };
 }
 
+type ColumnFillStat = {
+  id: string;
+  title: string;
+  type: string;
+  non_empty: number;
+  sample_size: number;
+  example: string | null;
+};
+
+function inspectColumnFill(
+  items: MondayItem[],
+  columns: MondayColumn[],
+  getText: (item: MondayItem, id: string) => string,
+  sampleLimit = 200,
+): ColumnFillStat[] {
+  const sample = items.slice(0, Math.max(0, sampleLimit));
+  const stats: ColumnFillStat[] = columns.map((c) => ({
+    id: c.id,
+    title: c.title,
+    type: c.type,
+    non_empty: 0,
+    sample_size: sample.length,
+    example: null,
+  }));
+  const idxById: Record<string, number> = Object.fromEntries(stats.map((s, i) => [s.id, i]));
+  for (const it of sample) {
+    for (const c of columns) {
+      const v = String(getText(it, c.id) || "").trim();
+      if (!v) continue;
+      const s = stats[idxById[c.id]];
+      s.non_empty += 1;
+      if (!s.example) s.example = v.length > 120 ? `${v.slice(0, 117)}...` : v;
+    }
+  }
+  return stats;
+}
+
 async function mondayGraphql(token: string, query: string, variables?: Record<string, unknown>) {
   const res = await fetch("https://api.monday.com/v2", {
     method: "POST",
@@ -273,7 +367,13 @@ function initScorecard() {
   };
 }
 
-function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: number, boardName: string) {
+function buildDataset(
+  items: MondayItem[],
+  columns: MondayColumn[],
+  boardId: number,
+  boardName: string,
+  opts?: { industry_col_id?: string | null },
+) {
   const colById: Record<string, MondayColumn> = Object.fromEntries(columns.map((c) => [c.id, c]));
   const byId = (item: MondayItem, id: string | null) => {
     if (!id) return "";
@@ -281,68 +381,9 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     return (x?.text || "").trim();
   };
   const byIdSmartText = (item: MondayItem, id: string | null) => {
-    // Monday often leaves `text` empty for mirror / relation columns; fall back to parsing `value`.
     if (!id) return "";
     const x = item.column_values.find((v) => v.id === id);
-    const direct = (x?.text || "").trim();
-    if (direct) return direct;
-    const raw = x?.value;
-    if (!raw) return "";
-    try {
-      const obj = JSON.parse(raw);
-      const pick = (o: any): string => {
-        if (o == null) return "";
-        if (typeof o === "string") return o.trim();
-        if (typeof o === "number" || typeof o === "boolean") return String(o);
-        if (typeof o !== "object") return "";
-        // Common fields across Monday column types.
-        const candidates = [
-          o.display_value,
-          o.displayValue,
-          o.label,
-          o.text,
-          o.value,
-          o.name,
-          o.title,
-        ];
-        for (const c of candidates) {
-          const s = pick(c);
-          if (s) return s;
-        }
-        // Mirror columns often contain nested mirrored values.
-        if (Array.isArray(o.mirrored_items)) {
-          const parts = o.mirrored_items
-            .map((mi: any) => {
-              const v = mi?.mirrored_value ?? mi?.mirroredValue ?? mi?.value;
-              // mirrored_value is sometimes JSON encoded
-              if (typeof v === "string") {
-                try {
-                  return pick(JSON.parse(v));
-                } catch (_) {
-                  return pick(v);
-                }
-              }
-              return pick(v);
-            })
-            .filter(Boolean);
-          if (parts.length) return parts.join(", ");
-        }
-        // Some types store arrays of labels/values.
-        if (Array.isArray(o.labels)) {
-          const parts = o.labels.map((z: any) => pick(z)).filter(Boolean);
-          if (parts.length) return parts.join(", ");
-        }
-        if (Array.isArray(o.ids)) {
-          const parts = o.ids.map((z: any) => pick(z)).filter(Boolean);
-          if (parts.length) return parts.join(", ");
-        }
-        return "";
-      };
-      const t = pick(obj);
-      return t.trim();
-    } catch (_) {
-      return "";
-    }
+    return smartTextFromMondayColumnValue(x?.text, x?.value);
   };
   const byIdDate = (item: MondayItem, id: string | null) => {
     if (!id) return "";
@@ -395,7 +436,9 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   // Only apply fill-rate-based auto selection to Industry, since this is commonly a Mirror/Connect column with blank `text`.
   const industryCandidates = pickColumnIds(columns, [(t) => t.includes("industry")]);
   const industryPick = pickBestColumnIdByFillRate(items, industryCandidates, (it, id) => byIdSmartText(it, id));
-  const industryCol = industryPick.best || pickColumnId(columns, [(t) => t.includes("industry")]);
+  const industryColAuto = industryPick.best || pickColumnId(columns, [(t) => t.includes("industry")]);
+  const industryColPinned = String(opts?.industry_col_id || "").trim() || null;
+  const industryCol = industryColPinned || industryColAuto;
 
   const logoCol = pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
   const functionCol = pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
@@ -716,6 +759,9 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
         logo: logoCol ? (colById[logoCol]?.type || null) : null,
         function: functionCol ? (colById[functionCol]?.type || null) : null,
       },
+      column_pins: {
+        industry_col_id: industryColPinned,
+      },
       duration_column_id: durationCol,
       duration_candidate_column_ids: durationCandidateCols,
       duration_detected_rows: durationDetectedCount,
@@ -856,6 +902,7 @@ Deno.serve(async (req) => {
     const username = String(body?.username || "").trim().toLowerCase();
     const password = String(body?.password || "");
     const boardId = boardIdFromInput(body?.board_id || body?.board_url);
+    const inspectOnly = !!body?.inspect;
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!boardId) return j({ error: "board_id (or board URL) is required." }, 400);
 
@@ -866,7 +913,43 @@ Deno.serve(async (req) => {
     if (!st || st.role !== "admin") return j({ error: "Admin access required." }, 403);
 
     const board = await fetchBoard(mondayToken, boardId);
-    const dataset = buildDataset(board.items, board.columns, boardId, board.boardName);
+    if (inspectOnly) {
+      const sampleLimit = 200;
+      const stats = inspectColumnFill(
+        board.items,
+        board.columns,
+        (it, id) => {
+          const cv = it.column_values.find((v) => v.id === id);
+          return smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        },
+        sampleLimit,
+      );
+      const industryCandidates = board.columns
+        .filter((c) => norm(c.title).includes("industry"))
+        .map((c) => c.id);
+      const industryPick = pickBestColumnIdByFillRate(
+        board.items,
+        industryCandidates,
+        (it, id) => {
+          const cv = it.column_values.find((v) => v.id === id);
+          return smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        },
+        sampleLimit,
+      );
+      return j({
+        ok: true,
+        inspect: {
+          sample_limit: sampleLimit,
+          columns: stats,
+          suggested_industry_col_id: industryPick.best,
+          industry_candidates: industryCandidates,
+          industry_sample_counts: industryPick.sampleCounts,
+        },
+      });
+    }
+
+    const pinnedIndustryCol = (st.settings && (st.settings as any).monday_industry_col_id) ? String((st.settings as any).monday_industry_col_id) : null;
+    const dataset = buildDataset(board.items, board.columns, boardId, board.boardName, { industry_col_id: pinnedIndustryCol });
     const datasetHash = await sha256Hex(JSON.stringify(dataset));
     const settings = {
       ...(st.settings || {}),
