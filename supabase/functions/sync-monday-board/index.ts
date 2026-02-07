@@ -377,6 +377,38 @@ function findConnectColumnToBoard(columns: MondayColumn[], targetBoardId: number
   return null;
 }
 
+function relationValueNonEmpty(raw: string | null | undefined): boolean {
+  const s = String(raw || "").trim();
+  if (!s) return false;
+  if (s === "null" || s === "{}" || s === "[]") return false;
+  return true;
+}
+
+function pickBestRelationColumnByFill(
+  items: MondayItem[],
+  columns: MondayColumn[],
+  predicate: (c: MondayColumn) => boolean,
+  sampleLimit = 200,
+): { best: string | null; counts: Record<string, number> } {
+  const candidates = columns.filter(predicate).map((c) => c.id);
+  const counts: Record<string, number> = {};
+  for (const id of candidates) counts[id] = 0;
+  const sample = items.slice(0, Math.max(0, sampleLimit));
+  for (const it of sample) {
+    for (const id of candidates) {
+      const cv = it.column_values.find((v) => v.id === id);
+      if (relationValueNonEmpty(cv?.value)) counts[id] += 1;
+    }
+  }
+  let best: string | null = null;
+  let bestCount = -1;
+  for (const id of candidates) {
+    const c = counts[id] || 0;
+    if (c > bestCount) { bestCount = c; best = id; }
+  }
+  return { best, counts };
+}
+
 async function fetchItemsByIds(
   token: string,
   itemIds: string[],
@@ -580,7 +612,27 @@ async function buildDataset(
   const accountsBoardId = (opts?.accounts_board_id && Number.isFinite(Number(opts.accounts_board_id))) ? Number(opts.accounts_board_id) : null;
   const accountsIndustryColPinned = String(opts?.accounts_industry_col_id || "").trim() || null;
   const accountsRelationColPinned = String(opts?.accounts_relation_col_id || "").trim() || null;
-  const accountsRelationColAuto = (accountsBoardId ? findConnectColumnToBoard(columns, accountsBoardId) : null);
+  const relPredicate = (c: MondayColumn) => {
+    const type = norm(c.type);
+    if (!(type.includes("relation") || type.includes("connect"))) return false;
+    if (!accountsBoardId) return false;
+    const st = parseJsonSafe(c.settings_str || null);
+    const target = String(Math.trunc(accountsBoardId));
+    if (st && typeof st === "object") {
+      const boardIds = st.boardIds || st.board_ids || st.connectedBoardIds || st.connected_board_ids || st.board_ids_array;
+      if (Array.isArray(boardIds) && boardIds.map((x: any) => String(x)).includes(target)) return true;
+      const boardId = st.boardId || st.board_id || st.connectedBoardId || st.connected_board_id;
+      if (boardId != null && String(boardId) === target) return true;
+      const boards = st.boards || st.linkedBoards;
+      if (Array.isArray(boards) && boards.some((b: any) => String(b?.id || b?.boardId || b?.board_id || "") === target)) return true;
+    }
+    // Title-based fallback: many orgs name it "Accounts".
+    if (norm(c.title).includes("account")) return true;
+    return false;
+  };
+  const accountsRelationColFromSettings = (accountsBoardId ? findConnectColumnToBoard(columns, accountsBoardId) : null);
+  const relFillPick = pickBestRelationColumnByFill(items, columns, relPredicate, 200);
+  const accountsRelationColAuto = relFillPick.best || accountsRelationColFromSettings;
   const accountsRelationColId = accountsRelationColPinned || relationColFromMirror || accountsRelationColAuto;
   const accountsRelationColMeta = accountsRelationColId ? {
     id: accountsRelationColId,
@@ -599,16 +651,18 @@ async function buildDataset(
     deals_with_joined_industry: 0,
     relation_nonempty_value_sample: 0,
     relation_value_examples: [] as string[],
+    relation_candidate_counts: {} as Record<string, number>,
   };
 
   if (accountsBoardId && accountsRelationColId && opts?.monday_token) {
     accountsJoinEnabled = true;
+    accountsJoinStats.relation_candidate_counts = relFillPick.counts || {};
     // Collect linked account item ids from deals items.
     const accountIds: string[] = [];
     for (const it of items) {
       const cv = it.column_values.find((v) => v.id === accountsRelationColId);
       const rawVal = String(cv?.value || "").trim();
-      if (rawVal) {
+      if (relationValueNonEmpty(rawVal)) {
         accountsJoinStats.relation_nonempty_value_sample += 1;
         if (accountsJoinStats.relation_value_examples.length < 3) {
           accountsJoinStats.relation_value_examples.push(rawVal.length > 500 ? `${rawVal.slice(0, 497)}...` : rawVal);
@@ -990,6 +1044,7 @@ async function buildDataset(
         industry_col_type: industryColType || null,
         relation_col_from_mirror: relationColFromMirror,
         relation_col_auto: accountsRelationColAuto,
+        relation_col_from_settings: accountsRelationColFromSettings,
         stats: accountsJoinStats,
       },
       duration_column_id: durationCol,
