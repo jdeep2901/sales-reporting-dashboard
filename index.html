@@ -5333,13 +5333,15 @@
       titleEl.textContent = title;
       const aggregatedMap = {};
       (rows || []).forEach((r) => {
+        const dealNorm = String(r.deal || '')
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .trim();
         const key = [
-          String(r.deal || '').trim().toLowerCase(),
+          dealNorm,
           String(r.stage || '').trim().toLowerCase(),
-          String(r.startDate || '').trim(),
-          String(r.durationMonths == null ? '' : r.durationMonths),
-          String(Number(r.dealSize || 0)),
-          String(r.basis || '').trim().toLowerCase(),
+          String(r.startDate || '').trim().slice(0, 10),
         ].join('||');
         if (!aggregatedMap[key]) {
           aggregatedMap[key] = { ...r, quarterContribution: Number(r.quarterContribution || 0) };
