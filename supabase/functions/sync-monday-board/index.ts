@@ -223,6 +223,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   };
   const cutoffDate = parseDate(INTRO_DATE_CUTOFF)!;
   const introDateCol = pickColumnId(columns, [(t) => t.includes("intro") && t.includes("date"), (t) => t.includes("scheduled intro")]);
+  const startDateCol = pickColumnId(columns, [(t) => t === "start date", (t) => t.includes("start date"), (t) => t.includes("deal start")]);
   const stageCol = pickColumnId(columns, [(t) => t.includes("deal stage"), (t) => t === "stage"]);
   const ownerCol = pickColumnId(columns, [(t) => t.includes("deal owner"), (t) => t.includes("owner")]);
   const nextStepCol = pickColumnId(columns, [(t) => t.includes("next step")]);
@@ -301,10 +302,11 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     nextStepDate: Date | null,
     createdMonth: string,
     dealSize: number | null,
+    startDateIso: string | null,
   ) => {
     bucket.stage_counts[stageLabel] = (bucket.stage_counts[stageLabel] || 0) + 1;
     const ageDays = Math.floor((todayDate().getTime() - createdDate.getTime()) / 86400000);
-    const baseRecord = { deal: dealName, seller: sellerLabel, stage: stageLabel, created_month: createdMonth, age_days: ageDays, deal_size: dealSize };
+    const baseRecord = { deal: dealName, seller: sellerLabel, stage: stageLabel, created_month: createdMonth, start_date: startDateIso, age_days: ageDays, deal_size: dealSize };
     if (stageNorm === "scheduled intro calls" || stageNorm === "qualification") {
       bucket.stage_1_2_count += 1;
       bucket.stage_1_2_records.push(baseRecord);
@@ -349,11 +351,14 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const stageRaw = byId(item, stageCol);
     const nextStepRaw = byId(item, nextStepCol);
     const introDateRaw = byId(item, introDateCol);
+    const startDateRaw = byId(item, startDateCol);
     const stage = cleanStage(stageRaw);
     if (!stage || norm(stage) === "deal stage") continue;
     const stageNorm = norm(stage);
     const introDate = parseDate(introDateRaw);
     if (!introDate || introDate < cutoffDate) continue;
+    const startDate = parseDate(startDateRaw);
+    const startDateIso = startDate ? startDate.toISOString().slice(0, 10) : null;
 
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -374,7 +379,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const logo = primaryToken(byId(item, logoCol));
     const bizFn = primaryToken(byId(item, functionCol));
 
-    addScorecard(scorecard["All (unique deals)"], dealName, "All (unique deals)", stageNorm, stageLabel, introDate, nextStepDate, month, dealSize);
+    addScorecard(scorecard["All (unique deals)"], dealName, "All (unique deals)", stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso);
     if (stageNorm === "won" || stageNorm === "lost") {
       addWinLoss(winLossOverall, industry, logo, bizFn, stageNorm as "won" | "lost");
     }
@@ -393,7 +398,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
         const fs = FUNNEL_STAGE_MAP[stageNorm];
         perSellerFunnel[label][fs] = (perSellerFunnel[label][fs] || 0) + 1;
       }
-      addScorecard(scorecard[label], dealName, label, stageNorm, stageLabel, introDate, nextStepDate, month, dealSize);
+      addScorecard(scorecard[label], dealName, label, stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso);
       if (MATTER_STAGES.has(stageNorm)) addIndustryAction(label, industry, logo, bizFn);
       if (stageNorm === "won" || stageNorm === "lost") addWinLoss(winLossPerSeller[label], industry, logo, bizFn, stageNorm as "won" | "lost");
       if (stageNorm !== "no show/ reschedule") {

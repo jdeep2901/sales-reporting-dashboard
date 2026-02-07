@@ -2438,6 +2438,7 @@
               <th>Deal</th>
               <th>Stage</th>
               <th>Intro Month</th>
+              <th>Start Date</th>
               <th>Age (days)</th>
               <th>Deal Size</th>
               <th>Reason</th>
@@ -3251,6 +3252,7 @@
         tr.appendChild(makeCell('td', 'No deals tagged'));
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
         bodyEl.appendChild(tr);
         return;
       }
@@ -3264,6 +3266,7 @@
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', r.deal || '-'));
         tr.appendChild(makeCell('td', r.stage || '-'));
+        tr.appendChild(makeCell('td', r.start_date || '-'));
         tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
         bodyEl.appendChild(tr);
       });
@@ -4490,6 +4493,7 @@
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
         body.appendChild(tr);
       } else {
         const rows = [...records].sort((a, b) => {
@@ -4503,6 +4507,7 @@
           tr.appendChild(makeCell('td', r.deal || '-'));
           tr.appendChild(makeCell('td', r.stage || '-'));
           tr.appendChild(makeCell('td', r.created_month || '-'));
+          tr.appendChild(makeCell('td', r.start_date || '-'));
           tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
           tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
           tr.appendChild(makeCell('td', r.reason || '-'));
@@ -4691,6 +4696,7 @@
           const hr = document.createElement('tr');
           hr.appendChild(makeCell('th', 'Deal'));
           hr.appendChild(makeCell('th', 'Stage'));
+          hr.appendChild(makeCell('th', 'Start Date'));
           hr.appendChild(makeCell('th', 'Size'));
           thead2.appendChild(hr);
           table2.appendChild(thead2);
