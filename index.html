@@ -3201,6 +3201,16 @@
       return `Q${info.quarter} FY${yy}`;
     }
 
+    function addMonthsSafe(dateObj, monthsToAdd) {
+      const d = new Date(dateObj.getTime());
+      const day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monthsToAdd);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(day, lastDay));
+      return d;
+    }
+
     function likelihoodRecordKey(rec) {
       return [
         String(rec.deal || '').trim().toLowerCase(),
@@ -5284,10 +5294,24 @@
       wonRows.forEach((r) => {
         const amount = Math.max(0, Number(r.deal_size || 0));
         if (!amount) return;
-        const fq = forecastQuarterFromStartDate(r.start_date);
-        if (fq && Object.prototype.hasOwnProperty.call(wonQuarterTotals, fq)) {
-          wonQuarterTotals[fq] += amount;
-        } else {
+        const start = r.start_date ? new Date(r.start_date) : null;
+        if (!start || Number.isNaN(start.getTime())) {
+          wonUnphased += amount;
+          return;
+        }
+        const durationRaw = Number(r.duration_months || 0);
+        const durationMonths = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : 1;
+        const monthlyAmount = amount / durationMonths;
+        let phasedAny = false;
+        for (let i = 0; i < durationMonths; i += 1) {
+          const monthDate = addMonthsSafe(start, i);
+          const fq = forecastQuarterFromStartDate(monthDate.toISOString().slice(0, 10));
+          if (fq && Object.prototype.hasOwnProperty.call(wonQuarterTotals, fq)) {
+            wonQuarterTotals[fq] += monthlyAmount;
+            phasedAny = true;
+          }
+        }
+        if (!phasedAny) {
           wonUnphased += amount;
         }
       });
