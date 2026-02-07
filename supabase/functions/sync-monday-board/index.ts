@@ -670,13 +670,32 @@ async function buildDataset(
     account_name_matched: 0,
   };
 
+  // Some Monday API responses omit board_relation values when requesting many columns at once.
+  // If we're attempting an Accounts join, fetch the relation column by itself and use that value for linking.
+  let relationValueByDealId: Record<string, { text: string; value: string | null }> | null = null;
+  if (opts?.monday_token && accountsRelationColId) {
+    try {
+      const relOnly = await fetchBoardItems(opts.monday_token, boardId, [accountsRelationColId]);
+      relationValueByDealId = {};
+      for (const it of relOnly) {
+        const cv = (it.column_values || []).find((v) => v.id === accountsRelationColId);
+        relationValueByDealId[String(it.id)] = { text: String(cv?.text || ""), value: cv?.value || null };
+      }
+    } catch (_) {
+      relationValueByDealId = null;
+    }
+  }
+
   if (accountsBoardId && accountsRelationColId && opts?.monday_token) {
     accountsJoinEnabled = true;
     accountsJoinStats.relation_candidate_counts = relFillPick.counts || {};
     // Collect linked account item ids from deals items.
     const accountIds: string[] = [];
     for (const it of items) {
-      const cv = it.column_values.find((v) => v.id === accountsRelationColId);
+      const fallback = relationValueByDealId ? relationValueByDealId[String(it.id)] : null;
+      const cv = fallback
+        ? ({ id: accountsRelationColId, text: fallback.text, value: fallback.value } as any)
+        : it.column_values.find((v) => v.id === accountsRelationColId);
       const rawVal = String(cv?.value || "").trim();
       if (relationValueNonEmpty(rawVal)) {
         accountsJoinStats.relation_nonempty_value_sample += 1;
@@ -924,7 +943,10 @@ async function buildDataset(
     if (dealSize == null) dealSize = parseAmount(byId(item, tcvCol));
     let industryRawText = byIdSmartText(item, industryCol);
     if (accountsJoinEnabled && accountsRelationColId) {
-      const cv = item.column_values.find((v) => v.id === accountsRelationColId);
+      const fallback = relationValueByDealId ? relationValueByDealId[String(item.id)] : null;
+      const cv = fallback
+        ? ({ id: accountsRelationColId, text: fallback.text, value: fallback.value } as any)
+        : item.column_values.find((v) => v.id === accountsRelationColId);
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
       if (linked.length) accountsJoinStats.deals_with_account_link += 1;
       for (const aid of linked) {
