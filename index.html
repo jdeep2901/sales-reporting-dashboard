@@ -5331,9 +5331,26 @@
       const body = document.getElementById('forecast-detail-body');
       if (!titleEl || !metaEl || !body) return;
       titleEl.textContent = title;
-      metaEl.textContent = `${money.format(rows.length)} contributing deal(s)`;
+      const aggregatedMap = {};
+      (rows || []).forEach((r) => {
+        const key = [
+          String(r.deal || '').trim().toLowerCase(),
+          String(r.stage || '').trim().toLowerCase(),
+          String(r.startDate || '').trim(),
+          String(r.durationMonths == null ? '' : r.durationMonths),
+          String(Number(r.dealSize || 0)),
+          String(r.basis || '').trim().toLowerCase(),
+        ].join('||');
+        if (!aggregatedMap[key]) {
+          aggregatedMap[key] = { ...r, quarterContribution: Number(r.quarterContribution || 0) };
+        } else {
+          aggregatedMap[key].quarterContribution += Number(r.quarterContribution || 0);
+        }
+      });
+      const aggregatedRows = Object.values(aggregatedMap);
+      metaEl.textContent = `${money.format(aggregatedRows.length)} contributing deal(s)`;
       body.innerHTML = '';
-      if (!rows.length) {
+      if (!aggregatedRows.length) {
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', 'No contributing deals'));
         tr.appendChild(makeCell('td', '-'));
@@ -5345,7 +5362,7 @@
         body.appendChild(tr);
         return;
       }
-      const sorted = [...rows].sort((a, b) => Number(b.quarterContribution || 0) - Number(a.quarterContribution || 0) || String(a.deal || '').localeCompare(String(b.deal || '')));
+      const sorted = [...aggregatedRows].sort((a, b) => Number(b.quarterContribution || 0) - Number(a.quarterContribution || 0) || String(a.deal || '').localeCompare(String(b.deal || '')));
       sorted.forEach((r) => {
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', r.deal || '-'));
