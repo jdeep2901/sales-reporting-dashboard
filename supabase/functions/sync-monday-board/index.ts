@@ -663,7 +663,11 @@ async function buildDataset(
     deals_with_joined_industry: 0,
     relation_nonempty_value_sample: 0,
     relation_value_examples: [] as string[],
+    relation_nonempty_text_sample: 0,
+    relation_text_examples: [] as string[],
     relation_candidate_counts: {} as Record<string, number>,
+    deals_with_joined_industry_by_name: 0,
+    account_name_matched: 0,
   };
 
   if (accountsBoardId && accountsRelationColId && opts?.monday_token) {
@@ -680,42 +684,65 @@ async function buildDataset(
           accountsJoinStats.relation_value_examples.push(rawVal.length > 500 ? `${rawVal.slice(0, 497)}...` : rawVal);
         }
       }
+      const rawText = String(cv?.text || "").trim();
+      if (rawText) {
+        accountsJoinStats.relation_nonempty_text_sample += 1;
+        if (accountsJoinStats.relation_text_examples.length < 3) {
+          accountsJoinStats.relation_text_examples.push(rawText.length > 200 ? `${rawText.slice(0, 197)}...` : rawText);
+        }
+      }
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
       for (const id of linked) if (!accountIds.includes(id)) accountIds.push(id);
       if (accountIds.length > 5000) break;
     }
     accountsJoinStats.account_ids_found = accountIds.length;
-    if (accountIds.length) {
-      // If account industry column isn't pinned, infer from Accounts board columns.
-      if (!accountsIndustryColId) {
-        const accMeta = await fetchBoardColumns(opts.monday_token, accountsBoardId);
-        const candidates = accMeta.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
-        if (candidates.length) {
-          const accItems = await fetchBoardItems(opts.monday_token, accountsBoardId, candidates);
-          const pick = pickBestColumnIdByFillRate(
-            accItems,
-            candidates,
-            (it, id) => {
-              const cv = it.column_values.find((v) => v.id === id);
-              return smartTextFromMondayColumnValue(cv?.text, cv?.value);
-            },
-            200,
-          );
-          accountsIndustryColId = pick.best || candidates[0] || null;
-        }
+    // If account industry column isn't pinned, infer from Accounts board columns.
+    if (!accountsIndustryColId) {
+      const accMeta = await fetchBoardColumns(opts.monday_token, accountsBoardId);
+      const candidates = accMeta.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
+      if (candidates.length) {
+        const accItems = await fetchBoardItems(opts.monday_token, accountsBoardId, candidates);
+        const pick = pickBestColumnIdByFillRate(
+          accItems,
+          candidates,
+          (it, id) => {
+            const cv = it.column_values.find((v) => v.id === id);
+            return smartTextFromMondayColumnValue(cv?.text, cv?.value);
+          },
+          200,
+        );
+        accountsIndustryColId = pick.best || candidates[0] || null;
       }
+    }
 
-      if (accountsIndustryColId) {
-        // Fetch account items by ids with only the industry column.
-        const accountItems = await fetchItemsByIds(opts.monday_token, accountIds, [accountsIndustryColId]);
-        accountsJoinStats.account_items_fetched = accountItems.length;
-        for (const ai of accountItems) {
-          const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
-          const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
-          if (val) accountIndustryById[String(ai.id)] = val;
-        }
-        accountsJoinStats.account_industry_mapped = Object.keys(accountIndustryById).length;
+    if (accountIds.length && accountsIndustryColId) {
+      // If account industry column isn't pinned, infer from Accounts board columns.
+      // Fetch account items by ids with only the industry column.
+      const accountItems = await fetchItemsByIds(opts.monday_token, accountIds, [accountsIndustryColId]);
+      accountsJoinStats.account_items_fetched = accountItems.length;
+      for (const ai of accountItems) {
+        const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
+        const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        if (val) accountIndustryById[String(ai.id)] = val;
       }
+      accountsJoinStats.account_industry_mapped = Object.keys(accountIndustryById).length;
+    }
+
+    // Fallback: if relation column doesn't provide linked ids, but does provide linked item *names* in text,
+    // join by Accounts item name -> industry.
+    if (!accountIds.length && accountsIndustryColId && accountsJoinStats.relation_nonempty_text_sample > 0) {
+      const accItemsAll = await fetchBoardItems(opts.monday_token, accountsBoardId, [accountsIndustryColId]);
+      const nameToIndustry: Record<string, string> = {};
+      for (const ai of accItemsAll) {
+        const nm = norm(ai.name || "");
+        if (!nm) continue;
+        const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
+        const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        if (val) nameToIndustry[nm] = val;
+      }
+      // Store in the same map but keyed by name marker.
+      (accountIndustryById as any).__nameToIndustry = nameToIndustry;
+      accountsJoinStats.account_name_matched = Object.keys(nameToIndustry).length;
     }
   }
 
@@ -907,6 +934,23 @@ async function buildDataset(
           industryRawText = v;
           accountsJoinStats.deals_with_joined_industry += 1;
           break;
+        }
+      }
+      if ((!industryRawText || !industryRawText.trim()) && cv && String(cv.text || "").trim()) {
+        const nameToIndustry = (accountIndustryById as any).__nameToIndustry || null;
+        if (nameToIndustry) {
+          const parts = String(cv.text || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          for (const nm of parts) {
+            const v = nameToIndustry[norm(nm)] || "";
+            if (v && v.trim()) {
+              industryRawText = v;
+              accountsJoinStats.deals_with_joined_industry_by_name += 1;
+              break;
+            }
+          }
         }
       }
     }
