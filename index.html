@@ -6056,8 +6056,8 @@
         tr.appendChild(makeCell('td', fmtDealSize(r.dealSize)));
         tr.appendChild(makeCell('td', r.intro));
         tr.appendChild(makeCell('td', r.start));
-        tr.appendChild(makeCell('td', money.format(r.days)));
-        tr.appendChild(makeCell('td', r.months.toFixed(1)));
+        tr.appendChild(makeCell('td', r.days == null ? '-' : money.format(r.days)));
+        tr.appendChild(makeCell('td', r.months == null ? '-' : r.months.toFixed(1)));
         dealsBody.appendChild(tr);
       });
     }
@@ -6071,13 +6071,14 @@
       renderCycleSummaryTable('cycle-channel-body', summarizeCycle(sorted, (r) => r.channel));
       updateCycleSortHeaders();
 
-      const med = medianValue(sorted.map((r) => r.days));
-      const avg = sorted.length ? sorted.reduce((a, b) => a + b.days, 0) / sorted.length : null;
-      const fastest = sorted.length ? sorted[sorted.length - 1] : null;
-      const slowest = sorted.length ? sorted[0] : null;
+      const validDurRows = sorted.filter((r) => Number.isFinite(r.days));
+      const med = medianValue(validDurRows.map((r) => r.days));
+      const avg = validDurRows.length ? validDurRows.reduce((a, b) => a + b.days, 0) / validDurRows.length : null;
+      const fastest = validDurRows.length ? validDurRows[validDurRows.length - 1] : null;
+      const slowest = validDurRows.length ? validDurRows[0] : null;
       const lines = [];
       lines.push(`${cycleScopeState}: ${money.format(sorted.length)} of ${money.format(cycleRowsState.length)} rows match current filters.`);
-      lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)}.`);
+      lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)} (computed on rows with both Intro and Start).`);
       if (slowest) lines.push(`Slowest: ${slowest.deal} (${money.format(slowest.days)} days, ${slowest.channel}).`);
       if (fastest) lines.push(`Fastest: ${fastest.deal} (${money.format(fastest.days)} days, ${fastest.channel}).`);
       setInsight('insight-cycletime', lines);
@@ -6134,8 +6135,9 @@
       });
       return Array.from(map.entries()).map(([key, days]) => {
         const count = days.length;
-        const avg = count ? (days.reduce((a, b) => a + b, 0) / count) : null;
-        const med = medianValue(days);
+        const valid = days.filter((x) => Number.isFinite(x));
+        const avg = valid.length ? (valid.reduce((a, b) => a + b, 0) / valid.length) : null;
+        const med = medianValue(valid);
         return { key, count, avg, median: med };
       }).sort((a, b) => b.count - a.count || (b.avg || 0) - (a.avg || 0) || a.key.localeCompare(b.key));
     }
@@ -6165,8 +6167,19 @@
 
     function renderCycleTime(data, scope) {
       const sellerBlocks = ((data.scorecard || {}).sellers || {});
+      const hasCycleRows = Array.isArray(data.cycle_time_rows);
       let stageRows = [];
-      if (scope === 'Overall') {
+      if (hasCycleRows) {
+        stageRows = data.cycle_time_rows.slice();
+        if (scope !== 'Overall') {
+          const target = String(scope || '').toLowerCase();
+          stageRows = stageRows.filter((r) => {
+            const ms = Array.isArray(r.matched_sellers) ? r.matched_sellers : [];
+            if (ms.some((x) => String(x || '').toLowerCase() === target)) return true;
+            return String(r.seller || '').toLowerCase().includes(target);
+          });
+        }
+      } else if (scope === 'Overall') {
         Object.keys(sellerBlocks)
           .filter((k) => k !== 'All (unique deals)')
           .forEach((k) => {
@@ -6182,11 +6195,19 @@
         const stage = String(r.stage || '').trim();
         const intro = parseCycleIntroDate(r);
         const start = parseIsoLocalDate(r.start_date);
-        if (!intro || !start) return;
-        const days = Math.round((start.getTime() - intro.getTime()) / 86400000);
-        if (!Number.isFinite(days) || days < 0) return;
+        let days = null;
+        let months = null;
+        if (intro && start) {
+          const d = Math.round((start.getTime() - intro.getTime()) / 86400000);
+          if (Number.isFinite(d) && d >= 0) {
+            days = d;
+            months = Number((d / 30.44).toFixed(1));
+          }
+        }
         const deal = String(r.deal || '').trim() || '(blank)';
-        const key = `${deal}||${stage}||${intro.toISOString().slice(0, 10)}||${start.toISOString().slice(0, 10)}`;
+        const introKey = intro ? intro.toISOString().slice(0, 10) : (String(r.intro_date || '').trim() || '-');
+        const startKey = start ? start.toISOString().slice(0, 10) : (String(r.start_date || '').trim() || '-');
+        const key = `${deal}||${stage}||${introKey}||${startKey}`;
         const sellerLabel = String(r.seller || '').trim() || (scope === 'Overall' ? '(blank)' : scope);
         if (!rowMap.has(key)) {
           rowMap.set(key, {
@@ -6197,10 +6218,10 @@
               industry: String(r.industry || '').trim() || '(blank)',
               channel: normalizeChannelUi(r.source_of_lead, r.revenue_source_mapping, r.channel),
               dealSize: r.deal_size,
-              intro: intro.toISOString().slice(0, 10),
-              start: start.toISOString().slice(0, 10),
+              intro: intro ? intro.toISOString().slice(0, 10) : (String(r.intro_date || '').trim() || '-'),
+              start: start ? start.toISOString().slice(0, 10) : (String(r.start_date || '').trim() || '-'),
               days,
-              months: Number((days / 30.44).toFixed(1)),
+              months,
             },
           });
         } else {

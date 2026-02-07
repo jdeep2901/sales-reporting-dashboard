@@ -327,6 +327,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   const introDetailOverall: Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>> = {};
   const introDetailPerSeller: Record<string, Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>>> =
     Object.fromEntries(SELLERS.map(([, l]) => [l, {}]));
+  const cycleTimeRows: Array<Record<string, unknown>> = [];
   let durationDetectedCount = 0;
 
   const addCounter = (table: Record<string, Record<string, number>>, stage: string, month: string) => {
@@ -473,22 +474,10 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     if (!stage || norm(stage) === "deal stage") continue;
     const stageNorm = norm(stage);
     const introDate = parseDate(introDateRaw);
-    if (!introDate || introDate < cutoffDate) continue;
     const startDate = parseDate(startDateRaw);
     const startDateIso = startDate ? startDate.toISOString().slice(0, 10) : null;
     if (durationMonths != null) durationDetectedCount += 1;
-
-    const ownerNorm = norm(owner);
-    const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
-    if (!matchedSellers.length) continue;
-
-    const month = monthLabel(introDate);
-    months.add(month);
-    stageTotals[stage] = (stageTotals[stage] || 0) + 1;
-    addCounter(allUnique, stage, month);
-    addDetail(allUniqueDetails, stage, month, dealName);
-
-    const nextStepDate = parseDate(nextStepRaw);
+    const month = introDate ? monthLabel(introDate) : null;
     const stageLabel = FUNNEL_STAGE_MAP[stageNorm] || stage;
     let dealSize = parseAmount(byId(item, adjContractNumCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, adjContractCol));
@@ -499,6 +488,35 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const sourceOfLead = byId(item, sourceLeadCol);
     const revenueSource = byId(item, revenueSourceCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
+
+    const ownerNorm = norm(owner);
+    const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
+    if (stageNorm === "won" || stageNorm === "lost") {
+      cycleTimeRows.push({
+        deal: dealName,
+        stage: stageLabel,
+        seller: owner || "(blank)",
+        matched_sellers: matchedSellers,
+        intro_date: introDate ? introDate.toISOString().slice(0, 10) : null,
+        created_month: month,
+        start_date: startDateIso,
+        duration_months: durationMonths,
+        deal_size: dealSize,
+        industry,
+        source_of_lead: sourceOfLead,
+        revenue_source_mapping: revenueSource,
+        channel,
+      });
+    }
+    if (!introDate || introDate < cutoffDate) continue;
+    if (!matchedSellers.length) continue;
+
+    months.add(month as string);
+    stageTotals[stage] = (stageTotals[stage] || 0) + 1;
+    addCounter(allUnique, stage, month);
+    addDetail(allUniqueDetails, stage, month, dealName);
+
+    const nextStepDate = parseDate(nextStepRaw);
 
     addScorecard(scorecard["All (unique deals)"], dealName, "All (unique deals)", stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso, durationMonths, industry, sourceOfLead, revenueSource, channel);
     if (stageNorm === "won" || stageNorm === "lost") {
@@ -668,6 +686,8 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     },
     note: "Weekly trend uses Intro Meeting Date, excludes deals currently in No Show/ Reschedule.",
   };
+
+  data.cycle_time_rows = cycleTimeRows;
 
   return data;
 }
