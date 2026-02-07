@@ -246,10 +246,75 @@ function initScorecard() {
 }
 
 function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: number, boardName: string) {
+  const colById: Record<string, MondayColumn> = Object.fromEntries(columns.map((c) => [c.id, c]));
   const byId = (item: MondayItem, id: string | null) => {
     if (!id) return "";
     const x = item.column_values.find((v) => v.id === id);
     return (x?.text || "").trim();
+  };
+  const byIdSmartText = (item: MondayItem, id: string | null) => {
+    // Monday often leaves `text` empty for mirror / relation columns; fall back to parsing `value`.
+    if (!id) return "";
+    const x = item.column_values.find((v) => v.id === id);
+    const direct = (x?.text || "").trim();
+    if (direct) return direct;
+    const raw = x?.value;
+    if (!raw) return "";
+    try {
+      const obj = JSON.parse(raw);
+      const pick = (o: any): string => {
+        if (o == null) return "";
+        if (typeof o === "string") return o.trim();
+        if (typeof o === "number" || typeof o === "boolean") return String(o);
+        if (typeof o !== "object") return "";
+        // Common fields across Monday column types.
+        const candidates = [
+          o.display_value,
+          o.displayValue,
+          o.label,
+          o.text,
+          o.value,
+          o.name,
+          o.title,
+        ];
+        for (const c of candidates) {
+          const s = pick(c);
+          if (s) return s;
+        }
+        // Mirror columns often contain nested mirrored values.
+        if (Array.isArray(o.mirrored_items)) {
+          const parts = o.mirrored_items
+            .map((mi: any) => {
+              const v = mi?.mirrored_value ?? mi?.mirroredValue ?? mi?.value;
+              // mirrored_value is sometimes JSON encoded
+              if (typeof v === "string") {
+                try {
+                  return pick(JSON.parse(v));
+                } catch (_) {
+                  return pick(v);
+                }
+              }
+              return pick(v);
+            })
+            .filter(Boolean);
+          if (parts.length) return parts.join(", ");
+        }
+        // Some types store arrays of labels/values.
+        if (Array.isArray(o.labels)) {
+          const parts = o.labels.map((z: any) => pick(z)).filter(Boolean);
+          if (parts.length) return parts.join(", ");
+        }
+        if (Array.isArray(o.ids)) {
+          const parts = o.ids.map((z: any) => pick(z)).filter(Boolean);
+          if (parts.length) return parts.join(", ");
+        }
+        return "";
+      };
+      const t = pick(obj);
+      return t.trim();
+    } catch (_) {
+      return "";
+    }
   };
   const byIdDate = (item: MondayItem, id: string | null) => {
     if (!id) return "";
@@ -483,11 +548,11 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     let dealSize = parseAmount(byId(item, adjContractNumCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, adjContractCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, tcvCol));
-    const industry = primaryToken(byId(item, industryCol));
-    const logo = primaryToken(byId(item, logoCol));
-    const bizFn = primaryToken(byId(item, functionCol));
-    const sourceOfLead = byId(item, sourceLeadCol);
-    const revenueSource = byId(item, revenueSourceCol);
+    const industry = primaryToken(byIdSmartText(item, industryCol));
+    const logo = primaryToken(byIdSmartText(item, logoCol));
+    const bizFn = primaryToken(byIdSmartText(item, functionCol));
+    const sourceOfLead = byIdSmartText(item, sourceLeadCol);
+    const revenueSource = byIdSmartText(item, revenueSourceCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -597,6 +662,23 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       source: "monday.com",
       monday_board_id: String(boardId),
       monday_board_name: boardName,
+      column_ids: {
+        intro_date: introDateCol,
+        start_date: startDateCol,
+        duration: durationCol,
+        stage: stageCol,
+        owner: ownerCol,
+        industry: industryCol,
+        logo: logoCol,
+        function: functionCol,
+        source_of_lead: sourceLeadCol,
+        revenue_source_mapping: revenueSourceCol,
+      },
+      column_types: {
+        industry: industryCol ? (colById[industryCol]?.type || null) : null,
+        logo: logoCol ? (colById[logoCol]?.type || null) : null,
+        function: functionCol ? (colById[functionCol]?.type || null) : null,
+      },
       duration_column_id: durationCol,
       duration_candidate_column_ids: durationCandidateCols,
       duration_detected_rows: durationDetectedCount,
