@@ -392,27 +392,15 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   const ownerCol = pickColumnId(columns, [(t) => t.includes("deal owner"), (t) => t.includes("owner")]);
   const nextStepCol = pickColumnId(columns, [(t) => t.includes("next step")]);
 
+  // Only apply fill-rate-based auto selection to Industry, since this is commonly a Mirror/Connect column with blank `text`.
   const industryCandidates = pickColumnIds(columns, [(t) => t.includes("industry")]);
   const industryPick = pickBestColumnIdByFillRate(items, industryCandidates, (it, id) => byIdSmartText(it, id));
   const industryCol = industryPick.best || pickColumnId(columns, [(t) => t.includes("industry")]);
 
-  const logoCandidates = pickColumnIds(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
-  const logoPick = pickBestColumnIdByFillRate(items, logoCandidates, (it, id) => byIdSmartText(it, id));
-  const logoCol = logoPick.best || pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
-
-  const functionCandidates = pickColumnIds(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
-  const functionPick = pickBestColumnIdByFillRate(items, functionCandidates, (it, id) => byIdSmartText(it, id));
-  const functionCol = functionPick.best || pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
-
-  const sourceLeadCandidates = pickColumnIds(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
-  const sourceLeadPick = pickBestColumnIdByFillRate(items, sourceLeadCandidates, (it, id) => byIdSmartText(it, id));
-  const sourceLeadCol =
-    sourceLeadPick.best || pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
-
-  const revenueSourceCandidates = pickColumnIds(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
-  const revenueSourcePick = pickBestColumnIdByFillRate(items, revenueSourceCandidates, (it, id) => byIdSmartText(it, id));
-  const revenueSourceCol =
-    revenueSourcePick.best || pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
+  const logoCol = pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
+  const functionCol = pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
+  const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
+  const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
   const adjContractNumCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
   const adjContractCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract")]);
   const tcvCol = pickColumnId(columns, [(t) => t.includes("tcv"), (t) => t.includes("contract value")]);
@@ -722,10 +710,6 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       column_pick_debug: {
         industry_candidates: industryCandidates,
         industry_sample_counts: industryPick.sampleCounts,
-        logo_candidates: logoCandidates,
-        logo_sample_counts: logoPick.sampleCounts,
-        function_candidates: functionCandidates,
-        function_sample_counts: functionPick.sampleCounts,
       },
       column_types: {
         industry: industryCol ? (colById[industryCol]?.type || null) : null,
