@@ -323,6 +323,24 @@ function extractLinkedItemIdsFromConnectValue(raw: string | null | undefined): s
   return out;
 }
 
+function findConnectColumnToBoard(columns: MondayColumn[], targetBoardId: number): string | null {
+  const target = String(Math.trunc(targetBoardId));
+  for (const c of columns) {
+    const type = norm(c.type);
+    // Monday connect boards column type is commonly "board-relation".
+    if (!(type.includes("relation") || type.includes("connect"))) continue;
+    const st = parseJsonSafe(c.settings_str || null);
+    if (!st || typeof st !== "object") continue;
+    const boardIds = st.boardIds || st.board_ids || st.connectedBoardIds || st.connected_board_ids || st.board_ids_array;
+    if (Array.isArray(boardIds) && boardIds.map((x: any) => String(x)).includes(target)) return c.id;
+    const boardId = st.boardId || st.board_id || st.connectedBoardId || st.connected_board_id;
+    if (boardId != null && String(boardId) === target) return c.id;
+    const boards = st.boards || st.linkedBoards;
+    if (Array.isArray(boards) && boards.some((b: any) => String(b?.id || b?.boardId || b?.board_id || "") === target)) return c.id;
+  }
+  return null;
+}
+
 async function fetchItemsByIds(
   token: string,
   itemIds: string[],
@@ -515,8 +533,8 @@ async function buildDataset(
   const adjContractCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract")]);
   const tcvCol = pickColumnId(columns, [(t) => t.includes("tcv"), (t) => t.includes("contract value")]);
 
-  // If Industry is a mirror from Accounts board, resolve it via join:
-  // Deals board -> relation(connect) column -> account item id(s) -> Accounts board industry column.
+  // If Industry is mirrored from Accounts board, resolve it via join:
+  // Deals board -> connect/relation column -> account item id(s) -> Accounts board industry column.
   const industryColType = industryCol ? (colById[industryCol]?.type || "") : "";
   const mirrorSettings = industryCol ? parseJsonSafe(colById[industryCol]?.settings_str || null) : null;
   const relationColFromMirror: string | null =
@@ -526,18 +544,21 @@ async function buildDataset(
   const accountsBoardId = (opts?.accounts_board_id && Number.isFinite(Number(opts.accounts_board_id))) ? Number(opts.accounts_board_id) : null;
   const accountsIndustryColPinned = String(opts?.accounts_industry_col_id || "").trim() || null;
   const accountsRelationColPinned = String(opts?.accounts_relation_col_id || "").trim() || null;
-  const accountsRelationColId = accountsRelationColPinned || relationColFromMirror;
+  const accountsRelationColAuto = (accountsBoardId ? findConnectColumnToBoard(columns, accountsBoardId) : null);
+  const accountsRelationColId = accountsRelationColPinned || relationColFromMirror || accountsRelationColAuto;
 
   let accountsIndustryColId: string | null = accountsIndustryColPinned;
   const accountIndustryById: Record<string, string> = {};
   let accountsJoinEnabled = false;
+  let accountsJoinStats = {
+    account_ids_found: 0,
+    account_items_fetched: 0,
+    account_industry_mapped: 0,
+    deals_with_account_link: 0,
+    deals_with_joined_industry: 0,
+  };
 
-  if (
-    String(industryColType || "").toLowerCase() === "mirror" &&
-    accountsBoardId &&
-    accountsRelationColId &&
-    opts?.monday_token
-  ) {
+  if (accountsBoardId && accountsRelationColId && opts?.monday_token) {
     accountsJoinEnabled = true;
     // Collect linked account item ids from deals items.
     const accountIds: string[] = [];
@@ -547,6 +568,7 @@ async function buildDataset(
       for (const id of linked) if (!accountIds.includes(id)) accountIds.push(id);
       if (accountIds.length > 5000) break;
     }
+    accountsJoinStats.account_ids_found = accountIds.length;
     if (accountIds.length) {
       // If account industry column isn't pinned, infer from Accounts board columns.
       if (!accountsIndustryColId) {
@@ -569,11 +591,13 @@ async function buildDataset(
       if (accountsIndustryColId) {
         // Fetch account items by ids with only the industry column.
         const accountItems = await fetchItemsByIds(opts.monday_token, accountIds, [accountsIndustryColId]);
+        accountsJoinStats.account_items_fetched = accountItems.length;
         for (const ai of accountItems) {
           const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
           const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
           if (val) accountIndustryById[String(ai.id)] = val;
         }
+        accountsJoinStats.account_industry_mapped = Object.keys(accountIndustryById).length;
       }
     }
   }
@@ -755,12 +779,18 @@ async function buildDataset(
     if (dealSize == null) dealSize = parseAmount(byId(item, adjContractCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, tcvCol));
     let industryRawText = byIdSmartText(item, industryCol);
-    if ((!industryRawText || !industryRawText.trim()) && accountsJoinEnabled && accountsRelationColId) {
+    if (accountsJoinEnabled && accountsRelationColId) {
       const cv = item.column_values.find((v) => v.id === accountsRelationColId);
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      if (linked.length) accountsJoinStats.deals_with_account_link += 1;
       for (const aid of linked) {
         const v = accountIndustryById[String(aid)] || "";
-        if (v && v.trim()) { industryRawText = v; break; }
+        if (v && v.trim()) {
+          // Prefer authoritative Industry from Accounts board when available.
+          industryRawText = v;
+          accountsJoinStats.deals_with_joined_industry += 1;
+          break;
+        }
       }
     }
     const industry = primaryToken(industryRawText);
@@ -907,6 +937,9 @@ async function buildDataset(
         accounts_relation_col_id: accountsRelationColId,
         accounts_industry_col_id: accountsIndustryColId,
         industry_col_type: industryColType || null,
+        relation_col_from_mirror: relationColFromMirror,
+        relation_col_auto: accountsRelationColAuto,
+        stats: accountsJoinStats,
       },
       duration_column_id: durationCol,
       duration_candidate_column_ids: durationCandidateCols,
