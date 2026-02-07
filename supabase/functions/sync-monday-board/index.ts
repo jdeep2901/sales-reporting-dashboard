@@ -48,10 +48,18 @@ const SELLERS: Array<[string, string]> = [
 ];
 
 type MondayColumn = { id: string; title: string; type: string; settings_str?: string | null };
-type MondayItem = { id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> };
+type MondayItem = {
+  id: string;
+  name: string;
+  column_values: Array<{ id: string; text: string; display_value?: string | null; value: string | null }>;
+};
 
-function smartTextFromMondayColumnValue(text: string | null | undefined, value: string | null | undefined): string {
-  const direct = String(text || "").trim();
+function smartTextFromMondayColumnValue(
+  text: string | null | undefined,
+  displayValue: string | null | undefined,
+  value: string | null | undefined,
+): string {
+  const direct = String(text || "").trim() || String(displayValue || "").trim();
   if (direct) return direct;
   const raw = value;
   if (!raw) return "";
@@ -413,7 +421,7 @@ async function fetchItemsByIds(
   token: string,
   itemIds: string[],
   columnIds: string[] | null,
-): Promise<Array<{ id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> }>> {
+): Promise<Array<{ id: string; name: string; column_values: Array<{ id: string; text: string; display_value?: string | null; value: string | null }> }>> {
   const ids = itemIds.filter(Boolean);
   if (!ids.length) return [];
   const chunks: string[][] = [];
@@ -424,7 +432,7 @@ async function fetchItemsByIds(
       items(ids: $ids) {
         id
         name
-        column_values(ids: $colIds) { id text value }
+        column_values(ids: $colIds) { id text display_value value }
       }
     }
   `;
@@ -473,7 +481,7 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
       boards(ids: $boardId) {
         items_page(limit: 500) {
           cursor
-          items { id name column_values(ids: $colIds) { id text value } }
+          items { id name column_values(ids: $colIds) { id text display_value value } }
         }
       }
     }
@@ -489,7 +497,7 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
     query ($cursor: String!, $colIds: [String!]) {
       next_items_page(limit: 500, cursor: $cursor) {
         cursor
-        items { id name column_values(ids: $colIds) { id text value } }
+        items { id name column_values(ids: $colIds) { id text display_value value } }
       }
     }
   `;
@@ -543,12 +551,12 @@ async function buildDataset(
   const byId = (item: MondayItem, id: string | null) => {
     if (!id) return "";
     const x = item.column_values.find((v) => v.id === id);
-    return (x?.text || "").trim();
+    return (String(x?.text || "").trim() || String(x?.display_value || "").trim());
   };
   const byIdSmartText = (item: MondayItem, id: string | null) => {
     if (!id) return "";
     const x = item.column_values.find((v) => v.id === id);
-    return smartTextFromMondayColumnValue(x?.text, x?.value);
+    return smartTextFromMondayColumnValue(x?.text, x?.display_value, x?.value);
   };
   const byIdDate = (item: MondayItem, id: string | null) => {
     if (!id) return "";
@@ -672,7 +680,7 @@ async function buildDataset(
 
   // Some Monday API responses omit board_relation values when requesting many columns at once.
   // If we're attempting an Accounts join, fetch the relation column by itself and use that value for linking.
-  let relationValueByDealId: Record<string, { text: string; value: string | null }> | null = null;
+  let relationValueByDealId: Record<string, { text: string; display_value: string; value: string | null }> | null = null;
   if (opts?.monday_token && accountsRelationColId) {
     try {
       const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
@@ -680,7 +688,11 @@ async function buildDataset(
       relationValueByDealId = {};
       for (const it of relOnly) {
         const cv = (it.column_values || []).find((v) => v.id === accountsRelationColId);
-        relationValueByDealId[String(it.id)] = { text: String(cv?.text || ""), value: cv?.value || null };
+        relationValueByDealId[String(it.id)] = {
+          text: String(cv?.text || ""),
+          display_value: String((cv as any)?.display_value || ""),
+          value: cv?.value || null,
+        };
       }
     } catch (_) {
       relationValueByDealId = null;
@@ -695,7 +707,7 @@ async function buildDataset(
     for (const it of items) {
       const fallback = relationValueByDealId ? relationValueByDealId[String(it.id)] : null;
       const cv = fallback
-        ? ({ id: accountsRelationColId, text: fallback.text, value: fallback.value } as any)
+        ? ({ id: accountsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
         : it.column_values.find((v) => v.id === accountsRelationColId);
       const rawVal = String(cv?.value || "").trim();
       if (relationValueNonEmpty(rawVal)) {
@@ -704,7 +716,7 @@ async function buildDataset(
           accountsJoinStats.relation_value_examples.push(rawVal.length > 500 ? `${rawVal.slice(0, 497)}...` : rawVal);
         }
       }
-      const rawText = String(cv?.text || "").trim();
+      const rawText = (String(cv?.text || "").trim() || String((cv as any)?.display_value || "").trim());
       if (rawText) {
         accountsJoinStats.relation_nonempty_text_sample += 1;
         if (accountsJoinStats.relation_text_examples.length < 3) {
@@ -727,7 +739,7 @@ async function buildDataset(
           candidates,
           (it, id) => {
             const cv = it.column_values.find((v) => v.id === id);
-            return smartTextFromMondayColumnValue(cv?.text, cv?.value);
+            return smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
           },
           200,
         );
@@ -742,7 +754,7 @@ async function buildDataset(
       accountsJoinStats.account_items_fetched = accountItems.length;
       for (const ai of accountItems) {
         const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
-        const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        const val = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
         if (val) accountIndustryById[String(ai.id)] = val;
       }
       accountsJoinStats.account_industry_mapped = Object.keys(accountIndustryById).length;
@@ -757,7 +769,7 @@ async function buildDataset(
         const nm = norm(ai.name || "");
         if (!nm) continue;
         const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
-        const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
+        const val = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
         if (val) nameToIndustry[nm] = val;
       }
       // Store in the same map but keyed by name marker.
@@ -946,7 +958,7 @@ async function buildDataset(
     if (accountsJoinEnabled && accountsRelationColId) {
       const fallback = relationValueByDealId ? relationValueByDealId[String(item.id)] : null;
       const cv = fallback
-        ? ({ id: accountsRelationColId, text: fallback.text, value: fallback.value } as any)
+        ? ({ id: accountsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
         : item.column_values.find((v) => v.id === accountsRelationColId);
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
       if (linked.length) accountsJoinStats.deals_with_account_link += 1;
@@ -959,10 +971,11 @@ async function buildDataset(
           break;
         }
       }
-      if ((!industryRawText || !industryRawText.trim()) && cv && String(cv.text || "").trim()) {
+      const cvText = (cv && (String((cv as any).text || "").trim() || String((cv as any).display_value || "").trim())) || "";
+      if ((!industryRawText || !industryRawText.trim()) && cv && cvText) {
         const nameToIndustry = (accountIndustryById as any).__nameToIndustry || null;
         if (nameToIndustry) {
-          const parts = String(cv.text || "")
+          const parts = String(cvText || "")
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean);
