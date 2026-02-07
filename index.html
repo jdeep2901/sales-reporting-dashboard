@@ -3292,6 +3292,27 @@
       return d;
     }
 
+    function buildShiftedPhaseWeights(phaseMap, startDateIso) {
+      const out = {};
+      FORECAST_QUARTERS.forEach((q) => { out[q] = Number((phaseMap && phaseMap[q]) || 0); });
+      if (!startDateIso) return out;
+      const startQuarter = forecastQuarterFromStartDate(startDateIso);
+      if (!startQuarter) return out;
+      const startIdx = FORECAST_QUARTERS.indexOf(startQuarter);
+      if (startIdx < 0) return out;
+      const eligible = FORECAST_QUARTERS.slice(startIdx);
+      const eligibleSum = eligible.reduce((acc, q) => acc + Number(out[q] || 0), 0);
+      if (eligibleSum <= 0) {
+        FORECAST_QUARTERS.forEach((q, idx) => { out[q] = idx === startIdx ? 1 : 0; });
+        return out;
+      }
+      FORECAST_QUARTERS.forEach((q, idx) => {
+        if (idx < startIdx) out[q] = 0;
+        else out[q] = Number(out[q] || 0) / eligibleSum;
+      });
+      return out;
+    }
+
     function likelihoodRecordKey(rec) {
       return [
         String(rec.deal || '').trim().toLowerCase(),
@@ -5402,15 +5423,10 @@
       FORECAST_QUARTERS.forEach((q) => { quarterTotals[q] = 0; });
 
       FORECAST_STAGE_CONFIG.forEach((cfg) => {
-        const ev = stageRows
-          .filter((r) => String(r.stage || '') === cfg.stage)
-          .reduce((acc, r) => {
-          const stageNum = stageNumber(r.stage);
-          const baseAmount = (stageNum != null && stageNum <= 4) ? 100000 : dealSizeValue(r.deal_size);
-          return acc + (baseAmount * cfg.winProb);
-        }, 0);
         const perQuarter = {};
+        FORECAST_QUARTERS.forEach((q) => { perQuarter[q] = 0; });
         const isDetailStage = cfg.label === 'Proposal' || cfg.label === 'Contracting';
+        const useStartShift = cfg.label === 'Proposal' || cfg.label === 'Contracting';
         const stageDeals = stageRows
           .filter((r) => String(r.stage || '') === cfg.stage)
           .map((r) => {
@@ -5426,24 +5442,32 @@
               dealEv,
             };
           });
-        FORECAST_QUARTERS.forEach((q) => {
-          const v = ev * Number((cfg.phase && cfg.phase[q]) || 0);
-          perQuarter[q] = v;
-          quarterTotals[q] += v;
-          if (isDetailStage) {
-            const rowsForQuarter = stageDeals
-              .map((d) => ({
+        FORECAST_QUARTERS.forEach((q) => { detailMap[`${cfg.label}||${q}`] = []; });
+        stageDeals.forEach((d) => {
+          const shiftedWeights = useStartShift
+            ? buildShiftedPhaseWeights(cfg.phase || {}, d.startDate)
+            : buildShiftedPhaseWeights(cfg.phase || {}, null);
+          FORECAST_QUARTERS.forEach((q) => {
+            const w = Number(shiftedWeights[q] || 0);
+            const contrib = d.dealEv * w;
+            perQuarter[q] += contrib;
+            if (isDetailStage && contrib > 0) {
+              detailMap[`${cfg.label}||${q}`].push({
                 deal: d.deal,
                 stage: cfg.label,
                 startDate: d.startDate,
                 durationMonths: d.durationMonths,
                 dealSize: d.dealSize,
-                quarterContribution: d.dealEv * Number((cfg.phase && cfg.phase[q]) || 0),
-                basis: `EV (${Math.round(cfg.winProb * 100)}%) x phase`,
-              }))
-              .filter((x) => Number(x.quarterContribution || 0) > 0);
-            detailMap[`${cfg.label}||${q}`] = rowsForQuarter;
-          }
+                quarterContribution: contrib,
+                basis: useStartShift && d.startDate
+                  ? `EV (${Math.round(cfg.winProb * 100)}%) x shifted phase`
+                  : `EV (${Math.round(cfg.winProb * 100)}%) x phase`,
+              });
+            }
+          });
+        });
+        FORECAST_QUARTERS.forEach((q) => {
+          quarterTotals[q] += perQuarter[q];
         });
         stageQuarterValues[cfg.label] = perQuarter;
 
