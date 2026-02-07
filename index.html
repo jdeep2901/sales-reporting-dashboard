@@ -1927,6 +1927,29 @@
       font-size: 12px;
     }
 
+    .cycle-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .cycle-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .cycle-card .title {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f7faff;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f3f75;
+    }
+
     .gap-neg {
       color: #0f6a39;
     }
@@ -2021,6 +2044,7 @@
         <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
         <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
         <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
+        <button id="tab-cycletime" class="tab-btn" type="button">Cycle Time</button>
         <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
@@ -2510,6 +2534,95 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div id="view-cycletime" class="view">
+        <div class="head">
+          <div>
+            <h1>Closed Deal Cycle Time</h1>
+            <div class="sub">Lead time from Intro Date to Start Date for closed deals with both dates present.</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="cycle-seller">Seller Scope</label>
+              <select id="cycle-seller"></select>
+            </div>
+          </div>
+        </div>
+        <div class="insight">
+          <div class="insight-title">Key Insights</div>
+          <ul id="insight-cycletime" class="insight-list"></ul>
+        </div>
+        <div class="table-wrap">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th>Deal</th>
+                <th>Stage</th>
+                <th>Industry</th>
+                <th>Seller</th>
+                <th>Channel</th>
+                <th>Deal Size</th>
+                <th>Intro Date</th>
+                <th>Start Date</th>
+                <th>Days</th>
+                <th>Months</th>
+              </tr>
+            </thead>
+            <tbody id="cycle-deals-body"></tbody>
+          </table>
+        </div>
+        <div class="cycle-grid">
+          <div class="cycle-card">
+            <div class="title">Summary by Industry</div>
+            <div class="table-wrap">
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th>Industry</th>
+                    <th>Deals</th>
+                    <th>Avg Days</th>
+                    <th>Median Days</th>
+                  </tr>
+                </thead>
+                <tbody id="cycle-industry-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="cycle-card">
+            <div class="title">Summary by Seller</div>
+            <div class="table-wrap">
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th>Seller</th>
+                    <th>Deals</th>
+                    <th>Avg Days</th>
+                    <th>Median Days</th>
+                  </tr>
+                </thead>
+                <tbody id="cycle-seller-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="cycle-card">
+            <div class="title">Summary by Channel</div>
+            <div class="table-wrap">
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th>Channel</th>
+                    <th>Deals</th>
+                    <th>Avg Days</th>
+                    <th>Median Days</th>
+                  </tr>
+                </thead>
+                <tbody id="cycle-channel-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="footnote">Current versions created before this feature may show Industry/Channel as blank until you run a fresh Monday sync.</div>
       </div>
 
       <div id="view-admin" class="view">
@@ -4676,6 +4789,7 @@
       const tabCompare = document.getElementById('tab-compare');
       const tabMomentum = document.getElementById('tab-momentum');
       const tabForecast = document.getElementById('tab-forecast');
+      const tabCycleTime = document.getElementById('tab-cycletime');
       const tabAssumptions = document.getElementById('tab-assumptions');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
@@ -4687,6 +4801,7 @@
       const viewCompare = document.getElementById('view-compare');
       const viewMomentum = document.getElementById('view-momentum');
       const viewForecast = document.getElementById('view-forecast');
+      const viewCycleTime = document.getElementById('view-cycletime');
       const viewAssumptions = document.getElementById('view-assumptions');
       const viewAdmin = document.getElementById('view-admin');
 
@@ -4700,6 +4815,7 @@
         tabCompare.classList.toggle('active', name === 'compare');
         tabMomentum.classList.toggle('active', name === 'momentum');
         tabForecast.classList.toggle('active', name === 'forecast');
+        tabCycleTime.classList.toggle('active', name === 'cycletime');
         tabAssumptions.classList.toggle('active', name === 'assumptions');
         tabAdmin.classList.toggle('active', name === 'admin');
         viewCross.classList.toggle('active', name === 'crosstab');
@@ -4711,6 +4827,7 @@
         viewCompare.classList.toggle('active', name === 'compare');
         viewMomentum.classList.toggle('active', name === 'momentum');
         viewForecast.classList.toggle('active', name === 'forecast');
+        viewCycleTime.classList.toggle('active', name === 'cycletime');
         viewAssumptions.classList.toggle('active', name === 'assumptions');
         viewAdmin.classList.toggle('active', name === 'admin');
       }
@@ -4726,6 +4843,7 @@
       tabCompare.addEventListener('click', () => activate('compare'));
       tabMomentum.addEventListener('click', () => activate('momentum'));
       tabForecast.addEventListener('click', () => activate('forecast'));
+      tabCycleTime.addEventListener('click', () => activate('cycletime'));
       tabAssumptions.addEventListener('click', () => activate('assumptions'));
       tabAdmin.addEventListener('click', () => activate('admin'));
     }
@@ -5743,6 +5861,176 @@
       renderForecastDealDetails(`${scope} | Proposal | ${FORECAST_QUARTERS[0]}`, detailMap[`Proposal||${FORECAST_QUARTERS[0]}`] || []);
     }
 
+    function normalizeChannelUi(sourceOfLead, revenueSource, existingChannel) {
+      const pre = String(existingChannel || '').trim();
+      if (pre) return pre;
+      const raw = `${String(sourceOfLead || '').trim()} | ${String(revenueSource || '').trim()}`.toLowerCase();
+      if (!raw.replace(/\|/g, '').trim()) return '(blank)';
+      if (raw.includes('refer')) return 'Reference';
+      if (raw.includes('partner') || raw.includes('alliance')) return 'Partner';
+      if (raw.includes('inbound') || raw.includes('website') || raw.includes('conference') || raw.includes('event') || raw.includes('webinar') || raw.includes('newsletter')) return 'Inbound/Marketing';
+      if (raw.includes('existing') || raw.includes('upsell') || raw.includes('cross sell') || raw.includes('cross-sell') || raw.includes('renewal')) return 'Existing Account';
+      if (raw.includes('outbound') || raw.includes('cold') || raw.includes('prospecting') || raw.includes('sdr') || raw.includes('bdr')) return 'Cold/Outbound';
+      return 'Other';
+    }
+
+    function parseCycleIntroDate(rec) {
+      const introRaw = String(rec && rec.intro_date || '').trim();
+      const introDirect = parseIsoLocalDate(introRaw);
+      if (introDirect) return introDirect;
+      const cm = String(rec && rec.created_month || '').trim();
+      const m = cm.match(/^(\d{4})-(\d{2})$/);
+      if (!m) return null;
+      return new Date(Number(m[1]), Number(m[2]) - 1, 1, 12, 0, 0, 0);
+    }
+
+    function medianValue(values) {
+      const arr = values.filter((x) => Number.isFinite(x)).slice().sort((a, b) => a - b);
+      const n = arr.length;
+      if (!n) return null;
+      const mid = Math.floor(n / 2);
+      if (n % 2 === 1) return arr[mid];
+      return (arr[mid - 1] + arr[mid]) / 2;
+    }
+
+    function summarizeCycle(rows, keyGetter) {
+      const map = new Map();
+      rows.forEach((r) => {
+        const key = keyGetter(r) || '(blank)';
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r.days);
+      });
+      return Array.from(map.entries()).map(([key, days]) => {
+        const count = days.length;
+        const avg = count ? (days.reduce((a, b) => a + b, 0) / count) : null;
+        const med = medianValue(days);
+        return { key, count, avg, median: med };
+      }).sort((a, b) => b.count - a.count || (b.avg || 0) - (a.avg || 0) || a.key.localeCompare(b.key));
+    }
+
+    function renderCycleSummaryTable(tbodyId, rows) {
+      const body = document.getElementById(tbodyId);
+      if (!body) return;
+      body.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No data'));
+        tr.appendChild(makeCell('td', '0'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.key));
+        tr.appendChild(makeCell('td', money.format(r.count)));
+        tr.appendChild(makeCell('td', r.avg == null ? '-' : r.avg.toFixed(1)));
+        tr.appendChild(makeCell('td', r.median == null ? '-' : r.median.toFixed(1)));
+        body.appendChild(tr);
+      });
+    }
+
+    function renderCycleTime(data, scope) {
+      const dealsBody = document.getElementById('cycle-deals-body');
+      if (!dealsBody) return;
+      dealsBody.innerHTML = '';
+      const sellerBlocks = ((data.scorecard || {}).sellers || {});
+      let stageRows = [];
+      if (scope === 'Overall') {
+        Object.keys(sellerBlocks)
+          .filter((k) => k !== 'All (unique deals)')
+          .forEach((k) => {
+            const m = sellerBlocks[k] || {};
+            stageRows.push(...(((m.kpi_details || {}).stage_7_8 || [])));
+          });
+      } else {
+        const metric = sellerBlocks[scope] || {};
+        stageRows = ((metric.kpi_details || {}).stage_7_8 || []);
+      }
+      const rowMap = new Map();
+      stageRows.forEach((r) => {
+        const stage = String(r.stage || '').trim();
+        const intro = parseCycleIntroDate(r);
+        const start = parseIsoLocalDate(r.start_date);
+        if (!intro || !start) return;
+        const days = Math.round((start.getTime() - intro.getTime()) / 86400000);
+        if (!Number.isFinite(days) || days < 0) return;
+        const deal = String(r.deal || '').trim() || '(blank)';
+        const key = `${deal}||${stage}||${intro.toISOString().slice(0, 10)}||${start.toISOString().slice(0, 10)}`;
+        const sellerLabel = String(r.seller || '').trim() || (scope === 'Overall' ? '(blank)' : scope);
+        if (!rowMap.has(key)) {
+          rowMap.set(key, {
+            sellerSet: new Set([sellerLabel]),
+            row: {
+              deal,
+              stage,
+              industry: String(r.industry || '').trim() || '(blank)',
+              channel: normalizeChannelUi(r.source_of_lead, r.revenue_source_mapping, r.channel),
+              dealSize: r.deal_size,
+              intro: intro.toISOString().slice(0, 10),
+              start: start.toISOString().slice(0, 10),
+              days,
+              months: Number((days / 30.44).toFixed(1)),
+            },
+          });
+        } else {
+          rowMap.get(key).sellerSet.add(sellerLabel);
+        }
+      });
+      const rows = Array.from(rowMap.values()).map(({ sellerSet, row }) => ({
+        ...row,
+        seller: Array.from(sellerSet).sort().join(', '),
+      }));
+
+      rows.sort((a, b) => b.days - a.days || a.deal.localeCompare(b.deal));
+
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No closed deals with both Intro Date and Start Date in this scope'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        dealsBody.appendChild(tr);
+      } else {
+        rows.forEach((r) => {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', r.deal));
+          tr.appendChild(makeCell('td', r.stage));
+          tr.appendChild(makeCell('td', r.industry));
+          tr.appendChild(makeCell('td', r.seller));
+          tr.appendChild(makeCell('td', r.channel));
+          tr.appendChild(makeCell('td', fmtDealSize(r.dealSize)));
+          tr.appendChild(makeCell('td', r.intro));
+          tr.appendChild(makeCell('td', r.start));
+          tr.appendChild(makeCell('td', money.format(r.days)));
+          tr.appendChild(makeCell('td', r.months.toFixed(1)));
+          dealsBody.appendChild(tr);
+        });
+      }
+
+      renderCycleSummaryTable('cycle-industry-body', summarizeCycle(rows, (r) => r.industry));
+      renderCycleSummaryTable('cycle-seller-body', summarizeCycle(rows, (r) => r.seller));
+      renderCycleSummaryTable('cycle-channel-body', summarizeCycle(rows, (r) => r.channel));
+
+      const med = medianValue(rows.map((r) => r.days));
+      const avg = rows.length ? rows.reduce((a, b) => a + b.days, 0) / rows.length : null;
+      const fastest = rows.length ? rows[rows.length - 1] : null;
+      const slowest = rows.length ? rows[0] : null;
+      const lines = [];
+      lines.push(`${scope}: ${money.format(rows.length)} closed deals have both Intro and Start dates for cycle-time calculation.`);
+      lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)}.`);
+      if (slowest) lines.push(`Slowest: ${slowest.deal} (${money.format(slowest.days)} days, ${slowest.channel}).`);
+      if (fastest) lines.push(`Fastest: ${fastest.deal} (${money.format(fastest.days)} days, ${fastest.channel}).`);
+      setInsight('insight-cycletime', lines);
+    }
+
     async function boot() {
       try {
         const appVersionEl = document.getElementById('app-version');
@@ -5783,6 +6071,7 @@
         const momentumRun = document.getElementById('momentum-run');
         const momentumPrev = document.getElementById('momentum-prev');
         const forecastSellerSelect = document.getElementById('forecast-seller');
+        const cycleSellerSelect = document.getElementById('cycle-seller');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -5809,6 +6098,7 @@
           renderVersionSelectors();
           renderMomentumSellerFilter(data);
           renderForecast(data, (forecastSellerSelect && forecastSellerSelect.value) || 'Overall');
+          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
         }
 
         async function runCompare() {
@@ -5964,6 +6254,12 @@
           o.textContent = s;
           forecastSellerSelect.appendChild(o);
         });
+        ['Overall', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
+          cycleSellerSelect.appendChild(o);
+        });
 
         sellerSelect.value = 'All (unique deals)';
         sellerSelect.addEventListener('change', () => render(data, sellerSelect.value, selectedStages, orderedStages));
@@ -5972,9 +6268,11 @@
         introSellerSelect.value = 'Overall (unique)';
         introGranularity.value = 'week';
         forecastSellerSelect.value = 'Overall';
+        cycleSellerSelect.value = 'Overall';
         introSellerSelect.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         introGranularity.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         forecastSellerSelect.addEventListener('change', () => renderForecast(data, forecastSellerSelect.value || 'Overall'));
+        cycleSellerSelect.addEventListener('change', () => renderCycleTime(data, cycleSellerSelect.value || 'Overall'));
         scorecardSellerSelect.addEventListener('change', () => {
           scorecardSelectedSeller = scorecardSellerSelect.value || 'Overall';
           renderScorecard(data);

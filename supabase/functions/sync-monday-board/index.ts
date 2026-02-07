@@ -128,6 +128,17 @@ function primaryToken(text: string | null | undefined, fallback = "(blank)"): st
   return (s.split(",")[0] || "").trim() || fallback;
 }
 
+function normalizeChannel(sourceOfLead: string | null | undefined, revenueSource: string | null | undefined): string {
+  const raw = `${String(sourceOfLead || "").trim()} | ${String(revenueSource || "").trim()}`.toLowerCase();
+  if (!raw.replace(/\|/g, "").trim()) return "Unknown";
+  if (raw.includes("refer")) return "Reference";
+  if (raw.includes("partner") || raw.includes("alliance")) return "Partner";
+  if (raw.includes("inbound") || raw.includes("website") || raw.includes("conference") || raw.includes("event") || raw.includes("webinar") || raw.includes("newsletter")) return "Inbound/Marketing";
+  if (raw.includes("existing") || raw.includes("upsell") || raw.includes("cross sell") || raw.includes("cross-sell") || raw.includes("renewal")) return "Existing Account";
+  if (raw.includes("outbound") || raw.includes("cold") || raw.includes("prospecting") || raw.includes("sdr") || raw.includes("bdr")) return "Cold/Outbound";
+  return "Other";
+}
+
 function stageNum(stage: string) {
   const m = stage.match(/^(\d+)\./);
   return m ? Number(m[1]) : null;
@@ -290,6 +301,8 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   const industryCol = pickColumnId(columns, [(t) => t.includes("industry")]);
   const logoCol = pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
   const functionCol = pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
+  const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
+  const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
   const adjContractNumCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
   const adjContractCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract")]);
   const tcvCol = pickColumnId(columns, [(t) => t.includes("tcv"), (t) => t.includes("contract value")]);
@@ -365,6 +378,10 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     dealSize: number | null,
     startDateIso: string | null,
     durationMonths: number | null,
+    industry: string,
+    sourceOfLead: string,
+    revenueSource: string,
+    channel: string,
   ) => {
     bucket.stage_counts[stageLabel] = (bucket.stage_counts[stageLabel] || 0) + 1;
     const ageDays = Math.floor((todayDate().getTime() - createdDate.getTime()) / 86400000);
@@ -372,11 +389,16 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       deal: dealName,
       seller: sellerLabel,
       stage: stageLabel,
+      intro_date: createdDate.toISOString().slice(0, 10),
       created_month: createdMonth,
       start_date: startDateIso,
       duration_months: durationMonths,
       age_days: ageDays,
       deal_size: dealSize,
+      industry,
+      source_of_lead: sourceOfLead,
+      revenue_source_mapping: revenueSource,
+      channel,
     };
     if (stageNorm === "scheduled intro calls" || stageNorm === "qualification") {
       bucket.stage_1_2_count += 1;
@@ -474,8 +496,11 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const industry = primaryToken(byId(item, industryCol));
     const logo = primaryToken(byId(item, logoCol));
     const bizFn = primaryToken(byId(item, functionCol));
+    const sourceOfLead = byId(item, sourceLeadCol);
+    const revenueSource = byId(item, revenueSourceCol);
+    const channel = normalizeChannel(sourceOfLead, revenueSource);
 
-    addScorecard(scorecard["All (unique deals)"], dealName, "All (unique deals)", stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso, durationMonths);
+    addScorecard(scorecard["All (unique deals)"], dealName, "All (unique deals)", stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso, durationMonths, industry, sourceOfLead, revenueSource, channel);
     if (stageNorm === "won" || stageNorm === "lost") {
       addWinLoss(winLossOverall, industry, logo, bizFn, stageNorm as "won" | "lost");
     }
@@ -494,7 +519,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
         const fs = FUNNEL_STAGE_MAP[stageNorm];
         perSellerFunnel[label][fs] = (perSellerFunnel[label][fs] || 0) + 1;
       }
-      addScorecard(scorecard[label], dealName, label, stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso, durationMonths);
+      addScorecard(scorecard[label], dealName, label, stageNorm, stageLabel, introDate, nextStepDate, month, dealSize, startDateIso, durationMonths, industry, sourceOfLead, revenueSource, channel);
       if (MATTER_STAGES.has(stageNorm)) addIndustryAction(label, industry, logo, bizFn);
       if (stageNorm === "won" || stageNorm === "lost") addWinLoss(winLossPerSeller[label], industry, logo, bizFn, stageNorm as "won" | "lost");
       if (stageNorm !== "no show/ reschedule") {
