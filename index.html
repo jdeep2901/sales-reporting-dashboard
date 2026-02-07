@@ -2496,7 +2496,8 @@
               3. For stages 1-4, default deal size is <code>$100,000</code>; for stages 5-6, adjusted Monday deal size is used.<br/>
               4. Proposal and Contracting phasing is shifted to start from the deal’s start quarter when start date exists.<br/>
               5. Won row uses 100% deal size and is spread by start date + duration (months).<br/>
-              6. Fiscal year is Apr-Mar (e.g., Jan-Mar maps to Q4 of the same fiscal year label).
+              6. Revenue from deals containing <code>Gilead</code> or <code>Lundbeck</code> is excluded from <code>Q1 FY27</code> onward.<br/>
+              7. Fiscal year is Apr-Mar (e.g., Jan-Mar maps to Q4 of the same fiscal year label).
             </div>
           </div>
 
@@ -2709,6 +2710,7 @@
     const MOMENTUM_CORE_STAGE_MAX = 6;
     const MOMENTUM_ALL_STAGE_MAX = 8;
     const FORECAST_QUARTERS = ['Q4 FY26', 'Q1 FY27', 'Q2 FY27', 'Q3 FY27', 'Q4 FY27'];
+    const FORECAST_Q1_PLUS_EXCLUDE_DEALS = ['gilead', 'lundbeck'];
     const FORECAST_QUARTER_KEY_MAP = {
       'Q4 FY26': "Q4'26",
       'Q1 FY27': "Q1'27",
@@ -3436,6 +3438,16 @@
         else out[q] = Number(out[q] || 0) / eligibleSum;
       });
       return out;
+    }
+
+    function isQ1OrLaterForecastQuarter(quarterLabel) {
+      const idx = FORECAST_QUARTERS.indexOf(quarterLabel);
+      return idx >= 1;
+    }
+
+    function isExcludedFromQ1PlusByDealName(dealName) {
+      const d = String(dealName || '').toLowerCase();
+      return FORECAST_Q1_PLUS_EXCLUDE_DEALS.some((token) => d.includes(token));
     }
 
     function likelihoodRecordKey(rec) {
@@ -5574,12 +5586,14 @@
           });
         FORECAST_QUARTERS.forEach((q) => { detailMap[`${cfg.label}||${q}`] = []; });
         stageDeals.forEach((d) => {
+          const isQ1PlusExcludedDeal = isExcludedFromQ1PlusByDealName(d.deal);
           const shiftedWeights = useStartShift
             ? buildShiftedPhaseWeights(cfg.phase || {}, d.startDate)
             : buildShiftedPhaseWeights(cfg.phase || {}, null);
           FORECAST_QUARTERS.forEach((q) => {
             const w = Number(shiftedWeights[q] || 0);
-            const contrib = d.dealEv * w;
+            const blockedByQ1Rule = isQ1PlusExcludedDeal && isQ1OrLaterForecastQuarter(q);
+            const contrib = blockedByQ1Rule ? 0 : (d.dealEv * w);
             perQuarter[q] += contrib;
             if (isDetailStage && contrib > 0) {
               detailMap[`${cfg.label}||${q}`].push({
@@ -5622,6 +5636,7 @@
       wonRows.forEach((r) => {
         const amount = Math.max(0, Number(r.deal_size || 0));
         if (!amount) return;
+        const isQ1PlusExcludedDeal = isExcludedFromQ1PlusByDealName(r.deal);
         const start = r.start_date ? parseDateOrNow(r.start_date) : null;
         if (!start || Number.isNaN(start.getTime())) {
           wonUnphased += amount;
@@ -5635,6 +5650,11 @@
           const monthDate = addMonthsSafe(start, i);
           const fq = forecastQuarterFromDate(monthDate);
           if (fq && Object.prototype.hasOwnProperty.call(wonQuarterTotals, fq)) {
+            if (isQ1PlusExcludedDeal && isQ1OrLaterForecastQuarter(fq)) {
+              // Intentionally excluded from Q1 onward for selected client names.
+              phasedAny = true;
+              continue;
+            }
             wonQuarterTotals[fq] += monthlyAmount;
             const key = `Won (Start Date)||${fq}`;
             if (!detailMap[key]) detailMap[key] = [];
