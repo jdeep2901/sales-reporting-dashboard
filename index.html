@@ -2605,6 +2605,13 @@
             <div class="sub">Lead time from Intro Date to Start Date for closed deals with both dates present.</div>
           </div>
           <div class="controls">
+            <div class="funnel-time" style="min-width: 260px;">
+              <div class="funnel-time-head">
+                <label for="cycle-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="cycle-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="cycle-time-slider" type="range" min="0" max="0" value="0" />
+            </div>
             <div>
               <label for="cycle-seller">Seller Scope</label>
               <select id="cycle-seller"></select>
@@ -2962,6 +2969,8 @@
     let scorecardSelectedSeller = 'Overall';
     let cycleRowsState = [];
     let cycleScopeState = 'Overall';
+    let cycleIntroMonthsState = [];
+    let cycleIntroCutoffMonthState = null;
     let cycleTableState = {
       sortKey: 'days',
       sortDir: 'desc',
@@ -6003,6 +6012,11 @@
     function cyclePassesFilters(r) {
       const f = cycleTableState.filters || {};
       const txt = (v) => String(v == null ? '' : v).toLowerCase();
+      if (cycleIntroCutoffMonthState) {
+        const m = String(r.intro || '').match(/^(\d{4}-\d{2})/);
+        const introMonth = m ? m[1] : null;
+        if (introMonth && introMonth < cycleIntroCutoffMonthState) return false;
+      }
       if (f.deal && !txt(r.deal).includes(String(f.deal).toLowerCase())) return false;
       if (f.stage && !txt(r.stage).includes(String(f.stage).toLowerCase())) return false;
       if (f.industry && !txt(r.industry).includes(String(f.industry).toLowerCase())) return false;
@@ -6062,6 +6076,34 @@
       });
     }
 
+    function syncCycleCutoffControls(rows) {
+      const slider = document.getElementById('cycle-time-slider');
+      const valueEl = document.getElementById('cycle-time-value');
+      if (!slider || !valueEl) return;
+      const months = Array.from(new Set((rows || [])
+        .map((r) => String(r.intro || ''))
+        .map((v) => (v.match(/^(\d{4}-\d{2})/) || [])[1])
+        .filter(Boolean)))
+        .sort();
+      cycleIntroMonthsState = months;
+      if (!months.length) {
+        slider.min = '0';
+        slider.max = '0';
+        slider.value = '0';
+        cycleIntroCutoffMonthState = null;
+        valueEl.textContent = '-';
+        return;
+      }
+      if (!cycleIntroCutoffMonthState || !months.includes(cycleIntroCutoffMonthState)) {
+        cycleIntroCutoffMonthState = months[0];
+      }
+      const idx = Math.max(0, months.indexOf(cycleIntroCutoffMonthState));
+      slider.min = '0';
+      slider.max = String(Math.max(0, months.length - 1));
+      slider.value = String(idx);
+      valueEl.textContent = cycleIntroCutoffMonthState;
+    }
+
     function applyCycleTableView() {
       const filtered = cycleRowsState.filter(cyclePassesFilters);
       const sorted = filtered.slice().sort((a, b) => cycleSortCompare(a, b, cycleTableState.sortKey, cycleTableState.sortDir));
@@ -6078,6 +6120,7 @@
       const slowest = validDurRows.length ? validDurRows[0] : null;
       const lines = [];
       lines.push(`${cycleScopeState}: ${money.format(sorted.length)} of ${money.format(cycleRowsState.length)} rows match current filters.`);
+      lines.push(`Intro cutoff: ${cycleIntroCutoffMonthState || '-'} (rows with blank intro date remain included).`);
       lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)} (computed on rows with both Intro and Start).`);
       if (slowest) lines.push(`Slowest: ${slowest.deal} (${money.format(slowest.days)} days, ${slowest.channel}).`);
       if (fastest) lines.push(`Fastest: ${fastest.deal} (${money.format(fastest.days)} days, ${fastest.channel}).`);
@@ -6105,6 +6148,16 @@
           applyCycleTableView();
         });
       });
+      const slider = document.getElementById('cycle-time-slider');
+      const valueEl = document.getElementById('cycle-time-value');
+      if (slider && valueEl) {
+        slider.addEventListener('input', () => {
+          const idx = Number(slider.value || 0);
+          cycleIntroCutoffMonthState = cycleIntroMonthsState[idx] || cycleIntroMonthsState[0] || null;
+          valueEl.textContent = cycleIntroCutoffMonthState || '-';
+          applyCycleTableView();
+        });
+      }
     }
 
     function parseCycleIntroDate(rec) {
@@ -6232,6 +6285,7 @@
         ...row,
         seller: Array.from(sellerSet).sort().join(', '),
       }));
+      syncCycleCutoffControls(rows);
       cycleRowsState = rows;
       cycleScopeState = scope;
       applyCycleTableView();

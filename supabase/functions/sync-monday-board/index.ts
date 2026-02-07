@@ -327,6 +327,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   const introDetailOverall: Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>> = {};
   const introDetailPerSeller: Record<string, Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>>> =
     Object.fromEntries(SELLERS.map(([, l]) => [l, {}]));
+  const allDealsRows: Array<Record<string, unknown>> = [];
   const cycleTimeRows: Array<Record<string, unknown>> = [];
   let durationDetectedCount = 0;
 
@@ -488,6 +489,24 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const sourceOfLead = byId(item, sourceLeadCol);
     const revenueSource = byId(item, revenueSourceCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
+    allDealsRows.push({
+      deal: dealName,
+      item_id: item.id,
+      stage: stageLabel,
+      owner: owner || "(blank)",
+      matched_sellers: matchedSellers,
+      intro_date: introDate ? introDate.toISOString().slice(0, 10) : null,
+      created_month: month,
+      start_date: startDateIso,
+      duration_months: durationMonths,
+      deal_size: dealSize,
+      industry,
+      logo,
+      function: bizFn,
+      source_of_lead: sourceOfLead,
+      revenue_source_mapping: revenueSource,
+      channel,
+    });
 
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -688,6 +707,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   };
 
   data.cycle_time_rows = cycleTimeRows;
+  data.all_deals_rows = allDealsRows;
 
   return data;
 }
