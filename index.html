@@ -1829,6 +1829,65 @@
       font-size: 15px;
     }
 
+    .forecast-clickable {
+      cursor: pointer;
+    }
+
+    .forecast-clickable:hover {
+      background: #e9f1ff !important;
+    }
+
+    .forecast-detail {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .forecast-detail-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .forecast-detail-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1d3f72;
+    }
+
+    .forecast-detail-wrap {
+      max-height: 32vh;
+      overflow: auto;
+    }
+
+    .forecast-detail-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .forecast-detail-table th, .forecast-detail-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #e7edf7;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .forecast-detail-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #fbfdff;
+      color: #294066;
+      font-weight: 700;
+    }
+
     .gap-neg {
       color: #0f6a39;
     }
@@ -2317,6 +2376,28 @@
               </thead>
               <tbody id="forecast-body"></tbody>
             </table>
+          </div>
+          <div class="forecast-detail">
+            <div class="forecast-detail-head">
+              <div id="forecast-detail-title" class="forecast-detail-title">Forecast Deal Breakup</div>
+              <div id="forecast-detail-meta" class="detail-meta">Click Proposal, Contracting, or Won cells to view deal-level splits.</div>
+            </div>
+            <div class="forecast-detail-wrap">
+              <table class="forecast-detail-table">
+                <thead>
+                  <tr>
+                    <th>Deal</th>
+                    <th>Stage</th>
+                    <th>Start Date</th>
+                    <th>Duration (months)</th>
+                    <th>Deal Size</th>
+                    <th>Quarter Contribution</th>
+                    <th>Basis</th>
+                  </tr>
+                </thead>
+                <tbody id="forecast-detail-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
         <div class="footnote">Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%. Stage phasing follows the configured quarter splits.</div>
@@ -5244,6 +5325,40 @@
       return 0;
     }
 
+    function renderForecastDealDetails(title, rows) {
+      const titleEl = document.getElementById('forecast-detail-title');
+      const metaEl = document.getElementById('forecast-detail-meta');
+      const body = document.getElementById('forecast-detail-body');
+      if (!titleEl || !metaEl || !body) return;
+      titleEl.textContent = title;
+      metaEl.textContent = `${money.format(rows.length)} contributing deal(s)`;
+      body.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No contributing deals'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+      const sorted = [...rows].sort((a, b) => Number(b.quarterContribution || 0) - Number(a.quarterContribution || 0) || String(a.deal || '').localeCompare(String(b.deal || '')));
+      sorted.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal || '-'));
+        tr.appendChild(makeCell('td', r.stage || '-'));
+        tr.appendChild(makeCell('td', r.startDate || '-'));
+        tr.appendChild(makeCell('td', r.durationMonths == null ? '-' : String(r.durationMonths)));
+        tr.appendChild(makeCell('td', fmtDealSize(r.dealSize)));
+        tr.appendChild(makeCell('td', fmtDealSize(r.quarterContribution)));
+        tr.appendChild(makeCell('td', r.basis || '-'));
+        body.appendChild(tr);
+      });
+    }
+
     function renderForecast(data, scope) {
       const head = document.getElementById('forecast-head-row');
       const body = document.getElementById('forecast-body');
@@ -5261,6 +5376,7 @@
         const s = String(r.stage || '').trim().toLowerCase();
         return s === '7. win' || s === 'won';
       });
+      const detailMap = {};
 
       const stageQuarterValues = {};
       const quarterTotals = {};
@@ -5270,21 +5386,60 @@
         const ev = stageRows
           .filter((r) => String(r.stage || '') === cfg.stage)
           .reduce((acc, r) => {
+          const stageNum = stageNumber(r.stage);
+          const baseAmount = (stageNum != null && stageNum <= 4) ? 100000 : dealSizeValue(r.deal_size);
+          return acc + (baseAmount * cfg.winProb);
+        }, 0);
+        const perQuarter = {};
+        const isDetailStage = cfg.label === 'Proposal' || cfg.label === 'Contracting';
+        const stageDeals = stageRows
+          .filter((r) => String(r.stage || '') === cfg.stage)
+          .map((r) => {
             const stageNum = stageNumber(r.stage);
             const baseAmount = (stageNum != null && stageNum <= 4) ? 100000 : dealSizeValue(r.deal_size);
-            return acc + (baseAmount * cfg.winProb);
-          }, 0);
-        const perQuarter = {};
+            const dealEv = baseAmount * cfg.winProb;
+            return {
+              deal: r.deal || '-',
+              stage: cfg.label,
+              startDate: r.start_date || null,
+              durationMonths: r.duration_months == null ? null : Number(r.duration_months || 0),
+              dealSize: baseAmount,
+              dealEv,
+            };
+          });
         FORECAST_QUARTERS.forEach((q) => {
           const v = ev * Number((cfg.phase && cfg.phase[q]) || 0);
           perQuarter[q] = v;
           quarterTotals[q] += v;
+          if (isDetailStage) {
+            const rowsForQuarter = stageDeals
+              .map((d) => ({
+                deal: d.deal,
+                stage: cfg.label,
+                startDate: d.startDate,
+                durationMonths: d.durationMonths,
+                dealSize: d.dealSize,
+                quarterContribution: d.dealEv * Number((cfg.phase && cfg.phase[q]) || 0),
+                basis: `EV (${Math.round(cfg.winProb * 100)}%) x phase`,
+              }))
+              .filter((x) => Number(x.quarterContribution || 0) > 0);
+            detailMap[`${cfg.label}||${q}`] = rowsForQuarter;
+          }
         });
         stageQuarterValues[cfg.label] = perQuarter;
 
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', cfg.label));
-        FORECAST_QUARTERS.forEach((q) => tr.appendChild(makeCell('td', forecastNumberText(perQuarter[q], false))));
+        FORECAST_QUARTERS.forEach((q) => {
+          const td = makeCell('td', forecastNumberText(perQuarter[q], false));
+          if (isDetailStage) {
+            td.classList.add('forecast-clickable');
+            td.addEventListener('click', () => {
+              renderForecastDealDetails(`${scope} | ${cfg.label} | ${q}`, detailMap[`${cfg.label}||${q}`] || []);
+            });
+          }
+          tr.appendChild(td);
+        });
         body.appendChild(tr);
       });
 
@@ -5308,6 +5463,17 @@
           const fq = forecastQuarterFromStartDate(monthDate.toISOString().slice(0, 10));
           if (fq && Object.prototype.hasOwnProperty.call(wonQuarterTotals, fq)) {
             wonQuarterTotals[fq] += monthlyAmount;
+            const key = `Won (Start Date)||${fq}`;
+            if (!detailMap[key]) detailMap[key] = [];
+            detailMap[key].push({
+              deal: r.deal || '-',
+              stage: 'Won',
+              startDate: r.start_date || null,
+              durationMonths,
+              dealSize: amount,
+              quarterContribution: monthlyAmount,
+              basis: 'Deal size / duration months',
+            });
             phasedAny = true;
           }
         }
@@ -5320,7 +5486,12 @@
       FORECAST_QUARTERS.forEach((q) => {
         const v = wonQuarterTotals[q] || 0;
         quarterTotals[q] += v;
-        wonRow.appendChild(makeCell('td', forecastNumberText(v, false)));
+        const td = makeCell('td', forecastNumberText(v, false));
+        td.classList.add('forecast-clickable');
+        td.addEventListener('click', () => {
+          renderForecastDealDetails(`${scope} | Won (Start Date) | ${q}`, detailMap[`Won (Start Date)||${q}`] || []);
+        });
+        wonRow.appendChild(td);
       });
       body.appendChild(wonRow);
 
@@ -5376,6 +5547,7 @@
         lines.push(`Largest target gap: ${widestGapQuarter.q} (${forecastNumberText(widestGapQuarter.gap, true)}).`);
       }
       setInsight('insight-forecast', lines);
+      renderForecastDealDetails(`${scope} | Proposal | ${FORECAST_QUARTERS[0]}`, detailMap[`Proposal||${FORECAST_QUARTERS[0]}`] || []);
     }
 
     async function boot() {
