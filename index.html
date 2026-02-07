@@ -1950,6 +1950,34 @@
       color: #1f3f75;
     }
 
+    .cycle-sortable {
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .cycle-sortable.active {
+      color: #163d7a;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .cycle-filter-row th {
+      background: #f8fbff;
+      padding: 6px 8px;
+    }
+
+    .cycle-filter-row input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 7px;
+      font-size: 12px;
+      color: #213a63;
+      background: #fff;
+    }
+
     .gap-neg {
       color: #0f6a39;
     }
@@ -2557,16 +2585,28 @@
           <table class="detail-table">
             <thead>
               <tr>
-                <th>Deal</th>
-                <th>Stage</th>
-                <th>Industry</th>
-                <th>Seller</th>
-                <th>Channel</th>
-                <th>Deal Size</th>
-                <th>Intro Date</th>
-                <th>Start Date</th>
-                <th>Days</th>
-                <th>Months</th>
+                <th id="cycle-th-deal" class="cycle-sortable" data-cycle-sort="deal">Deal</th>
+                <th id="cycle-th-stage" class="cycle-sortable" data-cycle-sort="stage">Stage</th>
+                <th id="cycle-th-industry" class="cycle-sortable" data-cycle-sort="industry">Industry</th>
+                <th id="cycle-th-seller" class="cycle-sortable" data-cycle-sort="seller">Seller</th>
+                <th id="cycle-th-channel" class="cycle-sortable" data-cycle-sort="channel">Channel</th>
+                <th id="cycle-th-deal_size" class="cycle-sortable" data-cycle-sort="dealSize">Deal Size</th>
+                <th id="cycle-th-intro" class="cycle-sortable" data-cycle-sort="intro">Intro Date</th>
+                <th id="cycle-th-start" class="cycle-sortable" data-cycle-sort="start">Start Date</th>
+                <th id="cycle-th-days" class="cycle-sortable" data-cycle-sort="days">Days</th>
+                <th id="cycle-th-months" class="cycle-sortable" data-cycle-sort="months">Months</th>
+              </tr>
+              <tr class="cycle-filter-row">
+                <th><input id="cycle-filter-deal" data-cycle-filter="deal" placeholder="Filter deal" /></th>
+                <th><input id="cycle-filter-stage" data-cycle-filter="stage" placeholder="Filter stage" /></th>
+                <th><input id="cycle-filter-industry" data-cycle-filter="industry" placeholder="Filter industry" /></th>
+                <th><input id="cycle-filter-seller" data-cycle-filter="seller" placeholder="Filter seller" /></th>
+                <th><input id="cycle-filter-channel" data-cycle-filter="channel" placeholder="Filter channel" /></th>
+                <th><input id="cycle-filter-deal_size" data-cycle-filter="dealSize" placeholder="e.g. >100000" /></th>
+                <th><input id="cycle-filter-intro" data-cycle-filter="intro" placeholder="YYYY-MM or date" /></th>
+                <th><input id="cycle-filter-start" data-cycle-filter="start" placeholder="YYYY-MM or date" /></th>
+                <th><input id="cycle-filter-days" data-cycle-filter="days" placeholder="e.g. <=120" /></th>
+                <th><input id="cycle-filter-months" data-cycle-filter="months" placeholder="e.g. <6" /></th>
               </tr>
             </thead>
             <tbody id="cycle-deals-body"></tbody>
@@ -2886,6 +2926,24 @@
     let scorecardSummaryEls = {};
     let scorecardSellerLabels = [];
     let scorecardSelectedSeller = 'Overall';
+    let cycleRowsState = [];
+    let cycleScopeState = 'Overall';
+    let cycleTableState = {
+      sortKey: 'days',
+      sortDir: 'desc',
+      filters: {
+        deal: '',
+        stage: '',
+        industry: '',
+        seller: '',
+        channel: '',
+        dealSize: '',
+        intro: '',
+        start: '',
+        days: '',
+        months: '',
+      },
+    };
     let activePopupSeller = null;
     let sharedStorePushTimer = null;
     let sharedStorePushInFlight = false;
@@ -5874,6 +5932,146 @@
       return 'Other';
     }
 
+    function cycleSortCompare(a, b, key, dir) {
+      const factor = dir === 'asc' ? 1 : -1;
+      if (key === 'days' || key === 'months' || key === 'dealSize') {
+        const av = Number(a[key] == null ? -Infinity : a[key]);
+        const bv = Number(b[key] == null ? -Infinity : b[key]);
+        if (av !== bv) return (av - bv) * factor;
+      } else if (key === 'intro' || key === 'start') {
+        const av = String(a[key] || '');
+        const bv = String(b[key] || '');
+        if (av !== bv) return av.localeCompare(bv) * factor;
+      } else {
+        const av = String(a[key] || '').toLowerCase();
+        const bv = String(b[key] || '').toLowerCase();
+        if (av !== bv) return av.localeCompare(bv) * factor;
+      }
+      return String(a.deal || '').localeCompare(String(b.deal || ''));
+    }
+
+    function cyclePassNumericFilter(value, exprRaw) {
+      const expr = String(exprRaw || '').trim();
+      if (!expr) return true;
+      const m = expr.match(/^(<=|>=|=|<|>)\s*(-?\d+(\.\d+)?)$/);
+      if (!m) return String(value == null ? '' : value).includes(expr);
+      const op = m[1];
+      const rhs = Number(m[2]);
+      const lhs = Number(value);
+      if (!Number.isFinite(lhs)) return false;
+      if (op === '<') return lhs < rhs;
+      if (op === '>') return lhs > rhs;
+      if (op === '<=') return lhs <= rhs;
+      if (op === '>=') return lhs >= rhs;
+      return lhs === rhs;
+    }
+
+    function cyclePassesFilters(r) {
+      const f = cycleTableState.filters || {};
+      const txt = (v) => String(v == null ? '' : v).toLowerCase();
+      if (f.deal && !txt(r.deal).includes(String(f.deal).toLowerCase())) return false;
+      if (f.stage && !txt(r.stage).includes(String(f.stage).toLowerCase())) return false;
+      if (f.industry && !txt(r.industry).includes(String(f.industry).toLowerCase())) return false;
+      if (f.seller && !txt(r.seller).includes(String(f.seller).toLowerCase())) return false;
+      if (f.channel && !txt(r.channel).includes(String(f.channel).toLowerCase())) return false;
+      if (f.intro && !txt(r.intro).includes(String(f.intro).toLowerCase())) return false;
+      if (f.start && !txt(r.start).includes(String(f.start).toLowerCase())) return false;
+      if (!cyclePassNumericFilter(r.dealSize, f.dealSize)) return false;
+      if (!cyclePassNumericFilter(r.days, f.days)) return false;
+      if (!cyclePassNumericFilter(r.months, f.months)) return false;
+      return true;
+    }
+
+    function updateCycleSortHeaders() {
+      document.querySelectorAll('[data-cycle-sort]').forEach((el) => {
+        const key = el.getAttribute('data-cycle-sort');
+        const active = key === cycleTableState.sortKey;
+        el.classList.toggle('active', active);
+        const arrow = active ? (cycleTableState.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        const base = el.textContent.replace(/\s[▲▼]$/, '');
+        el.textContent = `${base}${arrow}`;
+      });
+    }
+
+    function renderCycleDealsBody(rows) {
+      const dealsBody = document.getElementById('cycle-deals-body');
+      if (!dealsBody) return;
+      dealsBody.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No rows match current cycle-time filters'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        dealsBody.appendChild(tr);
+        return;
+      }
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.deal));
+        tr.appendChild(makeCell('td', r.stage));
+        tr.appendChild(makeCell('td', r.industry));
+        tr.appendChild(makeCell('td', r.seller));
+        tr.appendChild(makeCell('td', r.channel));
+        tr.appendChild(makeCell('td', fmtDealSize(r.dealSize)));
+        tr.appendChild(makeCell('td', r.intro));
+        tr.appendChild(makeCell('td', r.start));
+        tr.appendChild(makeCell('td', money.format(r.days)));
+        tr.appendChild(makeCell('td', r.months.toFixed(1)));
+        dealsBody.appendChild(tr);
+      });
+    }
+
+    function applyCycleTableView() {
+      const filtered = cycleRowsState.filter(cyclePassesFilters);
+      const sorted = filtered.slice().sort((a, b) => cycleSortCompare(a, b, cycleTableState.sortKey, cycleTableState.sortDir));
+      renderCycleDealsBody(sorted);
+      renderCycleSummaryTable('cycle-industry-body', summarizeCycle(sorted, (r) => r.industry));
+      renderCycleSummaryTable('cycle-seller-body', summarizeCycle(sorted, (r) => r.seller));
+      renderCycleSummaryTable('cycle-channel-body', summarizeCycle(sorted, (r) => r.channel));
+      updateCycleSortHeaders();
+
+      const med = medianValue(sorted.map((r) => r.days));
+      const avg = sorted.length ? sorted.reduce((a, b) => a + b.days, 0) / sorted.length : null;
+      const fastest = sorted.length ? sorted[sorted.length - 1] : null;
+      const slowest = sorted.length ? sorted[0] : null;
+      const lines = [];
+      lines.push(`${cycleScopeState}: ${money.format(sorted.length)} of ${money.format(cycleRowsState.length)} rows match current filters.`);
+      lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)}.`);
+      if (slowest) lines.push(`Slowest: ${slowest.deal} (${money.format(slowest.days)} days, ${slowest.channel}).`);
+      if (fastest) lines.push(`Fastest: ${fastest.deal} (${money.format(fastest.days)} days, ${fastest.channel}).`);
+      setInsight('insight-cycletime', lines);
+    }
+
+    function initCycleTableControls() {
+      document.querySelectorAll('[data-cycle-sort]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const key = el.getAttribute('data-cycle-sort');
+          if (!key) return;
+          if (cycleTableState.sortKey === key) cycleTableState.sortDir = cycleTableState.sortDir === 'asc' ? 'desc' : 'asc';
+          else {
+            cycleTableState.sortKey = key;
+            cycleTableState.sortDir = (key === 'days' || key === 'dealSize' || key === 'months') ? 'desc' : 'asc';
+          }
+          applyCycleTableView();
+        });
+      });
+      document.querySelectorAll('[data-cycle-filter]').forEach((input) => {
+        input.addEventListener('input', () => {
+          const key = input.getAttribute('data-cycle-filter');
+          if (!key) return;
+          cycleTableState.filters[key] = input.value || '';
+          applyCycleTableView();
+        });
+      });
+    }
+
     function parseCycleIntroDate(rec) {
       const introRaw = String(rec && rec.intro_date || '').trim();
       const introDirect = parseIsoLocalDate(introRaw);
@@ -5932,9 +6130,6 @@
     }
 
     function renderCycleTime(data, scope) {
-      const dealsBody = document.getElementById('cycle-deals-body');
-      if (!dealsBody) return;
-      dealsBody.innerHTML = '';
       const sellerBlocks = ((data.scorecard || {}).sellers || {});
       let stageRows = [];
       if (scope === 'Overall') {
@@ -5982,53 +6177,9 @@
         ...row,
         seller: Array.from(sellerSet).sort().join(', '),
       }));
-
-      rows.sort((a, b) => b.days - a.days || a.deal.localeCompare(b.deal));
-
-      if (!rows.length) {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', 'No closed deals with both Intro Date and Start Date in this scope'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        dealsBody.appendChild(tr);
-      } else {
-        rows.forEach((r) => {
-          const tr = document.createElement('tr');
-          tr.appendChild(makeCell('td', r.deal));
-          tr.appendChild(makeCell('td', r.stage));
-          tr.appendChild(makeCell('td', r.industry));
-          tr.appendChild(makeCell('td', r.seller));
-          tr.appendChild(makeCell('td', r.channel));
-          tr.appendChild(makeCell('td', fmtDealSize(r.dealSize)));
-          tr.appendChild(makeCell('td', r.intro));
-          tr.appendChild(makeCell('td', r.start));
-          tr.appendChild(makeCell('td', money.format(r.days)));
-          tr.appendChild(makeCell('td', r.months.toFixed(1)));
-          dealsBody.appendChild(tr);
-        });
-      }
-
-      renderCycleSummaryTable('cycle-industry-body', summarizeCycle(rows, (r) => r.industry));
-      renderCycleSummaryTable('cycle-seller-body', summarizeCycle(rows, (r) => r.seller));
-      renderCycleSummaryTable('cycle-channel-body', summarizeCycle(rows, (r) => r.channel));
-
-      const med = medianValue(rows.map((r) => r.days));
-      const avg = rows.length ? rows.reduce((a, b) => a + b.days, 0) / rows.length : null;
-      const fastest = rows.length ? rows[rows.length - 1] : null;
-      const slowest = rows.length ? rows[0] : null;
-      const lines = [];
-      lines.push(`${scope}: ${money.format(rows.length)} closed deals have both Intro and Start dates for cycle-time calculation.`);
-      lines.push(`Average days: ${avg == null ? '-' : avg.toFixed(1)} | Median days: ${med == null ? '-' : med.toFixed(1)}.`);
-      if (slowest) lines.push(`Slowest: ${slowest.deal} (${money.format(slowest.days)} days, ${slowest.channel}).`);
-      if (fastest) lines.push(`Fastest: ${fastest.deal} (${money.format(fastest.days)} days, ${fastest.channel}).`);
-      setInsight('insight-cycletime', lines);
+      cycleRowsState = rows;
+      cycleScopeState = scope;
+      applyCycleTableView();
     }
 
     async function boot() {
@@ -6336,6 +6487,7 @@
         updateFunnelMonth();
         rerenderAllViews();
         setupTabs();
+        initCycleTableControls();
         renderDetailTable('Details', []);
         if (compareRight && (viewedVersionIdState || activeVersionIdState || latestVersionIdState)) {
           const rightId = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
