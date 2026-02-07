@@ -5247,7 +5247,10 @@
       const sellerKey = scope === 'Overall' ? 'All (unique deals)' : scope;
       const metric = (((data.scorecard || {}).sellers || {})[sellerKey] || {});
       const stageRows = ((metric.kpi_details || {}).stage_1_6 || []);
-      const wonRows = ((metric.kpi_details || {}).stage_7_8 || []).filter((r) => String(r.stage || '') === '7. Win');
+      const wonRows = ((metric.kpi_details || {}).stage_7_8 || []).filter((r) => {
+        const s = String(r.stage || '').trim().toLowerCase();
+        return s === '7. win' || s === 'won';
+      });
 
       const stageQuarterValues = {};
       const quarterTotals = {};
