@@ -47,7 +47,7 @@ const SELLERS: Array<[string, string]> = [
   ["vitor quirino", "Vitor Quirino"],
 ];
 
-type MondayColumn = { id: string; title: string; type: string };
+type MondayColumn = { id: string; title: string; type: string; settings_str?: string | null };
 type MondayItem = { id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> };
 
 function smartTextFromMondayColumnValue(text: string | null | undefined, value: string | null | undefined): string {
@@ -288,6 +288,67 @@ function inspectColumnFill(
   return stats;
 }
 
+function parseJsonSafe(raw: string | null | undefined): any {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractLinkedItemIdsFromConnectValue(raw: string | null | undefined): string[] {
+  // Connect boards column_values.value commonly includes linkedPulseIds.
+  // Example: {"linkedPulseIds":[{"linkedPulseId":6218900123}]} or {"item_ids":[...]}.
+  const obj = parseJsonSafe(raw);
+  if (!obj || typeof obj !== "object") return [];
+  const ids: Array<string | number> = [];
+  const lp = obj.linkedPulseIds || obj.linked_pulse_ids || obj.linkedItemIds || obj.linked_item_ids;
+  if (Array.isArray(lp)) {
+    for (const x of lp) {
+      const v = (x && typeof x === "object") ? (x.linkedPulseId ?? x.linked_pulse_id ?? x.id ?? x.itemId) : x;
+      if (v != null) ids.push(v);
+    }
+  }
+  const itemIds = obj.itemIds || obj.item_ids || obj.item_ids_array || obj.items;
+  if (Array.isArray(itemIds)) {
+    for (const v of itemIds) if (v != null) ids.push(v);
+  }
+  // Dedup + normalize to string.
+  const out: string[] = [];
+  for (const v of ids) {
+    const s = String(v).trim();
+    if (s && /^\d+$/.test(s) && !out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
+async function fetchItemsByIds(
+  token: string,
+  itemIds: string[],
+  columnIds: string[] | null,
+): Promise<Array<{ id: string; name: string; column_values: Array<{ id: string; text: string; value: string | null }> }>> {
+  const ids = itemIds.filter(Boolean);
+  if (!ids.length) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  const out: any[] = [];
+  const q = `
+    query ($ids: [ID!], $colIds: [String!]) {
+      items(ids: $ids) {
+        id
+        name
+        column_values(ids: $colIds) { id text value }
+      }
+    }
+  `;
+  for (const ch of chunks) {
+    const data = await mondayGraphql(token, q, { ids: ch, colIds: columnIds || [] });
+    out.push(...((data?.items || []) as any[]));
+  }
+  return out as any;
+}
+
 async function mondayGraphql(token: string, query: string, variables?: Record<string, unknown>) {
   const res = await fetch("https://api.monday.com/v2", {
     method: "POST",
@@ -310,7 +371,7 @@ async function fetchBoard(token: string, boardId: number) {
       boards(ids: $boardId) {
         id
         name
-        columns { id title type }
+        columns { id title type settings_str }
         items_page(limit: 500) {
           cursor
           items { id name column_values { id text value } }
@@ -367,12 +428,18 @@ function initScorecard() {
   };
 }
 
-function buildDataset(
+async function buildDataset(
   items: MondayItem[],
   columns: MondayColumn[],
   boardId: number,
   boardName: string,
-  opts?: { industry_col_id?: string | null },
+  opts?: {
+    industry_col_id?: string | null;
+    accounts_board_id?: number | null;
+    accounts_industry_col_id?: string | null;
+    accounts_relation_col_id?: string | null; // deals-board connect column pointing to accounts
+    monday_token?: string | null;
+  },
 ) {
   const colById: Record<string, MondayColumn> = Object.fromEntries(columns.map((c) => [c.id, c]));
   const byId = (item: MondayItem, id: string | null) => {
@@ -447,6 +514,69 @@ function buildDataset(
   const adjContractNumCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
   const adjContractCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract")]);
   const tcvCol = pickColumnId(columns, [(t) => t.includes("tcv"), (t) => t.includes("contract value")]);
+
+  // If Industry is a mirror from Accounts board, resolve it via join:
+  // Deals board -> relation(connect) column -> account item id(s) -> Accounts board industry column.
+  const industryColType = industryCol ? (colById[industryCol]?.type || "") : "";
+  const mirrorSettings = industryCol ? parseJsonSafe(colById[industryCol]?.settings_str || null) : null;
+  const relationColFromMirror: string | null =
+    (mirrorSettings && (mirrorSettings.relation_column_id || mirrorSettings.relationColumnId || mirrorSettings.board_relation_column_id || mirrorSettings.boardRelationColumnId)) ? String(
+      mirrorSettings.relation_column_id || mirrorSettings.relationColumnId || mirrorSettings.board_relation_column_id || mirrorSettings.boardRelationColumnId,
+    ) : null;
+  const accountsBoardId = (opts?.accounts_board_id && Number.isFinite(Number(opts.accounts_board_id))) ? Number(opts.accounts_board_id) : null;
+  const accountsIndustryColPinned = String(opts?.accounts_industry_col_id || "").trim() || null;
+  const accountsRelationColPinned = String(opts?.accounts_relation_col_id || "").trim() || null;
+  const accountsRelationColId = accountsRelationColPinned || relationColFromMirror;
+
+  let accountsIndustryColId: string | null = accountsIndustryColPinned;
+  const accountIndustryById: Record<string, string> = {};
+  let accountsJoinEnabled = false;
+
+  if (
+    String(industryColType || "").toLowerCase() === "mirror" &&
+    accountsBoardId &&
+    accountsRelationColId &&
+    opts?.monday_token
+  ) {
+    accountsJoinEnabled = true;
+    // Collect linked account item ids from deals items.
+    const accountIds: string[] = [];
+    for (const it of items) {
+      const cv = it.column_values.find((v) => v.id === accountsRelationColId);
+      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      for (const id of linked) if (!accountIds.includes(id)) accountIds.push(id);
+      if (accountIds.length > 5000) break;
+    }
+    if (accountIds.length) {
+      // If account industry column isn't pinned, infer from Accounts board columns.
+      if (!accountsIndustryColId) {
+        const accBoard = await fetchBoard(opts.monday_token, accountsBoardId);
+        const candidates = accBoard.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
+        if (candidates.length) {
+          const pick = pickBestColumnIdByFillRate(
+            accBoard.items,
+            candidates,
+            (it, id) => {
+              const cv = it.column_values.find((v) => v.id === id);
+              return smartTextFromMondayColumnValue(cv?.text, cv?.value);
+            },
+            200,
+          );
+          accountsIndustryColId = pick.best || candidates[0] || null;
+        }
+      }
+
+      if (accountsIndustryColId) {
+        // Fetch account items by ids with only the industry column.
+        const accountItems = await fetchItemsByIds(opts.monday_token, accountIds, [accountsIndustryColId]);
+        for (const ai of accountItems) {
+          const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
+          const val = smartTextFromMondayColumnValue(cv?.text, cv?.value);
+          if (val) accountIndustryById[String(ai.id)] = val;
+        }
+      }
+    }
+  }
 
   const allUnique: Record<string, Record<string, number>> = {};
   const allUniqueDetails: Record<string, Record<string, string[]>> = {};
@@ -624,7 +754,16 @@ function buildDataset(
     let dealSize = parseAmount(byId(item, adjContractNumCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, adjContractCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, tcvCol));
-    const industry = primaryToken(byIdSmartText(item, industryCol));
+    let industryRawText = byIdSmartText(item, industryCol);
+    if ((!industryRawText || !industryRawText.trim()) && accountsJoinEnabled && accountsRelationColId) {
+      const cv = item.column_values.find((v) => v.id === accountsRelationColId);
+      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      for (const aid of linked) {
+        const v = accountIndustryById[String(aid)] || "";
+        if (v && v.trim()) { industryRawText = v; break; }
+      }
+    }
+    const industry = primaryToken(industryRawText);
     const logo = primaryToken(byIdSmartText(item, logoCol));
     const bizFn = primaryToken(byIdSmartText(item, functionCol));
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
@@ -761,6 +900,13 @@ function buildDataset(
       },
       column_pins: {
         industry_col_id: industryColPinned,
+      },
+      accounts_join: {
+        enabled: accountsJoinEnabled,
+        accounts_board_id: accountsBoardId,
+        accounts_relation_col_id: accountsRelationColId,
+        accounts_industry_col_id: accountsIndustryColId,
+        industry_col_type: industryColType || null,
       },
       duration_column_id: durationCol,
       duration_candidate_column_ids: durationCandidateCols,
@@ -902,7 +1048,6 @@ Deno.serve(async (req) => {
     const username = String(body?.username || "").trim().toLowerCase();
     const password = String(body?.password || "");
     const boardId = boardIdFromInput(body?.board_id || body?.board_url);
-    const inspectOnly = !!body?.inspect;
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!boardId) return j({ error: "board_id (or board URL) is required." }, 400);
 
@@ -913,43 +1058,17 @@ Deno.serve(async (req) => {
     if (!st || st.role !== "admin") return j({ error: "Admin access required." }, 403);
 
     const board = await fetchBoard(mondayToken, boardId);
-    if (inspectOnly) {
-      const sampleLimit = 200;
-      const stats = inspectColumnFill(
-        board.items,
-        board.columns,
-        (it, id) => {
-          const cv = it.column_values.find((v) => v.id === id);
-          return smartTextFromMondayColumnValue(cv?.text, cv?.value);
-        },
-        sampleLimit,
-      );
-      const industryCandidates = board.columns
-        .filter((c) => norm(c.title).includes("industry"))
-        .map((c) => c.id);
-      const industryPick = pickBestColumnIdByFillRate(
-        board.items,
-        industryCandidates,
-        (it, id) => {
-          const cv = it.column_values.find((v) => v.id === id);
-          return smartTextFromMondayColumnValue(cv?.text, cv?.value);
-        },
-        sampleLimit,
-      );
-      return j({
-        ok: true,
-        inspect: {
-          sample_limit: sampleLimit,
-          columns: stats,
-          suggested_industry_col_id: industryPick.best,
-          industry_candidates: industryCandidates,
-          industry_sample_counts: industryPick.sampleCounts,
-        },
-      });
-    }
-
     const pinnedIndustryCol = (st.settings && (st.settings as any).monday_industry_col_id) ? String((st.settings as any).monday_industry_col_id) : null;
-    const dataset = buildDataset(board.items, board.columns, boardId, board.boardName, { industry_col_id: pinnedIndustryCol });
+    const accountsBoardId = (st.settings && (st.settings as any).monday_accounts_board_id) ? Number((st.settings as any).monday_accounts_board_id) : 6218900019;
+    const accountsIndustryColId = (st.settings && (st.settings as any).monday_accounts_industry_col_id) ? String((st.settings as any).monday_accounts_industry_col_id) : null;
+    const accountsRelationColId = (st.settings && (st.settings as any).monday_deals_accounts_relation_col_id) ? String((st.settings as any).monday_deals_accounts_relation_col_id) : null;
+    const dataset = await buildDataset(board.items, board.columns, boardId, board.boardName, {
+      industry_col_id: pinnedIndustryCol,
+      accounts_board_id: accountsBoardId,
+      accounts_industry_col_id: accountsIndustryColId,
+      accounts_relation_col_id: accountsRelationColId,
+      monday_token: mondayToken,
+    });
     const datasetHash = await sha256Hex(JSON.stringify(dataset));
     const settings = {
       ...(st.settings || {}),

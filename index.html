@@ -2727,34 +2727,12 @@
             <div id="admin-sync-meta" class="sync-meta">Last sync: -</div>
           </div>
           <div class="admin-card">
-            <label style="margin-bottom:8px;">Monday Column Inspector (Industry)</label>
-            <div class="sub" style="margin-bottom:10px;">If Industry is blank, use this to find the correct column id and pin it.</div>
-            <form id="admin-inspect-form" class="admin-grid" autocomplete="off">
-              <div class="span-2">
-                <label for="admin-inspect-board">Board URL / ID</label>
-                <input id="admin-inspect-board" type="text" placeholder="https://themathcocrmtrial.monday.com/boards/6218900009" />
-              </div>
-              <button id="admin-inspect-btn" type="submit">Inspect Columns</button>
-              <div class="span-2">
-                <label for="admin-industry-col">Pinned Industry Column ID (optional)</label>
-                <input id="admin-industry-col" type="text" placeholder="e.g. text8 / mirror7 / dropdown2 ..." />
-              </div>
-              <button id="admin-industry-save" type="button">Save Industry Column</button>
-            </form>
-            <div id="admin-inspect-msg" class="auth-error"></div>
-            <div class="admin-table-wrap">
-              <table class="admin-table">
-                <thead>
-                  <tr>
-                    <th>Non-empty (sample)</th>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Column ID</th>
-                    <th>Example</th>
-                  </tr>
-                </thead>
-                <tbody id="admin-inspect-body"></tbody>
-              </table>
+            <label style="margin-bottom:8px;">Industry Mapping (Accounts Board)</label>
+            <div class="sub" style="margin-bottom:10px;">
+              Industry is mirrored from the Accounts board. On refresh, the backend joins Deals -> Account -> Industry.
+            </div>
+            <div class="sync-meta" style="white-space:pre-wrap;">
+              Accounts board: https://themathcocrmtrial.monday.com/boards/6218900019
             </div>
           </div>
           <div class="admin-card">
@@ -2930,7 +2908,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.1+20260207.1';
+    const APP_VERSION = 'v0.7.2+20260207.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3397,18 +3375,7 @@
       }, 220);
     }
 
-    async function savePinnedIndustryColumn(colId) {
-      if (!currentUser || !sessionPassword) throw new Error('Please login again.');
-      if (currentUser.role !== 'admin') throw new Error('Admin access required.');
-      const cleaned = String(colId || '').trim();
-      dashboardSettingsState = {
-        ...(dashboardSettingsState || {}),
-        monday_industry_col_id: cleaned || null,
-      };
-      persistLocalStateBundle();
-      await pushSharedStoreNow({ throwOnError: true });
-      return cleaned || null;
-    }
+    // (Removed) pinned industry column UI; backend resolves Industry via Accounts join.
 
     function normalizeQuarterLabel(raw) {
       const s = String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -3911,10 +3878,6 @@
       const el = document.getElementById('admin-sync-meta');
       if (!el) return;
       const s = dashboardSettingsState || {};
-      const pinned = document.getElementById('admin-industry-col');
-      if (pinned && (pinned.value || '') !== String(s.monday_industry_col_id || '')) {
-        pinned.value = String(s.monday_industry_col_id || '');
-      }
       const board = s.monday_board_name || s.monday_board_id || '-';
       const at = fmtTs(s.monday_last_sync_at);
       const by = s.monday_last_sync_by || '-';
@@ -3965,69 +3928,7 @@
       return body;
     }
 
-    async function inspectMondayColumns(boardValue) {
-      if (!currentUser || !sessionPassword) throw new Error('Please login again.');
-      const boardId = parseBoardId(boardValue);
-      if (!boardId) throw new Error('Enter a valid Monday board URL or numeric board ID.');
-      const url = `${SUPABASE_FUNCTIONS_URL}/sync-monday-board`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          username: currentUser.username,
-          password: sessionPassword,
-          board_id: boardId,
-          inspect: true,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Inspect failed (${res.status}).`);
-      return body;
-    }
-
-    function renderMondayInspectorTable(stats) {
-      const body = document.getElementById('admin-inspect-body');
-      if (!body) return;
-      body.innerHTML = '';
-      const rows = Array.isArray(stats) ? stats.slice() : [];
-      rows.sort((a, b) => (Number(b.non_empty || 0) - Number(a.non_empty || 0)) || String(a.title || '').localeCompare(String(b.title || '')));
-      if (!rows.length) {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', 'No data', ''));
-        tr.appendChild(makeCell('td', '-', ''));
-        tr.appendChild(makeCell('td', '-', ''));
-        tr.appendChild(makeCell('td', '-', ''));
-        tr.appendChild(makeCell('td', '-', ''));
-        body.appendChild(tr);
-        return;
-      }
-      rows.forEach((r) => {
-        const tr = document.createElement('tr');
-        const ne = `${Number(r.non_empty || 0)} / ${Number(r.sample_size || 0)}`;
-        tr.appendChild(makeCell('td', ne, ''));
-        tr.appendChild(makeCell('td', String(r.title || ''), ''));
-        tr.appendChild(makeCell('td', String(r.type || ''), ''));
-        const idCell = document.createElement('td');
-        const idBtn = document.createElement('button');
-        idBtn.type = 'button';
-        idBtn.textContent = String(r.id || '');
-        idBtn.style.padding = '4px 8px';
-        idBtn.addEventListener('click', () => {
-          const inp = document.getElementById('admin-industry-col');
-          if (inp) inp.value = String(r.id || '');
-          const msg = document.getElementById('admin-inspect-msg');
-          if (msg) msg.textContent = `Selected industry column id: ${String(r.id || '')}`;
-        });
-        idCell.appendChild(idBtn);
-        tr.appendChild(idCell);
-        tr.appendChild(makeCell('td', String(r.example || ''), ''));
-        body.appendChild(tr);
-      });
-    }
+    // (Removed) Monday column inspector UI; Industry is resolved via Accounts board join in backend.
 
     function renderAdminUsers() {
       const body = document.getElementById('admin-users-body');
@@ -6904,46 +6805,7 @@
           });
         });
 
-        const adminInspectForm = document.getElementById('admin-inspect-form');
-        const adminInspectMsg = document.getElementById('admin-inspect-msg');
-        const adminIndustrySave = document.getElementById('admin-industry-save');
-        if (adminInspectForm) {
-          adminInspectForm.addEventListener('submit', async (evt) => {
-            evt.preventDefault();
-            if (adminInspectMsg) adminInspectMsg.textContent = '';
-            const btn = document.getElementById('admin-inspect-btn');
-            const boardInp = document.getElementById('admin-inspect-board');
-            try {
-              if (btn) btn.disabled = true;
-              const boardValue = (boardInp && boardInp.value) || (document.getElementById('admin-monday-board') && document.getElementById('admin-monday-board').value) || '';
-              const out = await inspectMondayColumns(boardValue);
-              const stats = (out && out.inspect && out.inspect.columns) ? out.inspect.columns : [];
-              renderMondayInspectorTable(stats);
-              const suggested = out && out.inspect && out.inspect.suggested_industry_col_id;
-              if (suggested && document.getElementById('admin-industry-col')) {
-                document.getElementById('admin-industry-col').value = suggested;
-              }
-              if (adminInspectMsg) adminInspectMsg.textContent = `Inspect complete. Click a Column ID to select it, then Save.`;
-            } catch (e) {
-              if (adminInspectMsg) adminInspectMsg.textContent = e.message || 'Inspect failed.';
-            } finally {
-              if (btn) btn.disabled = false;
-            }
-          });
-        }
-        if (adminIndustrySave) {
-          adminIndustrySave.addEventListener('click', async () => {
-            if (adminInspectMsg) adminInspectMsg.textContent = '';
-            try {
-              const inp = document.getElementById('admin-industry-col');
-              const colId = inp ? inp.value : '';
-              const saved = await savePinnedIndustryColumn(colId);
-              if (adminInspectMsg) adminInspectMsg.textContent = `Saved pinned industry column id: ${saved || '(auto)'}. Run Refresh From Monday next.`;
-            } catch (e) {
-              if (adminInspectMsg) adminInspectMsg.textContent = e.message || 'Save failed.';
-            }
-          });
-        }
+        // (Removed) inspector wiring.
 
         const savedSession = loadSession();
         if (savedSession) {
