@@ -451,45 +451,57 @@ async function mondayGraphql(token: string, query: string, variables?: Record<st
   return body.data;
 }
 
-async function fetchBoard(token: string, boardId: number) {
-  const firstQuery = `
+async function fetchBoardColumns(token: string, boardId: number) {
+  const q = `
     query ($boardId: [ID!]) {
       boards(ids: $boardId) {
         id
         name
         columns { id title type settings_str }
+      }
+    }
+  `;
+  const data = await mondayGraphql(token, q, { boardId: [boardId] });
+  const board = data?.boards?.[0];
+  if (!board) throw new Error(`Board ${boardId} not found.`);
+  return { boardName: board.name as string, columns: board.columns as MondayColumn[] };
+}
+
+async function fetchBoardItems(token: string, boardId: number, colIds: string[]) {
+  const firstQuery = `
+    query ($boardId: [ID!], $colIds: [String!]) {
+      boards(ids: $boardId) {
         items_page(limit: 500) {
           cursor
-          items { id name column_values { id text value } }
+          items { id name column_values(ids: $colIds) { id text value } }
         }
       }
     }
   `;
-  const first = await mondayGraphql(token, firstQuery, { boardId: [boardId] });
+  const first = await mondayGraphql(token, firstQuery, { boardId: [boardId], colIds });
   const board = first?.boards?.[0];
-  if (!board) throw new Error(`Board ${boardId} not found.`);
+  if (!board) throw new Error(`Board ${boardId} not found (items).`);
 
   const items: MondayItem[] = [...(board.items_page?.items || [])];
   let cursor: string | null = board.items_page?.cursor || null;
 
   const nextQuery = `
-    query ($cursor: String!) {
+    query ($cursor: String!, $colIds: [String!]) {
       next_items_page(limit: 500, cursor: $cursor) {
         cursor
-        items { id name column_values { id text value } }
+        items { id name column_values(ids: $colIds) { id text value } }
       }
     }
   `;
 
   while (cursor) {
-    const next = await mondayGraphql(token, nextQuery, { cursor });
+    const next = await mondayGraphql(token, nextQuery, { cursor, colIds });
     const page = next?.next_items_page;
     if (!page) break;
     items.push(...(page.items || []));
     cursor = page.cursor || null;
   }
-
-  return { boardName: board.name, columns: board.columns as MondayColumn[], items };
+  return items;
 }
 
 function initScorecard() {
@@ -676,11 +688,12 @@ async function buildDataset(
     if (accountIds.length) {
       // If account industry column isn't pinned, infer from Accounts board columns.
       if (!accountsIndustryColId) {
-        const accBoard = await fetchBoard(opts.monday_token, accountsBoardId);
-        const candidates = accBoard.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
+        const accMeta = await fetchBoardColumns(opts.monday_token, accountsBoardId);
+        const candidates = accMeta.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
         if (candidates.length) {
+          const accItems = await fetchBoardItems(opts.monday_token, accountsBoardId, candidates);
           const pick = pickBestColumnIdByFillRate(
-            accBoard.items,
+            accItems,
             candidates,
             (it, id) => {
               const cv = it.column_values.find((v) => v.id === id);
@@ -1196,12 +1209,50 @@ Deno.serve(async (req) => {
     const st = Array.isArray(login.data) ? login.data[0] : login.data;
     if (!st || st.role !== "admin") return j({ error: "Admin access required." }, 403);
 
-    const board = await fetchBoard(mondayToken, boardId);
+    const meta = await fetchBoardColumns(mondayToken, boardId);
     const pinnedIndustryCol = (st.settings && (st.settings as any).monday_industry_col_id) ? String((st.settings as any).monday_industry_col_id) : null;
     const accountsBoardId = (st.settings && (st.settings as any).monday_accounts_board_id) ? Number((st.settings as any).monday_accounts_board_id) : 6218900019;
     const accountsIndustryColId = (st.settings && (st.settings as any).monday_accounts_industry_col_id) ? String((st.settings as any).monday_accounts_industry_col_id) : null;
     const accountsRelationColId = (st.settings && (st.settings as any).monday_deals_accounts_relation_col_id) ? String((st.settings as any).monday_deals_accounts_relation_col_id) : null;
-    const dataset = await buildDataset(board.items, board.columns, boardId, board.boardName, {
+
+    // Determine which columns we need so relation columns include `value` reliably.
+    const columns = meta.columns || [];
+    const neededCandidates = new Set<string>();
+    const addIf = (id: string | null) => { if (id) neededCandidates.add(id); };
+    const pick = (fns: any[]) => pickColumnId(columns, fns);
+    const pickMany = (fns: any[]) => pickColumnIds(columns, fns);
+    const introDateCol = pick([(t: string) => t.includes(\"intro\") && t.includes(\"date\"), (t: string) => t.includes(\"scheduled intro\")]);
+    const startDateCol = pick([(t: string) => t === \"start date\", (t: string) => t.includes(\"start date\"), (t: string) => t.includes(\"deal start\")]);
+    const durationCol = pick([(t: string) => t === \"duration\", (t: string) => t.includes(\"duration\")]);
+    const stageCol = pick([(t: string) => t.includes(\"deal stage\"), (t: string) => t === \"stage\"]);
+    const ownerCol = pick([(t: string) => t.includes(\"deal owner\"), (t: string) => t.includes(\"owner\")]);
+    const nextStepCol = pick([(t: string) => t.includes(\"next step\")]);
+    const industryCol = pinnedIndustryCol || pick([(t: string) => t.includes(\"industry\")]);
+    const logoCol = pick([(t: string) => t.includes(\"logo\"), (t: string) => t.includes(\"account\") || t.includes(\"company\")]);
+    const functionCol = pick([(t: string) => t.includes(\"business function\"), (t: string) => t === \"function\"]);
+    const sourceLeadCol = pick([(t: string) => t.includes(\"source of lead\"), (t: string) => t === \"source\", (t: string) => t.includes(\"lead source\")]);
+    const revenueSourceCol = pick([(t: string) => t.includes(\"revenue source mapping\"), (t: string) => t.includes(\"revenue source\")]);
+    const adjContractNumCol = pick([(t: string) => t.includes(\"adjusted\") && t.includes(\"contract\") && (t.includes(\"num\") || t.includes(\"number\"))]);
+    const adjContractCol = pick([(t: string) => t.includes(\"adjusted\") && t.includes(\"contract\")]);
+    const tcvCol = pick([(t: string) => t.includes(\"tcv\"), (t: string) => t.includes(\"contract value\")]);
+    const durationCandidateCols = new Set<string>([
+      ...(durationCol ? [durationCol] : []),
+      ...pickMany([(t: string) => t.includes(\"duration\"), (t: string) => t.includes(\"engagement\") && t.includes(\"month\"), (t: string) => t.includes(\"term\") && t.includes(\"month\"), (t: string) => t === \"months\"]),
+    ]);
+    addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
+    addIf(industryCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
+    addIf(adjContractNumCol); addIf(adjContractCol); addIf(tcvCol);
+    for (const id of durationCandidateCols) addIf(id);
+    if (accountsRelationColId) addIf(accountsRelationColId);
+    // Also include all relation/connect columns so we can auto-pick the right one by fill-rate.
+    for (const c of columns) {
+      const t = norm(c.type || '');
+      if (t.includes('relation') || t.includes('connect')) neededCandidates.add(c.id);
+    }
+
+    const items = await fetchBoardItems(mondayToken, boardId, Array.from(neededCandidates));
+
+    const dataset = await buildDataset(items, columns, boardId, meta.boardName, {
       industry_col_id: pinnedIndustryCol,
       accounts_board_id: accountsBoardId,
       accounts_industry_col_id: accountsIndustryColId,
