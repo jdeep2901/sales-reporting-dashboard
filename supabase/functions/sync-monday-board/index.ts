@@ -675,7 +675,8 @@ async function buildDataset(
   let relationValueByDealId: Record<string, { text: string; value: string | null }> | null = null;
   if (opts?.monday_token && accountsRelationColId) {
     try {
-      const relOnly = await fetchBoardItems(opts.monday_token, boardId, [accountsRelationColId]);
+      const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
+      const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [accountsRelationColId]);
       relationValueByDealId = {};
       for (const it of relOnly) {
         const cv = (it.column_values || []).find((v) => v.id === accountsRelationColId);
