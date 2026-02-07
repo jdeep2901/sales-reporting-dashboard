@@ -432,7 +432,16 @@ async function fetchItemsByIds(
       items(ids: $ids) {
         id
         name
-        column_values(ids: $colIds) { id text display_value value }
+        column_values(ids: $colIds) {
+          id
+          text
+          value
+          ... on BoardRelationValue { display_value }
+          ... on MirrorValue { display_value }
+          ... on FormulaValue { display_value }
+          ... on DependencyValue { display_value }
+          ... on SubtasksValue { display_value }
+        }
       }
     }
   `;
@@ -481,7 +490,20 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
       boards(ids: $boardId) {
         items_page(limit: 500) {
           cursor
-          items { id name column_values(ids: $colIds) { id text display_value value } }
+          items {
+            id
+            name
+            column_values(ids: $colIds) {
+              id
+              text
+              value
+              ... on BoardRelationValue { display_value }
+              ... on MirrorValue { display_value }
+              ... on FormulaValue { display_value }
+              ... on DependencyValue { display_value }
+              ... on SubtasksValue { display_value }
+            }
+          }
         }
       }
     }
@@ -497,7 +519,20 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
     query ($cursor: String!, $colIds: [String!]) {
       next_items_page(limit: 500, cursor: $cursor) {
         cursor
-        items { id name column_values(ids: $colIds) { id text display_value value } }
+        items {
+          id
+          name
+          column_values(ids: $colIds) {
+            id
+            text
+            value
+            ... on BoardRelationValue { display_value }
+            ... on MirrorValue { display_value }
+            ... on FormulaValue { display_value }
+            ... on DependencyValue { display_value }
+            ... on SubtasksValue { display_value }
+          }
+        }
       }
     }
   `;
