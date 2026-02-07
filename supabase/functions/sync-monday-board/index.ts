@@ -146,6 +146,15 @@ function pickColumnId(columns: MondayColumn[], candidates: Array<(t: string) => 
   return null;
 }
 
+function pickColumnIds(columns: MondayColumn[], candidates: Array<(t: string) => boolean>): string[] {
+  return columns
+    .filter((c) => {
+      const t = norm(c.title);
+      return candidates.some((fn) => fn(t));
+    })
+    .map((c) => c.id);
+}
+
 async function mondayGraphql(token: string, query: string, variables?: Record<string, unknown>) {
   const res = await fetch("https://api.monday.com/v2", {
     method: "POST",
@@ -252,10 +261,29 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       return "";
     }
   };
+  const byIdValue = (item: MondayItem, id: string | null) => {
+    if (!id) return null;
+    const x = item.column_values.find((v) => v.id === id);
+    return x?.value || null;
+  };
   const cutoffDate = parseDate(INTRO_DATE_CUTOFF)!;
   const introDateCol = pickColumnId(columns, [(t) => t.includes("intro") && t.includes("date"), (t) => t.includes("scheduled intro")]);
   const startDateCol = pickColumnId(columns, [(t) => t === "start date", (t) => t.includes("start date"), (t) => t.includes("deal start")]);
-  const durationCol = pickColumnId(columns, [(t) => t === "duration", (t) => t.includes("duration"), (t) => t.includes("months")]);
+  const durationCol = pickColumnId(columns, [
+    (t) => t === "duration",
+    (t) => t.includes("duration"),
+    (t) => t.includes("engagement duration"),
+    (t) => t.includes("duration months"),
+  ]);
+  const durationCandidateCols = Array.from(new Set([
+    ...(durationCol ? [durationCol] : []),
+    ...pickColumnIds(columns, [
+      (t) => t.includes("duration"),
+      (t) => t.includes("engagement") && t.includes("month"),
+      (t) => t.includes("term") && t.includes("month"),
+      (t) => t === "months",
+    ]),
+  ]));
   const stageCol = pickColumnId(columns, [(t) => t.includes("deal stage"), (t) => t === "stage"]);
   const ownerCol = pickColumnId(columns, [(t) => t.includes("deal owner"), (t) => t.includes("owner")]);
   const nextStepCol = pickColumnId(columns, [(t) => t.includes("next step")]);
@@ -286,6 +314,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
   const introDetailOverall: Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>> = {};
   const introDetailPerSeller: Record<string, Record<string, Array<{ deal: string; stage: string; intro_date: string; seller: string }>>> =
     Object.fromEntries(SELLERS.map(([, l]) => [l, {}]));
+  let durationDetectedCount = 0;
 
   const addCounter = (table: Record<string, Record<string, number>>, stage: string, month: string) => {
     table[stage] ||= {};
@@ -394,7 +423,30 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     const nextStepRaw = byId(item, nextStepCol);
     const introDateRaw = byId(item, introDateCol);
     const startDateRaw = byIdDate(item, startDateCol);
-    const durationRaw = byId(item, durationCol);
+    let durationMonths: number | null = null;
+    for (const cid of durationCandidateCols) {
+      const txt = byId(item, cid);
+      durationMonths = parseMonths(txt);
+      if (durationMonths != null) break;
+      const rawVal = byIdValue(item, cid);
+      if (rawVal) {
+        try {
+          const obj = JSON.parse(rawVal);
+          const candidates = [
+            obj?.number,
+            obj?.value,
+            obj?.duration,
+            obj?.duration_months,
+            obj?.text,
+          ];
+          for (const c of candidates) {
+            durationMonths = parseMonths(c == null ? "" : String(c));
+            if (durationMonths != null) break;
+          }
+          if (durationMonths != null) break;
+        } catch (_) {}
+      }
+    }
     const stage = cleanStage(stageRaw);
     if (!stage || norm(stage) === "deal stage") continue;
     const stageNorm = norm(stage);
@@ -402,7 +454,7 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
     if (!introDate || introDate < cutoffDate) continue;
     const startDate = parseDate(startDateRaw);
     const startDateIso = startDate ? startDate.toISOString().slice(0, 10) : null;
-    const durationMonths = parseMonths(durationRaw);
+    if (durationMonths != null) durationDetectedCount += 1;
 
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -484,6 +536,9 @@ function buildDataset(items: MondayItem[], columns: MondayColumn[], boardId: num
       source: "monday.com",
       monday_board_id: String(boardId),
       monday_board_name: boardName,
+      duration_column_id: durationCol,
+      duration_candidate_column_ids: durationCandidateCols,
+      duration_detected_rows: durationDetectedCount,
     },
   };
 
