@@ -1190,6 +1190,7 @@
       padding: 7px 8px;
       border-bottom: 1px solid #e8eef8;
       vertical-align: top;
+      overflow-wrap: anywhere;
     }
 
     .likelihood-mini-table th {
@@ -1228,6 +1229,13 @@
       text-align: right;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
+    }
+
+    /* Allow header text to wrap so columns don't overlap. */
+    .likelihood-mini-table th {
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.2;
     }
 
     .target-controls {
@@ -2402,7 +2410,7 @@
         <div class="head">
           <div>
             <h1>Weekly Scorecard</h1>
-            <div class="sub">Same data rules as crosstab/funnel | Includes proxy stuck indicators from missing next step and SLA age</div>
+            <div class="sub">Same data rules as crosstab/funnel.</div>
           </div>
           <div class="controls">
             <div>
@@ -2416,7 +2424,6 @@
           <ul id="insight-scorecard" class="insight-list"></ul>
         </div>
         <div id="score-wrap" class="score-wrap"></div>
-        <div class="footnote">Proxy stuck logic: stages 2-6 flagged if missing next step date or older than stage SLA (Intro 21d, Qualification/Capability 30d, Problem Scoping/Contracting/Commercial Proposal 45d).</div>
       </div>
 
       <div id="view-industry" class="view">
@@ -3120,7 +3127,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.24+20260208.1';
+    const APP_VERSION = 'v0.7.25+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
