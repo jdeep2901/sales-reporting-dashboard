@@ -2096,22 +2096,25 @@
           <button id="auth-logout" type="button">Logout</button>
         </div>
       </div>
-      <div class="tabs">
-        <button id="tab-crosstab" class="tab-btn active" type="button">Crosstab</button>
-        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
-        <button id="tab-scorecard" class="tab-btn" type="button">Weekly Scorecard</button>
-        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
-        <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
-        <button id="tab-introtrend" class="tab-btn" type="button">Intro Calls Trend</button>
-        <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
-        <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
+      <div class="tabs tabs-main">
+        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly Scorecard</button>
+        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
         <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
-        <button id="tab-cycletime" class="tab-btn" type="button">Cycle Time</button>
-        <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
+        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
         <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
       </div>
+      <div id="tabs-appendix" class="tabs tabs-appendix" style="display:none;">
+        <button id="tab-crosstab" class="tab-btn" type="button">Crosstab</button>
+        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
+        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
+        <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
+        <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
+        <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
+        <button id="tab-cycletime" class="tab-btn" type="button">Cycle Time</button>
+        <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
+      </div>
 
-      <div id="view-crosstab" class="view active">
+      <div id="view-crosstab" class="view">
         <div class="head">
           <div>
             <h1>Deal Stage x Intro Month Crosstab</h1>
@@ -2197,7 +2200,7 @@
         <div class="footnote">Conversion to next stage is calculated from reached counts across selected stages: <code>Reached(next) / Reached(current)</code>.</div>
       </div>
 
-      <div id="view-scorecard" class="view">
+      <div id="view-scorecard" class="view active">
         <div class="head">
           <div>
             <h1>Weekly Scorecard</h1>
@@ -3873,7 +3876,7 @@
       const tab = document.getElementById('tab-admin');
       const view = document.getElementById('view-admin');
       tab.style.display = isAdmin ? '' : 'none';
-      if (!isAdmin && view.classList.contains('active') && activateTab) activateTab('crosstab');
+      if (!isAdmin && view.classList.contains('active') && activateTab) activateTab('scorecard');
     }
 
     function showAuthError(message) {
@@ -4913,6 +4916,7 @@
     }
 
     function setupTabs() {
+      const appendixRow = document.getElementById('tabs-appendix');
       const tabCross = document.getElementById('tab-crosstab');
       const tabFunnel = document.getElementById('tab-funnel');
       const tabScore = document.getElementById('tab-scorecard');
@@ -4924,6 +4928,7 @@
       const tabForecast = document.getElementById('tab-forecast');
       const tabCycleTime = document.getElementById('tab-cycletime');
       const tabAssumptions = document.getElementById('tab-assumptions');
+      const tabAppendix = document.getElementById('tab-appendix');
       const tabAdmin = document.getElementById('tab-admin');
       const viewCross = document.getElementById('view-crosstab');
       const viewFunnel = document.getElementById('view-funnel');
@@ -4937,8 +4942,18 @@
       const viewCycleTime = document.getElementById('view-cycletime');
       const viewAssumptions = document.getElementById('view-assumptions');
       const viewAdmin = document.getElementById('view-admin');
+      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'compare', 'momentum', 'cycletime', 'assumptions']);
+      let appendixOpen = false;
+
+      function setAppendixOpen(next) {
+        appendixOpen = !!next;
+        if (appendixRow) appendixRow.style.display = appendixOpen ? '' : 'none';
+        if (tabAppendix) tabAppendix.setAttribute('aria-expanded', appendixOpen ? 'true' : 'false');
+      }
 
       function activate(name) {
+        const isAppendixView = appendixViews.has(name);
+        tabAppendix.classList.toggle('active', isAppendixView);
         tabCross.classList.toggle('active', name === 'crosstab');
         tabFunnel.classList.toggle('active', name === 'funnel');
         tabScore.classList.toggle('active', name === 'scorecard');
@@ -4963,6 +4978,13 @@
         viewCycleTime.classList.toggle('active', name === 'cycletime');
         viewAssumptions.classList.toggle('active', name === 'assumptions');
         viewAdmin.classList.toggle('active', name === 'admin');
+
+        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
+        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast') {
+          setAppendixOpen(false);
+        } else if (isAppendixView) {
+          setAppendixOpen(true);
+        }
       }
 
       activateTab = activate;
@@ -4979,6 +5001,10 @@
       tabCycleTime.addEventListener('click', () => activate('cycletime'));
       tabAssumptions.addEventListener('click', () => activate('assumptions'));
       tabAdmin.addEventListener('click', () => activate('admin'));
+      tabAppendix.addEventListener('click', () => setAppendixOpen(!appendixOpen));
+
+      // Initialize appendix row hidden unless we start on an appendix view.
+      setAppendixOpen(false);
     }
 
     function pct(x) {
