@@ -3104,7 +3104,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.20+20260208.1';
+    const APP_VERSION = 'v0.7.21+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3911,19 +3911,27 @@
         nextQuarterRevenue: 0,
         pendingStage3Plus: 0,
       };
-      const dedupe = new Set();
+      const dedupe = new Set(); // dedupe within bucket lists
+      const addTo = (bucketKey, rec, size) => {
+        const dkey = `${bucketKey}||${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
+        if (dedupe.has(dkey)) return;
+        dedupe.add(dkey);
+        if (bucketKey === 'this') {
+          out.thisQuarterDeals.push(rec);
+          out.thisQuarterRevenue += size;
+        } else if (bucketKey === 'next') {
+          out.nextQuarterDeals.push(rec);
+          out.nextQuarterRevenue += size;
+        }
+      };
       universe.forEach((rec) => {
         const key = likelihoodRecordKey(rec);
         const selected = likelihoodState[key] || '';
         const size = dealSizeValue(rec.deal_size);
-        const dkey = `${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
-        dedupe.add(dkey);
         if (selected === LIKELIHOOD_THIS_Q) {
-          out.thisQuarterDeals.push(rec);
-          out.thisQuarterRevenue += size;
+          addTo('this', rec, size);
         } else if (selected === LIKELIHOOD_NEXT_Q) {
-          out.nextQuarterDeals.push(rec);
-          out.nextQuarterRevenue += size;
+          addTo('next', rec, size);
         } else if (selected === LIKELIHOOD_HELP) {
           out.helpNeededDeals.push(rec);
         }
@@ -3941,15 +3949,10 @@
         const q = scorecardQuarterLabelForDate(rec.start_date);
         if (!q) return;
         const size = dealSizeValue(rec.deal_size);
-        const dkey = `${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
-        if (dedupe.has(dkey)) return;
-        dedupe.add(dkey);
         if (q === activeQuarterLabels.current) {
-          out.thisQuarterDeals.push(rec);
-          out.thisQuarterRevenue += size;
+          addTo('this', rec, size);
         } else if (q === activeQuarterLabels.next) {
-          out.nextQuarterDeals.push(rec);
-          out.nextQuarterRevenue += size;
+          addTo('next', rec, size);
         }
       });
       return out;
