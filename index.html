@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deal Stage Crosstab</title>
+  <title>MathCo Realtime Sales Reporting</title>
   <style>
     :root {
       --bg0: #f5f7fb;
@@ -1391,6 +1391,27 @@
       flex-wrap: wrap;
     }
 
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+    }
+
+    .brand-name {
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: #142033;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
     .app-meta {
       display: flex;
       align-items: center;
@@ -1461,6 +1482,16 @@
       box-shadow: 0 10px 26px rgba(21, 41, 74, 0.08);
       padding: 18px;
     }
+
+    .auth-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 10px;
+    }
+
+    .auth-brand .brand-mark { width: 36px; height: 36px; }
+    .auth-brand .brand-name { font-size: 18px; }
 
     .auth-gate h2 {
       margin: 0 0 6px;
@@ -2044,9 +2075,24 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div id="error" class="error" style="display:none;"></div>
+    <div class="wrap">
+      <div id="error" class="error" style="display:none;"></div>
     <div id="auth-gate" class="auth-gate" style="display:none;">
+      <div class="auth-brand">
+        <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
+          <g fill="none" stroke="#3b0a7a" stroke-width="16" stroke-linecap="round">
+            <path d="M60 16 L60 44" />
+            <path d="M60 76 L60 104" />
+            <path d="M16 60 L44 60" />
+            <path d="M76 60 L104 60" />
+            <path d="M26 26 L44 44" />
+            <path d="M76 76 L94 94" />
+            <path d="M94 26 L76 44" />
+            <path d="M44 76 L26 94" />
+          </g>
+        </svg>
+        <div class="brand-name">MathCo Realtime Sales Reporting</div>
+      </div>
       <h2>Sales Dashboard Access</h2>
       <div id="auth-sub" class="sub"></div>
       <form id="auth-login-form" class="auth-form" autocomplete="off" style="display:none;">
@@ -2082,6 +2128,21 @@
     </div>
     <div class="panel" id="app" style="display:none;">
       <div class="topbar">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
+            <g fill="none" stroke="#3b0a7a" stroke-width="16" stroke-linecap="round">
+              <path d="M60 16 L60 44" />
+              <path d="M60 76 L60 104" />
+              <path d="M16 60 L44 60" />
+              <path d="M76 60 L104 60" />
+              <path d="M26 26 L44 44" />
+              <path d="M76 76 L94 94" />
+              <path d="M94 26 L76 44" />
+              <path d="M44 76 L26 94" />
+            </g>
+          </svg>
+          <div class="brand-name">MathCo Realtime Sales Reporting</div>
+        </div>
         <div class="app-meta">
           <div class="sub">Private credentials are managed from the Admin tab.</div>
           <div id="app-version" class="app-version">v-</div>
