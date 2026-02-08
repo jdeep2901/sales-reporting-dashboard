@@ -2908,7 +2908,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.10+20260207.1';
+    const APP_VERSION = 'v0.7.11+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3644,6 +3644,23 @@
       const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
       d.setDate(Math.min(day, lastDay));
       return d;
+    }
+
+    function buildDurationQuarterWeights(startDateIso, durationMonths) {
+      const out = {};
+      FORECAST_QUARTERS.forEach((q) => { out[q] = 0; });
+      if (!startDateIso) return out;
+      const start = parseDateOrNow(startDateIso);
+      if (!start || Number.isNaN(start.getTime())) return out;
+      const durRaw = Number(durationMonths || 0);
+      const dur = Number.isFinite(durRaw) && durRaw > 0 ? Math.round(durRaw) : 1;
+      for (let i = 0; i < dur; i += 1) {
+        const monthDate = addMonthsSafe(start, i);
+        const fq = forecastQuarterFromDate(monthDate);
+        if (fq && Object.prototype.hasOwnProperty.call(out, fq)) out[fq] += 1;
+      }
+      FORECAST_QUARTERS.forEach((q) => { out[q] = Number(out[q] || 0) / dur; });
+      return out;
     }
 
     function buildShiftedPhaseWeights(phaseMap, startDateIso) {
@@ -5802,7 +5819,7 @@
         const perQuarter = {};
         FORECAST_QUARTERS.forEach((q) => { perQuarter[q] = 0; });
         const isDetailStage = cfg.label === 'Proposal' || cfg.label === 'Contracting';
-        const useStartShift = cfg.label === 'Proposal' || cfg.label === 'Contracting';
+        const useDurationSplit = cfg.label === 'Proposal' || cfg.label === 'Contracting';
         const stageDeals = stageRows
           .filter((r) => String(r.stage || '') === cfg.stage)
           .map((r) => {
@@ -5821,11 +5838,13 @@
         FORECAST_QUARTERS.forEach((q) => { detailMap[`${cfg.label}||${q}`] = []; });
         stageDeals.forEach((d) => {
           const isQ1PlusExcludedDeal = isExcludedFromQ1PlusByDealName(d.deal);
-          const shiftedWeights = useStartShift
-            ? buildShiftedPhaseWeights(cfg.phase || {}, d.startDate)
+          // For Proposal/Contracting: allocate by Start Date + Duration (months) if Start Date exists.
+          // This prevents over-counting early quarters (a known issue with phase renormalization).
+          const weights = (useDurationSplit && d.startDate)
+            ? buildDurationQuarterWeights(d.startDate, d.durationMonths)
             : buildShiftedPhaseWeights(cfg.phase || {}, null);
           FORECAST_QUARTERS.forEach((q) => {
-            const w = Number(shiftedWeights[q] || 0);
+            const w = Number(weights[q] || 0);
             const blockedByQ1Rule = isQ1PlusExcludedDeal && isQ1OrLaterForecastQuarter(q);
             const contrib = blockedByQ1Rule ? 0 : (d.dealEv * w);
             perQuarter[q] += contrib;
@@ -5837,8 +5856,8 @@
                 durationMonths: d.durationMonths,
                 dealSize: d.dealSize,
                 quarterContribution: contrib,
-                basis: useStartShift && d.startDate
-                  ? `EV (${Math.round(cfg.winProb * 100)}%) x shifted phase`
+                basis: (useDurationSplit && d.startDate)
+                  ? `EV (${Math.round(cfg.winProb * 100)}%) x duration split`
                   : `EV (${Math.round(cfg.winProb * 100)}%) x phase`,
               });
             }
