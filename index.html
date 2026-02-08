@@ -1201,7 +1201,7 @@
     }
 
     .likelihood-mini-table td:nth-child(1), .likelihood-mini-table th:nth-child(1) {
-      width: 58%;
+      width: 46%;
       white-space: normal;
       word-break: break-word;
       line-height: 1.35;
@@ -1209,7 +1209,7 @@
     }
 
     .likelihood-mini-table td:nth-child(2), .likelihood-mini-table th:nth-child(2) {
-      width: 25%;
+      width: 26%;
       white-space: normal;
       word-break: break-word;
       line-height: 1.35;
@@ -1217,7 +1217,14 @@
     }
 
     .likelihood-mini-table td:nth-child(3), .likelihood-mini-table th:nth-child(3) {
-      width: 17%;
+      width: 14%;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .likelihood-mini-table td:nth-child(4), .likelihood-mini-table th:nth-child(4) {
+      width: 14%;
       text-align: right;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -3113,7 +3120,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.23+20260208.1';
+    const APP_VERSION = 'v0.7.24+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
