@@ -1402,6 +1402,8 @@
       width: 28px;
       height: 28px;
       flex: 0 0 auto;
+      display: block;
+      object-fit: contain;
     }
 
     .brand-name {
@@ -2095,7 +2097,7 @@
     </svg>
     <div id="auth-gate" class="auth-gate" style="display:none;">
       <div class="auth-brand">
-        <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><use href="#mathco-logo"></use></svg>
+        <img class="brand-mark" src="assets/mathco-logo.svg" alt="MathCo logo"/>
         <div class="brand-name">MathCo Realtime Sales Reporting</div>
       </div>
       <h2>Sales Dashboard Access</h2>
@@ -2134,7 +2136,7 @@
     <div class="panel" id="app" style="display:none;">
       <div class="topbar">
         <div class="brand">
-          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><use href="#mathco-logo"></use></svg>
+          <img class="brand-mark" src="assets/mathco-logo.svg" alt="MathCo logo"/>
           <div class="brand-name">MathCo Realtime Sales Reporting</div>
         </div>
         <div class="app-meta">
@@ -2966,7 +2968,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.14+20260208.1';
+    const APP_VERSION = 'v0.7.15+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
