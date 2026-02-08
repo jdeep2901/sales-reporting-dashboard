@@ -1459,27 +1459,122 @@
       min-width: 150px;
     }
 
-    .auth-badge {
+    .profile {
+      position: relative;
       display: none;
       align-items: center;
       gap: 8px;
-      font-size: 12px;
-      color: #2a4268;
-      background: #eef4ff;
-      border: 1px solid #d3e0ff;
-      border-radius: 999px;
-      padding: 5px 8px;
     }
 
-    .auth-badge button {
-      border: 1px solid #c9d8fb;
+    .profile-btn {
+      border: 1px solid #d3e0ff;
+      background: #eef4ff;
       border-radius: 999px;
+      padding: 4px 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: #1f3f75;
+    }
+
+    .profile-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
       background: #fff;
-      color: #184487;
+      border: 1px solid #c9d8fb;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 12px;
+      color: #203a66;
+      flex: 0 0 auto;
+    }
+
+    .profile-meta {
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.15;
+      gap: 1px;
+      padding-right: 2px;
+    }
+
+    .profile-user {
+      font-size: 11px;
+      font-weight: 800;
+      color: #1a2f52;
+      white-space: nowrap;
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .profile-role {
       font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
+      color: #5d739d;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+
+    .profile-pop {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      width: 260px;
+      background: #fff;
+      border: 1px solid #dbe7ff;
+      border-radius: 12px;
+      box-shadow: 0 14px 34px rgba(21, 41, 74, 0.14);
+      padding: 10px;
+      z-index: 50;
+      display: none;
+    }
+
+    .profile.open .profile-pop { display: block; }
+
+    .profile-pop .row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 8px;
+      border-radius: 10px;
+    }
+
+    .profile-pop .row.small {
+      padding: 2px 8px 8px;
+      color: #6b7ea4;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .profile-pop .divider {
+      height: 1px;
+      background: #e7efff;
+      margin: 6px 0;
+    }
+
+    .profile-pop button {
+      width: 100%;
+      border: 1px solid #dbe7ff;
+      background: #f7faff;
+      color: #1f3f75;
+      font-weight: 800;
+      font-size: 12px;
+      padding: 9px 10px;
+      border-radius: 10px;
       cursor: pointer;
+      text-align: left;
+    }
+
+    .profile-pop button:hover { background: #eef4ff; }
+
+    @media (min-width: 880px) {
+      .profile-meta { display: flex; }
     }
 
     .auth-gate {
@@ -2146,18 +2241,30 @@
           <img class="brand-mark" src="assets/mathco-logo.svg" alt="MathCo logo"/>
           <div class="brand-name">MathCo Realtime Sales Reporting</div>
         </div>
-        <div class="app-meta">
-          <div class="topbar-hint">Private credentials are managed from the Admin tab.</div>
-          <div id="app-version" class="app-version">v-</div>
-          <label class="version-switch">
-            <span>Viewing:</span>
-            <select id="version-select"></select>
-          </label>
-        </div>
-        <div id="auth-badge" class="auth-badge">
-          <span id="auth-user-label"></span>
-          <button id="shared-refresh" type="button">Refresh Shared</button>
-          <button id="auth-logout" type="button">Logout</button>
+        <label class="version-switch">
+          <span>Viewing:</span>
+          <select id="version-select"></select>
+        </label>
+        <div id="profile" class="profile">
+          <button id="profile-btn" class="profile-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+            <span id="profile-avatar" class="profile-avatar" aria-hidden="true">U</span>
+            <span class="profile-meta">
+              <span id="profile-user" class="profile-user">user</span>
+              <span id="profile-role" class="profile-role">viewer</span>
+            </span>
+          </button>
+          <div id="profile-pop" class="profile-pop" role="menu" aria-label="Profile menu">
+            <div class="row">
+              <div style="font-weight:900;color:#1a2f52;">MathCo Realtime Sales Reporting</div>
+            </div>
+            <div class="row small">
+              <div>App version</div>
+              <div id="profile-version">v-</div>
+            </div>
+            <div class="divider"></div>
+            <button id="profile-admin" type="button" style="display:none;">Admin</button>
+            <button id="profile-logout" type="button">Logout</button>
+          </div>
         </div>
       </div>
       <div class="tabs tabs-main">
@@ -2975,7 +3082,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.18+20260208.1';
+    const APP_VERSION = 'v0.7.19+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3939,7 +4046,10 @@
     function setAdminVisibility(isAdmin) {
       const tab = document.getElementById('tab-admin');
       const view = document.getElementById('view-admin');
-      tab.style.display = isAdmin ? '' : 'none';
+      // Keep Admin tab hidden from the main nav; expose it via the profile menu instead.
+      tab.style.display = 'none';
+      const menu = document.getElementById('profile-admin');
+      if (menu) menu.style.display = isAdmin ? '' : 'none';
       if (!isAdmin && view.classList.contains('active') && activateTab) activateTab('scorecard');
     }
 
@@ -4058,10 +4168,19 @@
       currentUser = user;
       document.getElementById('auth-gate').style.display = 'none';
       document.getElementById('app').style.display = 'block';
-      const badge = document.getElementById('auth-badge');
-      const label = document.getElementById('auth-user-label');
-      label.textContent = `${user.username} (${user.role})`;
-      badge.style.display = 'inline-flex';
+      const profile = document.getElementById('profile');
+      const profileUser = document.getElementById('profile-user');
+      const profileRole = document.getElementById('profile-role');
+      const avatar = document.getElementById('profile-avatar');
+      const btn = document.getElementById('profile-btn');
+      if (profileUser) profileUser.textContent = user.username;
+      if (profileRole) profileRole.textContent = user.role;
+      if (avatar) avatar.textContent = String(user.username || 'U').trim().slice(0, 1).toUpperCase() || 'U';
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+      if (profile) {
+        profile.classList.remove('open');
+        profile.style.display = 'inline-flex';
+      }
       const isAdmin = user.role === 'admin';
       setAdminVisibility(isAdmin);
       if (isAdmin) {
@@ -6417,8 +6536,8 @@
 
     async function boot() {
       try {
-        const appVersionEl = document.getElementById('app-version');
-        if (appVersionEl) appVersionEl.textContent = APP_VERSION;
+        const versionEl = document.getElementById('profile-version');
+        if (versionEl) versionEl.textContent = APP_VERSION;
         const cached = loadSharedDatasetCache();
         let data = cached;
         if (!data) {
@@ -6438,8 +6557,11 @@
         const scorecardSellerSelect = document.getElementById('scorecard-seller');
         const loginForm = document.getElementById('auth-login-form');
         const setupForm = document.getElementById('auth-setup-form');
-        const logoutBtn = document.getElementById('auth-logout');
-        const sharedRefreshBtn = document.getElementById('shared-refresh');
+        const profile = document.getElementById('profile');
+        const profileBtn = document.getElementById('profile-btn');
+        const profilePop = document.getElementById('profile-pop');
+        const profileLogout = document.getElementById('profile-logout');
+        const profileAdmin = document.getElementById('profile-admin');
         const adminUserForm = document.getElementById('admin-user-form');
         const adminTargetForm = document.getElementById('admin-target-form');
         const adminSyncForm = document.getElementById('admin-sync-form');
@@ -6770,39 +6892,47 @@
           document.getElementById('auth-login-pass').value = '';
         });
 
-        logoutBtn.addEventListener('click', () => {
-          clearSession();
-          currentUser = null;
-          document.getElementById('auth-badge').style.display = 'none';
-          showLoginOrSetup();
+        function closeProfileMenu() {
+          if (!profile) return;
+          profile.classList.remove('open');
+          if (profileBtn) profileBtn.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleProfileMenu(forceOpen) {
+          if (!profile) return;
+          const isOpen = profile.classList.contains('open');
+          const next = (forceOpen == null) ? !isOpen : !!forceOpen;
+          profile.classList.toggle('open', next);
+          if (profileBtn) profileBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        }
+
+        if (profileBtn) {
+          profileBtn.addEventListener('click', (evt) => {
+            evt.preventDefault();
+            toggleProfileMenu();
+          });
+        }
+        document.addEventListener('click', (evt) => {
+          if (!profile || !profilePop || !profileBtn) return;
+          if (profile.contains(evt.target)) return;
+          closeProfileMenu();
+        });
+        document.addEventListener('keydown', (evt) => {
+          if (evt.key === 'Escape') closeProfileMenu();
         });
 
-        sharedRefreshBtn.addEventListener('click', async () => {
-          await loadSharedStore();
-          renderAdminSyncStatus();
-          renderVersionSelectors();
-          if (!viewedVersionIdState) viewedVersionIdState = activeVersionIdState || latestVersionIdState;
-          const targetVersionId = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
-          if (targetVersionId) {
-            try {
-              const out = await fetchVersionData(targetVersionId);
-              if (out && out.dataset) {
-                data = out.dataset;
-                window.__salesData = data;
-                versionLikelihoodState = (out.likelihood && typeof out.likelihood === 'object') ? out.likelihood : {};
-              }
-            } catch (_) {}
-          }
-          isHistoricalView = !!latestVersionIdState && String(targetVersionId || '') !== String(latestVersionIdState || '');
-          likelihoodState = isHistoricalView
-            ? JSON.parse(JSON.stringify(versionLikelihoodState || {}))
-            : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
-          if (currentUser && currentUser.role === 'admin') {
-            ensureOverallForecastTargets({ persist: !isHistoricalView });
-          }
-          rerenderAllViews();
-          if (currentUser && currentUser.role === 'admin') renderAdminUsers();
-          showAdminMessage('Shared data refreshed.');
+        if (profileAdmin) {
+          profileAdmin.addEventListener('click', () => {
+            closeProfileMenu();
+            if (activateTab) activateTab('admin');
+          });
+        }
+
+        profileLogout.addEventListener('click', () => {
+          clearSession();
+          currentUser = null;
+          if (profile) profile.style.display = 'none';
+          showLoginOrSetup();
         });
 
         adminUserForm.addEventListener('submit', async (evt) => {
