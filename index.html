@@ -2075,22 +2075,27 @@
   </style>
 </head>
 <body>
-    <div class="wrap">
-      <div id="error" class="error" style="display:none;"></div>
+  <div class="wrap">
+    <div id="error" class="error" style="display:none;"></div>
+    <svg width="0" height="0" style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- Approximation of provided MathCo logo (6-spoke asterisk, no horizontal spoke) -->
+        <symbol id="mathco-logo" viewBox="0 0 120 120">
+          <g fill="none" stroke="#3b0a7a" stroke-width="18" stroke-linecap="round">
+            <path d="M60 12 L60 46" />
+            <path d="M60 74 L60 108" />
+            <path d="M27 30 L47 50" />
+            <path d="M93 30 L73 50" />
+            <path d="M27 90 L47 70" />
+            <path d="M93 90 L73 70" />
+          </g>
+          <circle cx="60" cy="60" r="10" fill="#3b0a7a"/>
+        </symbol>
+      </defs>
+    </svg>
     <div id="auth-gate" class="auth-gate" style="display:none;">
       <div class="auth-brand">
-        <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
-          <g fill="none" stroke="#3b0a7a" stroke-width="16" stroke-linecap="round">
-            <path d="M60 16 L60 44" />
-            <path d="M60 76 L60 104" />
-            <path d="M16 60 L44 60" />
-            <path d="M76 60 L104 60" />
-            <path d="M26 26 L44 44" />
-            <path d="M76 76 L94 94" />
-            <path d="M94 26 L76 44" />
-            <path d="M44 76 L26 94" />
-          </g>
-        </svg>
+        <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><use href="#mathco-logo"></use></svg>
         <div class="brand-name">MathCo Realtime Sales Reporting</div>
       </div>
       <h2>Sales Dashboard Access</h2>
@@ -2129,18 +2134,7 @@
     <div class="panel" id="app" style="display:none;">
       <div class="topbar">
         <div class="brand">
-          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
-            <g fill="none" stroke="#3b0a7a" stroke-width="16" stroke-linecap="round">
-              <path d="M60 16 L60 44" />
-              <path d="M60 76 L60 104" />
-              <path d="M16 60 L44 60" />
-              <path d="M76 60 L104 60" />
-              <path d="M26 26 L44 44" />
-              <path d="M76 76 L94 94" />
-              <path d="M94 26 L76 44" />
-              <path d="M44 76 L26 94" />
-            </g>
-          </svg>
+          <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><use href="#mathco-logo"></use></svg>
           <div class="brand-name">MathCo Realtime Sales Reporting</div>
         </div>
         <div class="app-meta">
@@ -2972,7 +2966,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.11+20260208.1';
+    const APP_VERSION = 'v0.7.12+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
