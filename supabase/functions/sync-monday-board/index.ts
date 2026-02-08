@@ -1315,6 +1315,7 @@ Deno.serve(async (req) => {
     const username = String(body?.username || "").trim().toLowerCase();
     const password = String(body?.password || "");
     const boardId = boardIdFromInput(body?.board_id || body?.board_url);
+    const versionName = String(body?.version_name || "").trim() || null;
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!boardId) return j({ error: "board_id (or board URL) is required." }, 400);
 
@@ -1394,7 +1395,7 @@ Deno.serve(async (req) => {
       likelihood: st.likelihood || {},
       dataset_hash: datasetHash,
       item_count: Number(items.length || 0),
-      notes: null,
+      notes: versionName,
     }).select("id").single();
     if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
     const versionId = inserted.data.id;

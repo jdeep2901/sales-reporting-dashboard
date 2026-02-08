@@ -1384,11 +1384,20 @@
 
     .topbar {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
       gap: 8px;
       padding: 6px 10px;
       flex-wrap: wrap;
+    }
+
+    .topbar-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .brand {
@@ -2241,29 +2250,31 @@
           <img class="brand-mark" src="assets/mathco-logo.svg" alt="MathCo logo"/>
           <div class="brand-name">MathCo Realtime Sales Reporting</div>
         </div>
-        <label class="version-switch">
-          <span>Viewing:</span>
-          <select id="version-select"></select>
-        </label>
-        <div id="profile" class="profile">
-          <button id="profile-btn" class="profile-btn" type="button" aria-haspopup="menu" aria-expanded="false">
-            <span id="profile-avatar" class="profile-avatar" aria-hidden="true">U</span>
-            <span class="profile-meta">
-              <span id="profile-user" class="profile-user">user</span>
-              <span id="profile-role" class="profile-role">viewer</span>
-            </span>
-          </button>
-          <div id="profile-pop" class="profile-pop" role="menu" aria-label="Profile menu">
-            <div class="row">
-              <div style="font-weight:900;color:#1a2f52;">MathCo Realtime Sales Reporting</div>
+        <div class="topbar-right">
+          <label class="version-switch">
+            <span>Viewing:</span>
+            <select id="version-select"></select>
+          </label>
+          <div id="profile" class="profile">
+            <button id="profile-btn" class="profile-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+              <span id="profile-avatar" class="profile-avatar" aria-hidden="true">U</span>
+              <span class="profile-meta">
+                <span id="profile-user" class="profile-user">user</span>
+                <span id="profile-role" class="profile-role">viewer</span>
+              </span>
+            </button>
+            <div id="profile-pop" class="profile-pop" role="menu" aria-label="Profile menu">
+              <div class="row">
+                <div style="font-weight:900;color:#1a2f52;">MathCo Realtime Sales Reporting</div>
+              </div>
+              <div class="row small">
+                <div>App version</div>
+                <div id="profile-version">v-</div>
+              </div>
+              <div class="divider"></div>
+              <button id="profile-admin" type="button" style="display:none;">Admin</button>
+              <button id="profile-logout" type="button">Logout</button>
             </div>
-            <div class="row small">
-              <div>App version</div>
-              <div id="profile-version">v-</div>
-            </div>
-            <div class="divider"></div>
-            <button id="profile-admin" type="button" style="display:none;">Admin</button>
-            <button id="profile-logout" type="button">Logout</button>
           </div>
         </div>
       </div>
@@ -2895,10 +2906,21 @@
                 <label for="admin-monday-board">Board URL / ID</label>
                 <input id="admin-monday-board" type="text" placeholder="https://themathcocrmtrial.monday.com/boards/6218900009" />
               </div>
+              <div class="span-2">
+                <label for="admin-monday-version-name">Snapshot name (optional)</label>
+                <input id="admin-monday-version-name" type="text" placeholder="e.g., Week of Feb 10 (post refresh cleanup)" />
+              </div>
               <button id="admin-sync-btn" type="submit">Refresh From Monday</button>
             </form>
             <div id="admin-sync-msg" class="auth-error"></div>
             <div id="admin-sync-meta" class="sync-meta">Last sync: -</div>
+            <div class="admin-grid" style="margin-top:10px; align-items:end;">
+              <div class="span-2">
+                <label for="admin-version-rename">Rename selected version</label>
+                <input id="admin-version-rename" type="text" placeholder="Displayed in Viewing dropdown (admin only)" />
+              </div>
+              <button id="admin-version-rename-btn" type="button">Rename Version</button>
+            </div>
           </div>
           <div class="admin-card">
             <label style="margin-bottom:8px;">Industry Mapping (Accounts Board)</label>
@@ -3082,7 +3104,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.19+20260208.1';
+    const APP_VERSION = 'v0.7.20+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3568,22 +3590,19 @@
       const key = quarterTargetKey(seller, quarter);
       const x = quarterTargetsState[key] || {};
       return {
-        deals: Number.isFinite(Number(x.deals)) ? Number(x.deals) : 0,
         revenue: Number.isFinite(Number(x.revenue)) ? Number(x.revenue) : 0,
       };
     }
 
-    function upsertQuarterTarget(seller, quarter, deals, revenue) {
+    function upsertQuarterTarget(seller, quarter, revenue) {
       const q = normalizeQuarterLabel(quarter);
       if (!q) throw new Error("Quarter must be in format Q4'26.");
       const s = String(seller || '').trim();
       if (!s) throw new Error('Seller is required.');
-      const dealsN = Math.max(0, Number(deals || 0));
       const revenueN = Math.max(0, Number(revenue || 0));
       quarterTargetsState[quarterTargetKey(s, q)] = {
         seller: s,
         quarter: q,
-        deals: Number.isFinite(dealsN) ? dealsN : 0,
         revenue: Number.isFinite(revenueN) ? revenueN : 0,
       };
       persistLocalStateBundle();
@@ -3607,7 +3626,6 @@
         quarterTargetsState[quarterTargetKey('Overall', qKey)] = {
           seller: 'Overall',
           quarter: qKey,
-          deals: Number(current.deals || 0),
           revenue: Number(revenue || 0),
         };
         changed = true;
@@ -3679,6 +3697,7 @@
 
       headMain.innerHTML = '';
       headSub.innerHTML = '';
+      // Keep the 2-row header structure but collapse to a single revenue column per quarter.
       const sellerMain = document.createElement('th');
       sellerMain.rowSpan = 2;
       sellerMain.textContent = 'Seller';
@@ -3689,13 +3708,9 @@
       headSub.appendChild(sellerSub);
       quarters.forEach((q) => {
         const th = document.createElement('th');
-        th.colSpan = 2;
+        th.colSpan = 1;
         th.textContent = q;
         headMain.appendChild(th);
-        const d = document.createElement('th');
-        d.textContent = 'Deals';
-        d.className = 'target-subhead';
-        headSub.appendChild(d);
         const r = document.createElement('th');
         r.textContent = 'Revenue ($)';
         r.className = 'target-subhead';
@@ -3708,18 +3723,6 @@
         tr.appendChild(makeCell('td', seller));
         quarters.forEach((q) => {
           const current = getQuarterTarget(seller, q);
-          const dealsTd = document.createElement('td');
-          const dealsInput = document.createElement('input');
-          dealsInput.type = 'number';
-          dealsInput.min = '0';
-          dealsInput.step = '1';
-          dealsInput.value = Number(current.deals || 0);
-          dealsInput.dataset.seller = seller;
-          dealsInput.dataset.quarter = q;
-          dealsInput.dataset.metric = 'deals';
-          dealsTd.appendChild(dealsInput);
-          tr.appendChild(dealsTd);
-
           const revTd = document.createElement('td');
           const revInput = document.createElement('input');
           revInput.type = 'number';
@@ -3741,6 +3744,14 @@
       const a = Number(actual || 0);
       if (t <= 0) return 'n/a';
       return `${((a / t) * 100).toFixed(1)}%`;
+    }
+
+    function scorecardQuarterLabelForDate(dateLike) {
+      // Returns "Q4'26" style label (FY starts April).
+      if (!dateLike) return null;
+      const d = parseDateOrNow(dateLike);
+      if (!d || Number.isNaN(d.getTime())) return null;
+      return fiscalQuarterText(fiscalQuarterLabel(d));
     }
 
     function stageNumber(stage) {
@@ -3900,10 +3911,13 @@
         nextQuarterRevenue: 0,
         pendingStage3Plus: 0,
       };
+      const dedupe = new Set();
       universe.forEach((rec) => {
         const key = likelihoodRecordKey(rec);
         const selected = likelihoodState[key] || '';
         const size = dealSizeValue(rec.deal_size);
+        const dkey = `${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
+        dedupe.add(dkey);
         if (selected === LIKELIHOOD_THIS_Q) {
           out.thisQuarterDeals.push(rec);
           out.thisQuarterRevenue += size;
@@ -3916,6 +3930,27 @@
 
         const stageNum = stageNumber(rec.stage);
         if (stageNum != null && stageNum >= 3 && stageNum <= 6 && !selected) out.pendingStage3Plus += 1;
+      });
+
+      // Auto-include Won deals into quarter buckets based on Start Date (no manual tagging needed).
+      const details = metric.kpi_details || {};
+      const wl = details.stage_7_8 || [];
+      (wl || []).forEach((rec) => {
+        const stage = String(rec.stage || '').toLowerCase();
+        if (!stage.includes('win') && !stage.startsWith('7.')) return;
+        const q = scorecardQuarterLabelForDate(rec.start_date);
+        if (!q) return;
+        const size = dealSizeValue(rec.deal_size);
+        const dkey = `${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
+        if (dedupe.has(dkey)) return;
+        dedupe.add(dkey);
+        if (q === activeQuarterLabels.current) {
+          out.thisQuarterDeals.push(rec);
+          out.thisQuarterRevenue += size;
+        } else if (q === activeQuarterLabels.next) {
+          out.nextQuarterDeals.push(rec);
+          out.nextQuarterRevenue += size;
+        }
       });
       return out;
     }
@@ -3955,8 +3990,8 @@
       const x = classifyLikelihoodForSeller(metric);
       const tThis = getQuarterTarget(seller, activeQuarterLabels.current);
       const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
-      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals (T ${money.format(tThis.deals)} | ${pctText(x.thisQuarterDeals.length, tThis.deals)}) | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)})`;
-      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals (T ${money.format(tNext.deals)} | ${pctText(x.nextQuarterDeals.length, tNext.deals)}) | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)})`;
+      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)} | ${pctText(x.thisQuarterRevenue, tThis.revenue)})`;
+      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)} | ${pctText(x.nextQuarterRevenue, tNext.revenue)})`;
       refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals | Not updated (stage 3+): ${money.format(x.pendingStage3Plus)}`;
       renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals);
       renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals);
@@ -4089,7 +4124,7 @@
       return null;
     }
 
-    async function refreshFromMonday(boardValue) {
+    async function refreshFromMonday(boardValue, versionName) {
       if (!currentUser || !sessionPassword) throw new Error('Please login again.');
       const boardId = parseBoardId(boardValue);
       if (!boardId) throw new Error('Enter a valid Monday board URL or numeric board ID.');
@@ -4105,6 +4140,7 @@
           username: currentUser.username,
           password: sessionPassword,
           board_id: boardId,
+          version_name: String(versionName || '').trim() || null,
         }),
       });
       const body = await res.json();
@@ -4313,6 +4349,8 @@
       const dt = fmtTs(v.created_at);
       const by = v.created_by || '-';
       const board = v.board_name || v.board_id || '-';
+      const note = String(v.notes || '').trim();
+      if (note) return `${note} | ${dt} | ${by} | ${board}`;
       return `${dt} | ${by} | ${board}`;
     }
 
@@ -4370,6 +4408,15 @@
         p_password: sessionPassword,
         p_left_version_id: leftVersionId,
         p_right_version_id: rightVersionId,
+      });
+    }
+
+    async function renameVersion(versionId, notes) {
+      return supabaseRpc('rename_dashboard_version', {
+        p_username: currentUser.username,
+        p_password: sessionPassword,
+        p_version_id: versionId,
+        p_notes: String(notes || '').trim(),
       });
     }
 
@@ -5361,16 +5408,18 @@
         shape.className = 'funnel-shape';
         const shapeTitle = document.createElement('div');
         shapeTitle.className = 'funnel-shape-title';
-        shapeTitle.textContent = 'Funnel Shape (Grouped)';
+        shapeTitle.textContent = 'Funnel Shape (By Stage)';
         shape.appendChild(shapeTitle);
-        const buckets = [
-          ['1-2', Number(m.stage_1_2_count || 0)],
-          ['3-4', Number(m.stage_3_4_count || 0)],
-          ['5-6', Number(m.stage_5_6_count || 0)],
-          ['7-8', Number(m.stage_7_8_count || 0)],
-        ];
-        const base = Math.max(1, buckets[0][1]);
-        buckets.forEach(([label, value]) => {
+        const counts = {};
+        const details2 = m.kpi_details || {};
+        [...(details2.stage_1_6 || []), ...(details2.stage_7_8 || [])].forEach((r) => {
+          const st = String(r.stage || '').trim() || '(blank)';
+          counts[st] = (counts[st] || 0) + 1;
+        });
+        const stages = ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','5. Contracting','6. Commercial Proposal','7. Win','8. Loss'];
+        const maxV = Math.max(1, ...stages.map((s) => Number(counts[s] || 0)));
+        stages.forEach((label) => {
+          const value = Number(counts[label] || 0);
           const row = document.createElement('div');
           row.className = 'funnel-shape-row';
           const l = document.createElement('div');
@@ -5380,7 +5429,7 @@
           track.className = 'funnel-shape-track';
           const fill = document.createElement('div');
           fill.className = 'funnel-shape-fill';
-          const widthPct = Math.max(4, Math.min(100, (value / base) * 100));
+          const widthPct = Math.max(4, Math.min(100, (value / maxV) * 100));
           fill.style.width = `${widthPct}%`;
           track.appendChild(fill);
           const v = document.createElement('div');
@@ -6928,6 +6977,38 @@
           });
         }
 
+        const renameBtn = document.getElementById('admin-version-rename-btn');
+        if (renameBtn) {
+          renameBtn.addEventListener('click', async () => {
+            showAdminSyncMessage('');
+            if (!currentUser || currentUser.role !== 'admin') {
+              showAdminSyncMessage('Only admin users can rename versions.');
+              return;
+            }
+            const versionId = (document.getElementById('version-select') && document.getElementById('version-select').value) || viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+            if (!versionId) {
+              showAdminSyncMessage('No version selected.');
+              return;
+            }
+            const notes = document.getElementById('admin-version-rename') ? document.getElementById('admin-version-rename').value : '';
+            if (!String(notes || '').trim()) {
+              showAdminSyncMessage('Enter a name to save.');
+              return;
+            }
+            try {
+              renameBtn.disabled = true;
+              const out = await renameVersion(versionId, notes);
+              if (out) applySharedStorePayload(out);
+              renderVersionSelectors();
+              showAdminSyncMessage('Version renamed.');
+            } catch (e) {
+              showAdminSyncMessage(e.message || 'Rename failed.');
+            } finally {
+              renameBtn.disabled = false;
+            }
+          });
+        }
+
         profileLogout.addEventListener('click', () => {
           clearSession();
           currentUser = null;
@@ -6964,7 +7045,9 @@
           }
           const btn = document.getElementById('admin-sync-btn');
           const boardInput = document.getElementById('admin-monday-board');
+          const nameInput = document.getElementById('admin-monday-version-name');
           const boardRaw = boardInput ? boardInput.value : '';
+          const versionName = nameInput ? nameInput.value : '';
           const boardId = parseBoardId(boardRaw);
           if (!boardId) {
             showAdminSyncMessage('Enter a valid Monday board URL/ID.');
@@ -6979,7 +7062,7 @@
           try {
             if (btn) btn.disabled = true;
             showAdminSyncMessage('Refreshing from Monday.com...');
-            const out = await refreshFromMonday(boardRaw);
+            const out = await refreshFromMonday(boardRaw, versionName);
             showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}. Reloading...`);
             setTimeout(() => window.location.reload(), 600);
           } catch (e) {
@@ -7018,13 +7101,11 @@
           };
           sellers.forEach((seller) => {
             quarters.forEach((quarter) => {
-              const deals = Math.max(0, Number(valueFor(seller, quarter, 'deals') || 0));
               const revenue = Math.max(0, Number(valueFor(seller, quarter, 'revenue') || 0));
-              if (deals > 0 || revenue > 0) {
+              if (revenue > 0) {
                 newState[quarterTargetKey(seller, quarter)] = {
                   seller,
                   quarter,
-                  deals: Number.isFinite(deals) ? deals : 0,
                   revenue: Number.isFinite(revenue) ? revenue : 0,
                 };
               }
