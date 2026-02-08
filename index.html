@@ -1386,21 +1386,21 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 10px;
-      padding: 10px 12px 0;
+      gap: 8px;
+      padding: 6px 10px;
       flex-wrap: wrap;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
     }
 
     .brand-mark {
-      width: 28px;
-      height: 28px;
+      width: 22px;
+      height: 22px;
       flex: 0 0 auto;
       display: block;
       object-fit: contain;
@@ -1410,7 +1410,7 @@
       font-weight: 800;
       letter-spacing: 0.2px;
       color: #142033;
-      font-size: 14px;
+      font-size: 13px;
       white-space: nowrap;
     }
 
@@ -1421,13 +1421,20 @@
       flex-wrap: wrap;
     }
 
+    .topbar-hint {
+      display: none;
+      color: #6b7ea4;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
     .app-version {
       border: 1px solid #d3e0ff;
       background: #eef4ff;
       color: #1f3f75;
       border-radius: 999px;
-      padding: 4px 8px;
-      font-size: 11px;
+      padding: 3px 7px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.2px;
       white-space: nowrap;
@@ -1436,9 +1443,9 @@
     .version-switch {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       color: #274777;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
     }
 
@@ -1447,9 +1454,9 @@
       border-radius: 8px;
       background: #fff;
       color: #244777;
-      font-size: 11px;
-      padding: 4px 7px;
-      min-width: 170px;
+      font-size: 10px;
+      padding: 3px 7px;
+      min-width: 150px;
     }
 
     .auth-badge {
@@ -1461,7 +1468,7 @@
       background: #eef4ff;
       border: 1px solid #d3e0ff;
       border-radius: 999px;
-      padding: 6px 10px;
+      padding: 5px 8px;
     }
 
     .auth-badge button {
@@ -1469,9 +1476,9 @@
       border-radius: 999px;
       background: #fff;
       color: #184487;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 4px 8px;
+      padding: 3px 8px;
       cursor: pointer;
     }
 
@@ -2140,7 +2147,7 @@
           <div class="brand-name">MathCo Realtime Sales Reporting</div>
         </div>
         <div class="app-meta">
-          <div class="sub">Private credentials are managed from the Admin tab.</div>
+          <div class="topbar-hint">Private credentials are managed from the Admin tab.</div>
           <div id="app-version" class="app-version">v-</div>
           <label class="version-switch">
             <span>Viewing:</span>
@@ -2968,7 +2975,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.17+20260208.1';
+    const APP_VERSION = 'v0.7.18+20260208.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
