@@ -1147,77 +1147,55 @@
 	    .closure-filters {
 	      display: flex;
 	      align-items: center;
-	      justify-content: flex-end;
+	      justify-content: flex-start;
 	      gap: 10px;
 	      margin-top: 8px;
 	      flex-wrap: wrap;
 	    }
 	
-	    .ms {
-	      position: relative;
+	    .pill-picker {
+	      display: flex;
+	      align-items: center;
+	      flex-wrap: wrap;
+	      gap: 6px;
+	      padding: 7px 8px;
 	      border: 1px solid #dbe6fb;
 	      background: #ffffff;
-	      border-radius: 10px;
-	      padding: 6px 8px;
+	      border-radius: 12px;
 	      box-shadow: 0 8px 20px rgba(10, 35, 80, 0.05);
 	    }
 	
-	    .ms summary {
+	    .pill-picker .label {
+	      font-size: 12px;
+	      font-weight: 800;
+	      color: #274777;
+	      margin-right: 4px;
+	    }
+	
+	    .pill-btn {
+	      border: 1px solid #dbe6fb;
+	      background: #f5f9ff;
+	      color: #274777;
+	      border-radius: 999px;
+	      padding: 6px 10px;
+	      font-size: 12px;
+	      font-weight: 700;
 	      cursor: pointer;
-	      list-style: none;
-	      font-size: 12px;
-	      font-weight: 700;
-	      color: #274777;
-	      outline: none;
 	      user-select: none;
+	      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
 	    }
 	
-	    .ms summary::-webkit-details-marker { display: none; }
+	    .pill-btn:hover { transform: translateY(-1px); }
 	
-	    .ms-panel {
-	      margin-top: 8px;
-	      padding-top: 8px;
-	      border-top: 1px solid #e6eefc;
-	      max-height: 220px;
-	      overflow: auto;
-	      min-width: 260px;
+	    .pill-btn.active {
+	      background: #1a66ff;
+	      border-color: #1a66ff;
+	      color: #ffffff;
 	    }
 	
-	    .ms-row {
-	      display: flex;
-	      align-items: center;
-	      gap: 8px;
-	      padding: 5px 2px;
-	      font-size: 12px;
-	      color: #1e345a;
-	    }
-	
-	    .ms-row input { accent-color: #2f7efc; }
-	
-	    .closure-help-filter {
-	      display: flex;
-	      align-items: center;
-	      gap: 8px;
-	      border: 1px solid #dbe6fb;
+	    .pill-btn.muted {
 	      background: #ffffff;
-	      border-radius: 10px;
-	      padding: 6px 8px;
-	      box-shadow: 0 8px 20px rgba(10, 35, 80, 0.05);
-	    }
-	
-	    .closure-help-filter label {
-	      font-size: 12px;
-	      font-weight: 700;
-	      color: #274777;
-	    }
-	
-	    .closure-help-filter select {
-	      border: 1px solid #dbe6fb;
-	      border-radius: 8px;
-	      padding: 6px 8px;
-	      font-size: 12px;
-	      color: #1e345a;
-	      background: #ffffff;
+	      color: #45608c;
 	    }
 
     .likelihood-table-card {
@@ -3235,7 +3213,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.35+20260209.1';
+    const APP_VERSION = 'v0.7.36+20260209.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4147,7 +4125,7 @@
       thisDeals.sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')));
       nextDeals.sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')));
 
-      // Build stage filter options from the current closures universe.
+      // Build stage filter pills from the current closures universe.
       const stageUniverse = new Set();
       [...thisDeals, ...nextDeals].forEach((rec) => {
         const st = String(rec.stage || '').trim() || '(blank)';
@@ -4155,35 +4133,50 @@
       });
       const stageOptions = Array.from(stageUniverse)
         .sort((a, b) => (stageSortKey(a) - stageSortKey(b)) || a.localeCompare(b));
-      if (refs.closureStagePanelEl && refs.closureStageSummaryEl) {
-        refs.closureStagePanelEl.innerHTML = '';
+      if (refs.closureStagePillsEl) {
+        refs.closureStagePillsEl.innerHTML = '';
         stageOptions.forEach((st) => {
-          const row = document.createElement('label');
-          row.className = 'ms-row';
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.value = st;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'pill-btn';
+          btn.textContent = st;
           const activeSet = scorecardClosureStageFilter;
-          cb.checked = (!activeSet || activeSet.size === 0) ? true : activeSet.has(st);
-          cb.addEventListener('change', () => {
+          const active = (!activeSet || activeSet.size === 0) ? true : activeSet.has(st);
+          btn.classList.toggle('active', active);
+          btn.addEventListener('click', () => {
+            // Multi-select toggle.
             const next = new Set(scorecardClosureStageFilter || stageOptions);
-            if (cb.checked) next.add(st);
-            else next.delete(st);
-            // Normalize: if all selected, store null (means All) to keep state small.
+            if (next.has(st)) next.delete(st);
+            else next.add(st);
+            // Normalize: if all selected, store null (means All).
             if (next.size === stageOptions.length) scorecardClosureStageFilter = null;
             else scorecardClosureStageFilter = next;
             updateLikelihoodSummaryForSeller(seller);
           });
-          const txt = document.createElement('span');
-          txt.textContent = st;
-          row.appendChild(cb);
-          row.appendChild(txt);
-          refs.closureStagePanelEl.appendChild(row);
+          refs.closureStagePillsEl.appendChild(btn);
         });
-        refs.closureStageSummaryEl.textContent = stageLabelText(
-          scorecardClosureStageFilter,
-          stageOptions.length
-        );
+      }
+
+      if (refs.closureHelpPillsEl) {
+        refs.closureHelpPillsEl.innerHTML = '';
+        const choices = [
+          ['all', 'All'],
+          ['yes', 'Yes'],
+          ['no', 'No'],
+        ];
+        choices.forEach(([v, label]) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'pill-btn muted';
+          btn.textContent = label;
+          const active = (scorecardClosureHelpFilter || 'all') === v;
+          btn.classList.toggle('active', active);
+          btn.addEventListener('click', () => {
+            scorecardClosureHelpFilter = v;
+            updateLikelihoodSummaryForSeller(seller);
+          });
+          refs.closureHelpPillsEl.appendChild(btn);
+        });
       }
 
       const stageFilterSet = scorecardClosureStageFilter;
@@ -5706,41 +5699,33 @@
         const closureFilterBar = document.createElement('div');
         closureFilterBar.className = 'closure-filters';
 
-        // Stage multi-select (checkbox dropdown).
-        const stageMs = document.createElement('details');
-        stageMs.className = 'ms';
-        const stageSummary = document.createElement('summary');
-        stageSummary.textContent = 'Stages: All';
-        stageMs.appendChild(stageSummary);
-        const stagePanel = document.createElement('div');
-        stagePanel.className = 'ms-panel';
-        stageMs.appendChild(stagePanel);
-        closureFilterBar.appendChild(stageMs);
+        // Stage multi-select (pill picker).
+        const stagePicker = document.createElement('div');
+        stagePicker.className = 'pill-picker';
+        const stageLab = document.createElement('div');
+        stageLab.className = 'label';
+        stageLab.textContent = 'Stages';
+        stagePicker.appendChild(stageLab);
+        const stagePills = document.createElement('div');
+        stagePills.style.display = 'flex';
+        stagePills.style.flexWrap = 'wrap';
+        stagePills.style.gap = '6px';
+        stagePicker.appendChild(stagePills);
+        closureFilterBar.appendChild(stagePicker);
 
-        // Help Needed filter (All / Yes / No).
-        const helpBox = document.createElement('div');
-        helpBox.className = 'closure-help-filter';
-        const helpLab = document.createElement('label');
+        // Help Needed filter (single-select pill picker).
+        const helpPicker = document.createElement('div');
+        helpPicker.className = 'pill-picker';
+        const helpLab = document.createElement('div');
+        helpLab.className = 'label';
         helpLab.textContent = 'Help Needed';
-        const helpSel = document.createElement('select');
-        [
-          ['all', 'All'],
-          ['yes', 'Yes'],
-          ['no', 'No'],
-        ].forEach(([v, t]) => {
-          const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = t;
-          helpSel.appendChild(opt);
-        });
-        helpSel.value = scorecardClosureHelpFilter || 'all';
-        helpSel.addEventListener('change', () => {
-          scorecardClosureHelpFilter = helpSel.value || 'all';
-          updateLikelihoodSummaryForSeller(seller);
-        });
-        helpBox.appendChild(helpLab);
-        helpBox.appendChild(helpSel);
-        closureFilterBar.appendChild(helpBox);
+        helpPicker.appendChild(helpLab);
+        const helpPills = document.createElement('div');
+        helpPills.style.display = 'flex';
+        helpPills.style.flexWrap = 'wrap';
+        helpPills.style.gap = '6px';
+        helpPicker.appendChild(helpPills);
+        closureFilterBar.appendChild(helpPicker);
 
         card.appendChild(closureFilterBar);
 
@@ -5787,8 +5772,8 @@
           nextQuarterMeta: nextCard.meta,
           thisQuarterLines: thisCard.lines,
           nextQuarterLines: nextCard.lines,
-          closureStageSummaryEl: stageSummary,
-          closureStagePanelEl: stagePanel,
+          closureStagePillsEl: stagePills,
+          closureHelpPillsEl: helpPills,
         };
 
         wrap.appendChild(card);
