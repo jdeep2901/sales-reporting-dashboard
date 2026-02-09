@@ -697,6 +697,7 @@ async function buildDataset(
 
   let accountsIndustryColId: string | null = accountsIndustryColPinned;
   const accountIndustryById: Record<string, string> = {};
+  const accountNameById: Record<string, string> = {};
   let accountsJoinEnabled = false;
   let accountsJoinStats = {
     account_ids_found: 0,
@@ -788,6 +789,7 @@ async function buildDataset(
       const accountItems = await fetchItemsByIds(opts.monday_token, accountIds, [accountsIndustryColId]);
       accountsJoinStats.account_items_fetched = accountItems.length;
       for (const ai of accountItems) {
+        if (ai?.id && ai?.name) accountNameById[String(ai.id)] = String(ai.name);
         const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
         const val = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
         if (val) accountIndustryById[String(ai.id)] = val;
@@ -800,15 +802,18 @@ async function buildDataset(
     if (!accountIds.length && accountsIndustryColId && accountsJoinStats.relation_nonempty_text_sample > 0) {
       const accItemsAll = await fetchBoardItems(opts.monday_token, accountsBoardId, [accountsIndustryColId]);
       const nameToIndustry: Record<string, string> = {};
+      const nameToId: Record<string, string> = {};
       for (const ai of accItemsAll) {
         const nm = norm(ai.name || "");
         if (!nm) continue;
+        nameToId[nm] = String(ai.id || "");
         const cv = (ai.column_values || []).find((v) => v.id === accountsIndustryColId);
         const val = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
         if (val) nameToIndustry[nm] = val;
       }
       // Store in the same map but keyed by name marker.
       (accountIndustryById as any).__nameToIndustry = nameToIndustry;
+      (accountNameById as any).__nameToId = nameToId;
       accountsJoinStats.account_name_matched = Object.keys(nameToIndustry).length;
     }
   }
@@ -1026,7 +1031,33 @@ async function buildDataset(
       }
     }
     const industry = primaryToken(industryRawText);
-    const logo = primaryToken(byIdSmartText(item, logoCol));
+    let logoRawText = byIdSmartText(item, logoCol);
+    if (accountsJoinEnabled && accountsRelationColId) {
+      const fallback = relationValueByDealId ? relationValueByDealId[String(item.id)] : null;
+      const cv = fallback
+        ? ({ id: accountsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
+        : item.column_values.find((v) => v.id === accountsRelationColId);
+      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      for (const aid of linked) {
+        const nm = accountNameById[String(aid)] || "";
+        if (nm && nm.trim()) { logoRawText = nm; break; }
+      }
+      if ((!logoRawText || !logoRawText.trim()) && cv) {
+        const cvText = (cv && (String((cv as any).text || "").trim() || String((cv as any).display_value || "").trim())) || "";
+        const nameToId = (accountNameById as any).__nameToId || null;
+        if (cvText && nameToId) {
+          const parts = String(cvText || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          for (const nm of parts) {
+            const id = nameToId[norm(nm)] || "";
+            if (id && accountNameById[id]) { logoRawText = accountNameById[id]; break; }
+          }
+        }
+      }
+    }
+    const logo = primaryToken(logoRawText);
     const bizFn = primaryToken(byIdSmartText(item, functionCol));
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
     const revenueSource = byIdSmartText(item, revenueSourceCol);
