@@ -656,7 +656,15 @@ async function buildDataset(
   const industryCol = industryColPinned || industryColAuto;
 
   const logoCol = pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
-  const functionCol = pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function"]);
+  // Business Function is often a mirrored / formula / connect-backed column; pick by fill-rate across likely candidates.
+  const functionCandidates = pickColumnIds(columns, [
+    (t) => t.includes("business function"),
+    (t) => t === "function",
+    (t) => t.includes("function"),
+    (t) => t.includes("business") && t.includes("role"),
+  ]);
+  const functionPick = pickBestColumnIdByFillRate(items, functionCandidates, (it, id) => byIdSmartText(it, id));
+  const functionCol = functionPick.best || pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function", (t) => t.includes("function")]);
   const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
   const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
   const adjContractNumCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
@@ -721,7 +729,7 @@ async function buildDataset(
     account_name_matched: 0,
   };
 
-  // Some Monday API responses omit board_relation values when requesting many columns at once.
+  // Some Monday API responses omit certain column values when requesting many columns at once.
   // If we're attempting an Accounts join, fetch the relation column by itself and use that value for linking.
   let relationValueByDealId: Record<string, { text: string; display_value: string; value: string | null }> | null = null;
   if (opts?.monday_token && accountsRelationColId) {
@@ -739,6 +747,35 @@ async function buildDataset(
       }
     } catch (_) {
       relationValueByDealId = null;
+    }
+  }
+
+  // Same idea for Business Function: if the chosen column appears mostly blank, fetch it alone to recover display_value.
+  let functionValueByDealId: Record<string, { text: string; display_value: string; value: string | null }> | null = null;
+  if (opts?.monday_token && functionCol) {
+    try {
+      const sample = items.slice(0, 220);
+      const filled = sample.filter((it) => {
+        const cv = (it.column_values || []).find((v) => v.id === functionCol);
+        const v = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
+        return !!String(v || "").trim();
+      }).length;
+      // If fewer than 25% of sampled rows have a function value, attempt a single-column refetch.
+      if (sample.length && (filled / sample.length) < 0.25) {
+        const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
+        const fnOnly = await fetchItemsByIds(opts.monday_token, dealIds, [functionCol]);
+        functionValueByDealId = {};
+        for (const it of fnOnly) {
+          const cv = (it.column_values || []).find((v) => v.id === functionCol);
+          functionValueByDealId[String(it.id)] = {
+            text: String(cv?.text || ""),
+            display_value: String((cv as any)?.display_value || ""),
+            value: cv?.value || null,
+          };
+        }
+      }
+    } catch (_) {
+      functionValueByDealId = null;
     }
   }
 
@@ -1064,7 +1101,12 @@ async function buildDataset(
       }
     }
     const logo = primaryToken(logoRawText);
-    const bizFn = primaryToken(byIdSmartText(item, functionCol));
+    let bizFnRaw = byIdSmartText(item, functionCol);
+    if ((!bizFnRaw || !String(bizFnRaw).trim()) && functionValueByDealId && functionCol) {
+      const fallback = functionValueByDealId[String(item.id)];
+      if (fallback) bizFnRaw = smartTextFromMondayColumnValue(fallback.text, fallback.display_value, fallback.value);
+    }
+    const bizFn = primaryToken(bizFnRaw);
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
     const revenueSource = byIdSmartText(item, revenueSourceCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
@@ -1382,7 +1424,7 @@ Deno.serve(async (req) => {
     const nextStepCol = pick([(t: string) => t.includes("next step")]);
     const industryCol = pinnedIndustryCol || pick([(t: string) => t.includes("industry")]);
     const logoCol = pick([(t: string) => t.includes("logo"), (t: string) => t.includes("account") || t.includes("company")]);
-    const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function"]);
+    const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function", (t: string) => t.includes("function")]);
     const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
     const revenueSourceCol = pick([(t: string) => t.includes("revenue source mapping"), (t: string) => t.includes("revenue source")]);
     const adjContractNumCol = pick([(t: string) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);

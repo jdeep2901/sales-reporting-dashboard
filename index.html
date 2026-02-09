@@ -2424,6 +2424,13 @@
               <label for="scorecard-seller">Seller View</label>
               <select id="scorecard-seller"></select>
             </div>
+            <div class="funnel-time" style="min-width:260px;">
+              <div class="funnel-time-head">
+                <label for="scorecard-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="scorecard-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="scorecard-time-slider" type="range" min="0" max="0" value="0" />
+            </div>
           </div>
         </div>
         <div class="insight">
@@ -3044,21 +3051,7 @@
       </div>
     </div>
   </div>
-  <button id="chat-fab" class="chat-fab" type="button" title="Ask about your data">
-    <img src="./assets/chatbot-icon.svg" alt="Chatbot" />
-  </button>
-  <div id="chat-panel" class="chat-panel" aria-hidden="true">
-    <div class="chat-panel-head">
-      <span>Sales Data Chat</span>
-      <button id="chat-close" type="button">Close</button>
-    </div>
-    <div id="chat-messages" class="chat-messages"></div>
-    <div class="chat-input-row">
-      <input id="chat-input" type="text" placeholder="Ask: How many deals are in contracting for Somya?" />
-      <button id="chat-send" type="button">Ask</button>
-    </div>
-    <div id="chat-suggest" class="chat-suggest" style="padding: 0 10px 10px;"></div>
-  </div>
+  <!-- Chat UI removed for now (LLM disabled). -->
   <div id="chart-tooltip" class="chart-tooltip"></div>
   <div id="kpi-popup" class="popup" aria-hidden="true">
     <div class="popup-card">
@@ -3150,7 +3143,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.30+20260209.1';
+    const APP_VERSION = 'v0.7.31+20260209.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3220,6 +3213,8 @@
     let scorecardSummaryEls = {};
     let scorecardSellerLabels = [];
     let scorecardSelectedSeller = 'Overall';
+    let scorecardIntroMonthsState = [];
+    let scorecardIntroCutoffMonthState = null;
     let cycleRowsState = [];
     let cycleScopeState = 'Overall';
     let cycleIntroMonthsState = [];
@@ -3267,16 +3262,8 @@
       return String(value || '').trim().toLowerCase();
     }
 
-    function chatAppend(role, text) {
-      const box = document.getElementById('chat-messages');
-      if (!box) return;
-      const div = document.createElement('div');
-      div.className = `chat-msg ${role}`;
-      div.textContent = text;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
-      return div;
-    }
+    // Chat disabled for now.
+    function chatAppend() { return null; }
 
     function chatResolveSeller(q, data) {
       const s = String(q || '').toLowerCase();
@@ -3398,94 +3385,6 @@
       chatDataRef = data;
       if (chatInitialized) return;
       chatInitialized = true;
-      const fab = document.getElementById('chat-fab');
-      const panel = document.getElementById('chat-panel');
-      const close = document.getElementById('chat-close');
-      const input = document.getElementById('chat-input');
-      const send = document.getElementById('chat-send');
-      const suggest = document.getElementById('chat-suggest');
-
-      const toggle = (open) => {
-        panel.classList.toggle('open', !!open);
-        panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-        if (open) setTimeout(() => input.focus(), 40);
-      };
-
-      async function ask() {
-        const q = input.value.trim();
-        if (!q) return;
-        chatAppend('user', q);
-        const dataNow = chatDataRef || window.__salesData;
-        if (!dataNow) {
-          chatAppend('assistant', 'Data is not loaded yet. Please refresh the dashboard first.');
-          input.value = '';
-          return;
-        }
-        const pending = chatAppend('assistant', 'Thinking…');
-        try {
-          const ans = await chatAskLlm(q);
-          pending.textContent = ans;
-        } catch (e) {
-          pending.textContent = `${chatAnswer(q, dataNow)}\n\n[LLM unavailable: ${e && e.message ? e.message : 'failed'}]`;
-        }
-        input.value = '';
-      }
-
-      fab.addEventListener('click', () => toggle(!panel.classList.contains('open')));
-      close.addEventListener('click', () => toggle(false));
-      send.addEventListener('click', ask);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') ask();
-      });
-
-      const prompts = [
-        'How many deals are in contracting for Somya?',
-        'Which deals are stuck for Akshay Iyer?',
-        'Show won/lost sources for Overall',
-        'Give me funnel snapshot for Vitor Quirino'
-      ];
-      prompts.forEach((p) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = p;
-        b.addEventListener('click', () => {
-          toggle(true);
-          input.value = p;
-          ask();
-        });
-        suggest.appendChild(b);
-      });
-
-      chatAppend('assistant', 'Ask me about stage counts, deal lists, stuck deals, funnel snapshot, intro trend, or won/lost sources.');
-    }
-
-    async function chatAskLlm(question) {
-      if (!currentUser || !sessionPassword) throw new Error('Not logged in');
-      const url = `${SUPABASE_URL}/functions/v1/chat-analyst`;
-      const payload = {
-        username: currentUser.username,
-        password: sessionPassword,
-        question,
-        // If the user is viewing a historical version, answer from that snapshot.
-        version_id: viewedVersionIdState || null,
-      };
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok || !out || out.ok !== true) {
-        const msg = out && out.error ? String(out.error) : `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
-      const model = out.model ? ` (${out.model})` : '';
-      const v = out.version_id ? ` [v=${String(out.version_id).slice(0, 8)}]` : '';
-      return `${String(out.answer || '').trim() || '(no answer)'}${model}${v}`;
     }
 
     function dealSizeValue(raw) {
@@ -5442,6 +5341,10 @@
       scorecardStateBySeller = {};
       scorecardSummaryEls = {};
 
+      // Apply additional Intro cutoff in this tab (beyond backend snapshot cutoff).
+      const cutoffMonth = scorecardIntroCutoffMonthState || null;
+      const filterRecords = (arr) => (Array.isArray(arr) ? arr.filter((r) => passIntroCutoffMonth(r.intro_date, cutoffMonth)) : []);
+
       const scorecardSellerSelect = document.getElementById('scorecard-seller');
       if (scorecardSellerSelect) {
         const curr = scorecardSelectedSeller;
@@ -5468,7 +5371,30 @@
       }
 
       renderEntries.forEach(({ label: seller, metric: m }) => {
-        scorecardStateBySeller[seller] = m;
+        // Recompute counts based on filtered details.
+        const detailsRaw = m.kpi_details || {};
+        const d12 = filterRecords(detailsRaw.stage_1_2);
+        const d34 = filterRecords(detailsRaw.stage_3_4);
+        const d16 = filterRecords(detailsRaw.stage_1_6);
+        const d56 = filterRecords(detailsRaw.stage_5_6);
+        const d78 = filterRecords(detailsRaw.stage_7_8);
+        const filteredMetric = {
+          ...m,
+          stage_1_2_count: d12.length,
+          stage_3_4_count: d34.length,
+          stage_1_6_count: d16.length,
+          stage_5_6_count: d56.length,
+          stage_7_8_count: d78.length,
+          kpi_details: {
+            ...detailsRaw,
+            stage_1_2: d12,
+            stage_3_4: d34,
+            stage_1_6: d16,
+            stage_5_6: d56,
+            stage_7_8: d78,
+          },
+        };
+        scorecardStateBySeller[seller] = filteredMetric;
         const card = document.createElement('div');
         card.className = 'score-card';
 
@@ -5489,13 +5415,13 @@
 
         const kpis = document.createElement('div');
         kpis.className = 'score-kpis';
-        const details = m.kpi_details || {};
+        const details = filteredMetric.kpi_details || {};
         const entries = [
-          ['Stage 1-6 Total', money.format(m.stage_1_6_count || 0), 'stage_1_6'],
-          ['Stage 1-2', money.format(m.stage_1_2_count || 0), 'stage_1_2'],
-          ['Stage 3-4', money.format(m.stage_3_4_count || 0), 'stage_3_4'],
-          ['Stage 5-6', money.format(m.stage_5_6_count || 0), 'stage_5_6'],
-          ['Won/Lost (7-8)', money.format(m.stage_7_8_count || 0), 'stage_7_8'],
+          ['Stage 1-6 Total', money.format(filteredMetric.stage_1_6_count || 0), 'stage_1_6'],
+          ['Stage 1-2', money.format(filteredMetric.stage_1_2_count || 0), 'stage_1_2'],
+          ['Stage 3-4', money.format(filteredMetric.stage_3_4_count || 0), 'stage_3_4'],
+          ['Stage 5-6', money.format(filteredMetric.stage_5_6_count || 0), 'stage_5_6'],
+          ['Won/Lost (7-8)', money.format(filteredMetric.stage_7_8_count || 0), 'stage_7_8'],
         ];
         entries.forEach(([label, value, detailKey]) => {
           const box = document.createElement('div');
@@ -5522,7 +5448,7 @@
         shapeTitle.textContent = 'Funnel Shape (By Stage)';
         shape.appendChild(shapeTitle);
         const counts = {};
-        const details2 = m.kpi_details || {};
+        const details2 = filteredMetric.kpi_details || {};
         [...(details2.stage_1_6 || []), ...(details2.stage_7_8 || [])].forEach((r) => {
           const st = String(r.stage || '').trim() || '(blank)';
           counts[st] = (counts[st] || 0) + 1;
@@ -5622,6 +5548,9 @@
       } else {
         const m = (score.sellers || {})[picked] || {};
         lines.push(`${picked}: Stage 1-6 = ${money.format(m.stage_1_6_count || 0)}, Stage 5-6 = ${money.format(m.stage_5_6_count || 0)}, Won/Lost = ${money.format(m.stage_7_8_count || 0)}.`);
+      }
+      if (scorecardIntroCutoffMonthState) {
+        lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
       }
       setInsight('insight-scorecard', lines);
     }
@@ -5945,6 +5874,13 @@
         valueEl.textContent = ms[i] || '-';
         onChange();
       });
+    }
+
+    function passIntroCutoffMonth(introDate, cutoffMonth) {
+      const cm = cutoffMonth || null;
+      if (!cm) return true;
+      const m = String(introDate || '').slice(0, 7);
+      return !m || m >= cm;
     }
 
     function buildIntroSeries(data, scope, granularity) {
@@ -6899,13 +6835,14 @@
         currentAuthStore = loadAuthStore();
         ensureOverallForecastTargets({ persist: false });
         window.__salesData = data;
-        initChatAssistant(data);
+        // Chat UI currently disabled.
         renderMomentumSellerFilter(data);
 
         // Industry Action + Won/Lost tabs use their own intro cutoffs (client-side recompute).
         const allDealsForSliders = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
         industryIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
         wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+        scorecardIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
         initMonthSlider(
           document.getElementById('industry-time-slider'),
           document.getElementById('industry-time-value'),
@@ -6921,6 +6858,14 @@
           () => wlIntroCutoffMonthState,
           (v) => { wlIntroCutoffMonthState = v; },
           () => renderWinLoss(data, (document.getElementById('wl-seller') || {}).value || 'Overall (unique)'),
+        );
+        initMonthSlider(
+          document.getElementById('scorecard-time-slider'),
+          document.getElementById('scorecard-time-value'),
+          scorecardIntroMonthsState,
+          () => scorecardIntroCutoffMonthState,
+          (v) => { scorecardIntroCutoffMonthState = v; },
+          () => renderScorecard(data),
         );
 
         function rerenderAllViews() {
