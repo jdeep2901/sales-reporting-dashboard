@@ -3303,7 +3303,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.41+20260209.1';
+    const APP_VERSION = 'v0.7.42+20260209.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6584,9 +6584,9 @@
         1: 'Intro',
         2: 'Qualification',
         3: 'Capabilities',
-        4: 'Scoping',
+        4: 'Problem Scoping',
         5: 'Contracting',
-        6: 'Proposal',
+        6: 'Commercial Proposal',
       };
       return stageMap[n] || `Stage ${n}`;
     }
@@ -6748,7 +6748,7 @@
       });
 
       // Ensure consistent stage row ordering.
-      const ordered = ['Intro', 'Qualification', 'Capabilities', 'Scoping', 'Contracting', 'Proposal'];
+      const ordered = ['Intro', 'Qualification', 'Capabilities', 'Problem Scoping', 'Contracting', 'Commercial Proposal'];
       const normalizedOut = {};
       ordered.forEach((k) => {
         if (out[k]) normalizedOut[k] = out[k];
