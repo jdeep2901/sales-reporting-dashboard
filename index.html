@@ -2787,10 +2787,55 @@
       </div>
 
 	      <div id="view-forecast" class="view">
-        <div class="head">
-          <div>
-            <h1>Quarterly Revenue Forecast (Risk-Adjusted EV)</h1>
-            <div class="sub">EV per deal = Deal Size × P(win | stage). Stages 1-4 use $100,000 default size; stages 5-6 use adjusted deal size from Monday.</div>
+	        <div class="head">
+	          <div>
+	            <h1>Quarterly Revenue Forecast (Risk-Adjusted EV)</h1>
+	            <div class="sub">EV per deal = Deal Size × P(win | stage). Stages 1-4 use $100,000 default size; stages 5-6 use adjusted deal size from Monday.</div>
+	          </div>
+	          <div class="controls">
+	            <div>
+	              <label for="forecast-seller">Scope</label>
+	              <select id="forecast-seller"></select>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="insight">
+	          <div class="insight-title">Forecast Summary</div>
+	          <ul id="insight-forecast" class="insight-list"></ul>
+	        </div>
+	        <div class="forecast-wrap">
+	          <div class="table-wrap">
+	            <table class="forecast-table" id="forecast-table">
+	              <thead>
+	                <tr id="forecast-head-row"></tr>
+	              </thead>
+	              <tbody id="forecast-body"></tbody>
+	            </table>
+	          </div>
+	          <div class="forecast-detail">
+	            <div class="forecast-detail-head">
+	              <div id="forecast-detail-title" class="forecast-detail-title">Forecast Deal Breakup</div>
+	              <div id="forecast-detail-meta" class="detail-meta">Click Proposal, Contracting, or Won cells to view deal-level splits.</div>
+	            </div>
+	            <div class="forecast-detail-wrap">
+	              <table class="forecast-detail-table">
+	                <thead>
+	                  <tr>
+	                    <th>Deal</th>
+	                    <th>Stage</th>
+	                    <th>Start Date</th>
+	                    <th>Duration (months)</th>
+	                    <th>Deal Size</th>
+	                    <th>Quarter Contribution</th>
+	                    <th>Basis</th>
+	                  </tr>
+	                </thead>
+	                <tbody id="forecast-detail-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="footnote">Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%. Stage phasing follows the configured quarter splits.</div>
 	      </div>
 
 	      <div id="view-forecast-actuals" class="view">
@@ -2849,51 +2894,6 @@
 	          <ul id="insight-forecast-actuals" class="insight-list"></ul>
 	        </div>
 	      </div>
-          <div class="controls">
-            <div>
-              <label for="forecast-seller">Scope</label>
-              <select id="forecast-seller"></select>
-            </div>
-          </div>
-        </div>
-        <div class="insight">
-          <div class="insight-title">Forecast Summary</div>
-          <ul id="insight-forecast" class="insight-list"></ul>
-        </div>
-        <div class="forecast-wrap">
-          <div class="table-wrap">
-            <table class="forecast-table" id="forecast-table">
-              <thead>
-                <tr id="forecast-head-row"></tr>
-              </thead>
-              <tbody id="forecast-body"></tbody>
-            </table>
-          </div>
-          <div class="forecast-detail">
-            <div class="forecast-detail-head">
-              <div id="forecast-detail-title" class="forecast-detail-title">Forecast Deal Breakup</div>
-              <div id="forecast-detail-meta" class="detail-meta">Click Proposal, Contracting, or Won cells to view deal-level splits.</div>
-            </div>
-            <div class="forecast-detail-wrap">
-              <table class="forecast-detail-table">
-                <thead>
-                  <tr>
-                    <th>Deal</th>
-                    <th>Stage</th>
-                    <th>Start Date</th>
-                    <th>Duration (months)</th>
-                    <th>Deal Size</th>
-                    <th>Quarter Contribution</th>
-                    <th>Basis</th>
-                  </tr>
-                </thead>
-                <tbody id="forecast-detail-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="footnote">Probabilities: Intro 5%, Qualification 10%, Capabilities 20%, Scoping 50%, Proposal 70%, Contracting 80%. Stage phasing follows the configured quarter splits.</div>
-      </div>
 
       <div id="view-assumptions" class="view">
         <div class="head">
@@ -3271,7 +3271,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.38+20260209.1';
+    const APP_VERSION = 'v0.7.39+20260209.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
