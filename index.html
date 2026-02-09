@@ -2379,13 +2379,14 @@
           </div>
         </div>
       </div>
-      <div class="tabs tabs-main">
-        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly Scorecard</button>
-        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
-        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
-        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
-        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
-      </div>
+	      <div class="tabs tabs-main">
+	        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly Scorecard</button>
+	        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
+	        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
+	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
+	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
+	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
+	      </div>
       <div id="tabs-appendix" class="tabs tabs-appendix" style="display:none;">
         <button id="tab-crosstab" class="tab-btn" type="button">Crosstab</button>
         <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
@@ -2785,12 +2786,69 @@
         </div>
       </div>
 
-      <div id="view-forecast" class="view">
+	      <div id="view-forecast" class="view">
         <div class="head">
           <div>
             <h1>Quarterly Revenue Forecast (Risk-Adjusted EV)</h1>
             <div class="sub">EV per deal = Deal Size × P(win | stage). Stages 1-4 use $100,000 default size; stages 5-6 use adjusted deal size from Monday.</div>
-          </div>
+	      </div>
+
+	      <div id="view-forecast-actuals" class="view">
+	        <div class="head">
+	          <div>
+	            <h1>Revenue Forecast (Actuals-Based Phasing)</h1>
+	            <div class="sub">
+	              Empirical start-quarter phasing derived from <strong>won deals</strong> by aligning all deals to their <code>Intro Date</code> quarter and measuring
+	              when their <code>Start Date</code> quarter occurs (<code>+0Q</code>, <code>+1Q</code>, ...). This phasing is then applied to current pipeline EV.
+	              Showing the next <strong>4 fiscal quarters</strong>.
+	            </div>
+	          </div>
+	          <div class="controls">
+	            <div>
+	              <label for="fa-seller">Seller</label>
+	              <select id="fa-seller"></select>
+	            </div>
+	            <div>
+	              <label for="fa-cutoff">Intro cutoff (won + pipeline)</label>
+	              <select id="fa-cutoff"></select>
+	            </div>
+	          </div>
+	        </div>
+
+	        <div class="cards">
+	          <div class="card">
+	            <div class="card-title">Actual Phasing (Won Deals, By Industry)</div>
+	            <div class="sub" style="margin-top:4px;">
+	              Each % is the share of won deals starting in that quarter offset after intro (<code>+0Q</code> = same quarter as intro). If an industry has low volume, the forecast falls back to <code>Overall</code>.
+	            </div>
+	            <div class="table-wrap">
+	              <table class="detail-table" id="fa-phasing-table">
+	                <thead id="fa-phasing-head"></thead>
+	                <tbody id="fa-phasing-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+
+	          <div class="card">
+	            <div class="card-title">Quarterly EV Forecast (Pipeline, Industry-Phased)</div>
+	            <div class="sub" style="margin-top:4px;">
+	              Pipeline EV uses stage probabilities and size rules (stages 1-4 = $100k; stages 5-6 = Monday deal size). EV is allocated into quarters using the empirical industry phasing.
+	            </div>
+	            <div class="table-wrap">
+	              <table class="detail-table" id="fa-forecast-table">
+	                <thead id="fa-forecast-head"></thead>
+	                <tbody id="fa-forecast-body"></tbody>
+	              </table>
+	            </div>
+	            <div id="fa-forecast-note" class="sub" style="margin-top:8px;"></div>
+	          </div>
+	        </div>
+
+	        <div class="insight">
+	          <div class="insight-title">Key Insights</div>
+	          <ul id="insight-forecast-actuals" class="insight-list"></ul>
+	        </div>
+	      </div>
           <div class="controls">
             <div>
               <label for="forecast-seller">Scope</label>
@@ -5366,35 +5424,37 @@
       setInsight('insight-funnel', lines);
     }
 
-    function setupTabs() {
-      const appendixRow = document.getElementById('tabs-appendix');
-      const tabCross = document.getElementById('tab-crosstab');
-      const tabFunnel = document.getElementById('tab-funnel');
-      const tabScore = document.getElementById('tab-scorecard');
-      const tabIndustry = document.getElementById('tab-industry');
-      const tabWinLoss = document.getElementById('tab-winloss');
-      const tabIntroTrend = document.getElementById('tab-introtrend');
-      const tabCompare = document.getElementById('tab-compare');
-      const tabMomentum = document.getElementById('tab-momentum');
-      const tabForecast = document.getElementById('tab-forecast');
-      const tabCycleTime = document.getElementById('tab-cycletime');
-      const tabAssumptions = document.getElementById('tab-assumptions');
-      const tabAppendix = document.getElementById('tab-appendix');
-      const tabAdmin = document.getElementById('tab-admin');
-      const viewCross = document.getElementById('view-crosstab');
-      const viewFunnel = document.getElementById('view-funnel');
-      const viewScore = document.getElementById('view-scorecard');
-      const viewIndustry = document.getElementById('view-industry');
-      const viewWinLoss = document.getElementById('view-winloss');
-      const viewIntroTrend = document.getElementById('view-introtrend');
-      const viewCompare = document.getElementById('view-compare');
-      const viewMomentum = document.getElementById('view-momentum');
-      const viewForecast = document.getElementById('view-forecast');
-      const viewCycleTime = document.getElementById('view-cycletime');
-      const viewAssumptions = document.getElementById('view-assumptions');
-      const viewAdmin = document.getElementById('view-admin');
-      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'compare', 'momentum', 'cycletime', 'assumptions']);
-      let appendixOpen = false;
+	    function setupTabs() {
+	      const appendixRow = document.getElementById('tabs-appendix');
+	      const tabCross = document.getElementById('tab-crosstab');
+	      const tabFunnel = document.getElementById('tab-funnel');
+	      const tabScore = document.getElementById('tab-scorecard');
+	      const tabIndustry = document.getElementById('tab-industry');
+	      const tabWinLoss = document.getElementById('tab-winloss');
+	      const tabIntroTrend = document.getElementById('tab-introtrend');
+	      const tabCompare = document.getElementById('tab-compare');
+	      const tabMomentum = document.getElementById('tab-momentum');
+	      const tabForecast = document.getElementById('tab-forecast');
+	      const tabForecastActuals = document.getElementById('tab-forecast-actuals');
+	      const tabCycleTime = document.getElementById('tab-cycletime');
+	      const tabAssumptions = document.getElementById('tab-assumptions');
+	      const tabAppendix = document.getElementById('tab-appendix');
+	      const tabAdmin = document.getElementById('tab-admin');
+	      const viewCross = document.getElementById('view-crosstab');
+	      const viewFunnel = document.getElementById('view-funnel');
+	      const viewScore = document.getElementById('view-scorecard');
+	      const viewIndustry = document.getElementById('view-industry');
+	      const viewWinLoss = document.getElementById('view-winloss');
+	      const viewIntroTrend = document.getElementById('view-introtrend');
+	      const viewCompare = document.getElementById('view-compare');
+	      const viewMomentum = document.getElementById('view-momentum');
+	      const viewForecast = document.getElementById('view-forecast');
+	      const viewForecastActuals = document.getElementById('view-forecast-actuals');
+	      const viewCycleTime = document.getElementById('view-cycletime');
+	      const viewAssumptions = document.getElementById('view-assumptions');
+	      const viewAdmin = document.getElementById('view-admin');
+	      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'compare', 'momentum', 'cycletime', 'assumptions']);
+	      let appendixOpen = false;
 
       function setAppendixOpen(next) {
         appendixOpen = !!next;
@@ -5402,41 +5462,43 @@
         if (tabAppendix) tabAppendix.setAttribute('aria-expanded', appendixOpen ? 'true' : 'false');
       }
 
-      function activate(name) {
-        const isAppendixView = appendixViews.has(name);
-        tabAppendix.classList.toggle('active', isAppendixView);
-        tabCross.classList.toggle('active', name === 'crosstab');
-        tabFunnel.classList.toggle('active', name === 'funnel');
-        tabScore.classList.toggle('active', name === 'scorecard');
-        tabIndustry.classList.toggle('active', name === 'industry');
-        tabWinLoss.classList.toggle('active', name === 'winloss');
-        tabIntroTrend.classList.toggle('active', name === 'introtrend');
-        tabCompare.classList.toggle('active', name === 'compare');
-        tabMomentum.classList.toggle('active', name === 'momentum');
-        tabForecast.classList.toggle('active', name === 'forecast');
-        tabCycleTime.classList.toggle('active', name === 'cycletime');
-        tabAssumptions.classList.toggle('active', name === 'assumptions');
-        tabAdmin.classList.toggle('active', name === 'admin');
-        viewCross.classList.toggle('active', name === 'crosstab');
-        viewFunnel.classList.toggle('active', name === 'funnel');
-        viewScore.classList.toggle('active', name === 'scorecard');
-        viewIndustry.classList.toggle('active', name === 'industry');
-        viewWinLoss.classList.toggle('active', name === 'winloss');
-        viewIntroTrend.classList.toggle('active', name === 'introtrend');
-        viewCompare.classList.toggle('active', name === 'compare');
-        viewMomentum.classList.toggle('active', name === 'momentum');
-        viewForecast.classList.toggle('active', name === 'forecast');
-        viewCycleTime.classList.toggle('active', name === 'cycletime');
-        viewAssumptions.classList.toggle('active', name === 'assumptions');
-        viewAdmin.classList.toggle('active', name === 'admin');
+	      function activate(name) {
+	        const isAppendixView = appendixViews.has(name);
+	        tabAppendix.classList.toggle('active', isAppendixView);
+	        tabCross.classList.toggle('active', name === 'crosstab');
+	        tabFunnel.classList.toggle('active', name === 'funnel');
+	        tabScore.classList.toggle('active', name === 'scorecard');
+	        tabIndustry.classList.toggle('active', name === 'industry');
+	        tabWinLoss.classList.toggle('active', name === 'winloss');
+	        tabIntroTrend.classList.toggle('active', name === 'introtrend');
+	        tabCompare.classList.toggle('active', name === 'compare');
+	        tabMomentum.classList.toggle('active', name === 'momentum');
+	        tabForecast.classList.toggle('active', name === 'forecast');
+	        tabForecastActuals.classList.toggle('active', name === 'forecast-actuals');
+	        tabCycleTime.classList.toggle('active', name === 'cycletime');
+	        tabAssumptions.classList.toggle('active', name === 'assumptions');
+	        tabAdmin.classList.toggle('active', name === 'admin');
+	        viewCross.classList.toggle('active', name === 'crosstab');
+	        viewFunnel.classList.toggle('active', name === 'funnel');
+	        viewScore.classList.toggle('active', name === 'scorecard');
+	        viewIndustry.classList.toggle('active', name === 'industry');
+	        viewWinLoss.classList.toggle('active', name === 'winloss');
+	        viewIntroTrend.classList.toggle('active', name === 'introtrend');
+	        viewCompare.classList.toggle('active', name === 'compare');
+	        viewMomentum.classList.toggle('active', name === 'momentum');
+	        viewForecast.classList.toggle('active', name === 'forecast');
+	        viewForecastActuals.classList.toggle('active', name === 'forecast-actuals');
+	        viewCycleTime.classList.toggle('active', name === 'cycletime');
+	        viewAssumptions.classList.toggle('active', name === 'assumptions');
+	        viewAdmin.classList.toggle('active', name === 'admin');
 
-        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast') {
-          setAppendixOpen(false);
-        } else if (isAppendixView) {
-          setAppendixOpen(true);
-        }
-      }
+	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
+	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals') {
+	          setAppendixOpen(false);
+	        } else if (isAppendixView) {
+	          setAppendixOpen(true);
+	        }
+	      }
 
       activateTab = activate;
 
@@ -5444,14 +5506,15 @@
       tabFunnel.addEventListener('click', () => activate('funnel'));
       tabScore.addEventListener('click', () => activate('scorecard'));
       tabIndustry.addEventListener('click', () => activate('industry'));
-      tabWinLoss.addEventListener('click', () => activate('winloss'));
-      tabIntroTrend.addEventListener('click', () => activate('introtrend'));
-      tabCompare.addEventListener('click', () => activate('compare'));
-      tabMomentum.addEventListener('click', () => activate('momentum'));
-      tabForecast.addEventListener('click', () => activate('forecast'));
-      tabCycleTime.addEventListener('click', () => activate('cycletime'));
-      tabAssumptions.addEventListener('click', () => activate('assumptions'));
-      tabAdmin.addEventListener('click', () => activate('admin'));
+	      tabWinLoss.addEventListener('click', () => activate('winloss'));
+	      tabIntroTrend.addEventListener('click', () => activate('introtrend'));
+	      tabCompare.addEventListener('click', () => activate('compare'));
+	      tabMomentum.addEventListener('click', () => activate('momentum'));
+	      tabForecast.addEventListener('click', () => activate('forecast'));
+	      tabForecastActuals.addEventListener('click', () => activate('forecast-actuals'));
+	      tabCycleTime.addEventListener('click', () => activate('cycletime'));
+	      tabAssumptions.addEventListener('click', () => activate('assumptions'));
+	      tabAdmin.addEventListener('click', () => activate('admin'));
       tabAppendix.addEventListener('click', () => setAppendixOpen(!appendixOpen));
 
       // Initialize appendix row hidden unless we start on an appendix view.
@@ -6450,6 +6513,327 @@
       return 0;
     }
 
+    function fiscalQuarterIndexFromInfo(info) {
+      if (!info || info.quarter == null || info.fiscalYear == null) return null;
+      return (Number(info.fiscalYear) * 4) + (Number(info.quarter) - 1);
+    }
+
+    function fiscalQuarterInfoFromIndex(idx) {
+      if (idx == null) return null;
+      const i = Number(idx);
+      const fiscalYear = Math.floor(i / 4);
+      const quarter = (i % 4) + 1;
+      return { quarter, fiscalYear };
+    }
+
+    function forecastQuarterLabelFromInfo(info) {
+      if (!info) return null;
+      const yy = String(info.fiscalYear).slice(-2);
+      return `Q${info.quarter} FY${yy}`;
+    }
+
+    function buildNextForecastQuarters(n, referenceDate) {
+      const out = [];
+      let info = fiscalQuarterLabel(referenceDate || new Date());
+      for (let i = 0; i < n; i += 1) {
+        out.push(forecastQuarterLabelFromInfo(info));
+        info = nextFiscalQuarter(info);
+      }
+      return out;
+    }
+
+    function normalizeIndustry(raw) {
+      const s = String(raw || '').trim();
+      return s ? s : '(blank)';
+    }
+
+    function normalizeStageNameFromNumber(n) {
+      const stageMap = {
+        1: 'Intro',
+        2: 'Qualification',
+        3: 'Capabilities',
+        4: 'Scoping',
+        5: 'Contracting',
+        6: 'Proposal',
+      };
+      return stageMap[n] || `Stage ${n}`;
+    }
+
+    function stageWinProbability(stageN) {
+      const probs = {
+        1: 0.05,
+        2: 0.10,
+        3: 0.20,
+        4: 0.50,
+        5: 0.80,
+        6: 0.70,
+      };
+      return Number(probs[stageN] || 0);
+    }
+
+    function isWonStage(stageRaw) {
+      const s = String(stageRaw || '').trim().toLowerCase();
+      const n = stageNumber(stageRaw);
+      return n === 7 || s === 'won' || s.includes('win');
+    }
+
+    function isLostStage(stageRaw) {
+      const s = String(stageRaw || '').trim().toLowerCase();
+      const n = stageNumber(stageRaw);
+      return n === 8 || s === 'lost' || s.includes('loss');
+    }
+
+    function computeActualPhasingByIndustry(allDealsRows, sellerScope, introCutoffIso) {
+      const cutoff = parseIsoLocalDate(introCutoffIso);
+      const rows = Array.isArray(allDealsRows) ? allDealsRows : [];
+      const dist = {}; // industry -> { total, offsets: {k:count} }
+      const overallKey = 'Overall';
+      dist[overallKey] = { total: 0, offsets: {} };
+
+      const sellerLower = String(sellerScope || '').trim().toLowerCase();
+      rows.forEach((r) => {
+        const stageRaw = r.stage || r.deal_stage || r.dealStage;
+        if (!isWonStage(stageRaw)) return;
+        const intro = parseIsoLocalDate(r.intro_date || r.intro || r.introDate);
+        const start = parseIsoLocalDate(r.start_date || r.start || r.startDate);
+        if (!intro || !start) return;
+        if (cutoff && intro < cutoff) return;
+        if (sellerScope && sellerScope !== 'Overall') {
+          const sellerVal = String(r.deal_owner || r.seller || r.owner || '').trim().toLowerCase();
+          if (!sellerVal.includes(sellerLower)) return;
+        }
+        const introIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(intro));
+        const startIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(start));
+        if (introIdx == null || startIdx == null) return;
+        const offset = startIdx - introIdx;
+        if (offset < 0) return;
+
+        const industry = normalizeIndustry(r.industry);
+        if (!dist[industry]) dist[industry] = { total: 0, offsets: {} };
+        dist[industry].total += 1;
+        dist[industry].offsets[offset] = Number(dist[industry].offsets[offset] || 0) + 1;
+        dist[overallKey].total += 1;
+        dist[overallKey].offsets[offset] = Number(dist[overallKey].offsets[offset] || 0) + 1;
+      });
+
+      return dist;
+    }
+
+    function phasingWeightsFromDist(distRow, minCountForSpecific) {
+      const threshold = Number.isFinite(Number(minCountForSpecific)) ? Number(minCountForSpecific) : 6;
+      if (!distRow || Number(distRow.total || 0) < threshold) return null;
+      const total = Number(distRow.total || 0);
+      if (total <= 0) return null;
+      const weights = {};
+      Object.entries(distRow.offsets || {}).forEach(([k, v]) => {
+        const kk = Number(k);
+        if (!Number.isFinite(kk) || kk < 0) return;
+        weights[kk] = Number(v || 0) / total;
+      });
+      return weights;
+    }
+
+    function allocateEvIntoQuartersUsingPhasing(opts) {
+      const {
+        deals,
+        sellerScope,
+        introCutoffIso,
+        forecastQuarters,
+        quarterIndexMap,
+        distByIndustry,
+        minIndustryWins,
+      } = opts || {};
+      const cutoff = parseIsoLocalDate(introCutoffIso);
+      const rows = Array.isArray(deals) ? deals : [];
+      const quarters = Array.isArray(forecastQuarters) ? forecastQuarters : [];
+      const out = {}; // stageName -> { q -> val }
+      const totalsByQuarter = {}; // q -> total
+      const assignedTotal = { value: 0 };
+      const unassignedTotal = { value: 0 };
+      quarters.forEach((q) => { totalsByQuarter[q] = 0; });
+
+      const distOverall = (distByIndustry && distByIndustry.Overall) ? distByIndustry.Overall : { total: 0, offsets: {} };
+      const overallWeights = phasingWeightsFromDist(distOverall, 0) || { 0: 0.25, 1: 0.40, 2: 0.20, 3: 0.10, 4: 0.05 };
+
+      const sellerLower = String(sellerScope || '').trim().toLowerCase();
+      rows.forEach((r) => {
+        const stageRaw = r.stage || r.deal_stage || r.dealStage;
+        const n = stageNumber(stageRaw);
+        if (n == null || n < 1 || n > 6) return;
+        const intro = parseIsoLocalDate(r.intro_date || r.intro || r.introDate);
+        if (!intro) return;
+        if (cutoff && intro < cutoff) return;
+        if (sellerScope && sellerScope !== 'Overall') {
+          const sellerVal = String(r.deal_owner || r.seller || r.owner || '').trim().toLowerCase();
+          if (!sellerVal.includes(sellerLower)) return;
+        }
+        if (isWonStage(stageRaw) || isLostStage(stageRaw)) return;
+
+        const p = stageWinProbability(n);
+        if (p <= 0) return;
+
+        let size = 0;
+        if (n <= 4) size = 100000;
+        else size = Number(r.deal_size || r.adj_deal_size || r.adjusted_deal_size || 0);
+        if (!Number.isFinite(size) || size <= 0) return;
+        const ev = size * p;
+
+        const introIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(intro));
+        if (introIdx == null) return;
+
+        const industry = normalizeIndustry(r.industry);
+        const distRow = distByIndustry && distByIndustry[industry] ? distByIndustry[industry] : null;
+        const industryWeights = phasingWeightsFromDist(distRow, minIndustryWins);
+        const weights = industryWeights || overallWeights;
+
+        const stageName = normalizeStageNameFromNumber(n);
+        if (!out[stageName]) {
+          out[stageName] = {};
+          quarters.forEach((q) => { out[stageName][q] = 0; });
+        }
+
+        let assigned = 0;
+        quarters.forEach((q) => {
+          const qIdx = quarterIndexMap ? quarterIndexMap[q] : null;
+          if (qIdx == null) return;
+          const offset = qIdx - introIdx;
+          if (offset < 0) return;
+          const w = Number(weights[offset] || 0);
+          if (w <= 0) return;
+          const v = ev * w;
+          out[stageName][q] += v;
+          totalsByQuarter[q] += v;
+          assigned += v;
+        });
+        assignedTotal.value += assigned;
+        unassignedTotal.value += Math.max(0, ev - assigned);
+      });
+
+      // Ensure consistent stage row ordering.
+      const ordered = ['Intro', 'Qualification', 'Capabilities', 'Scoping', 'Contracting', 'Proposal'];
+      const normalizedOut = {};
+      ordered.forEach((k) => {
+        if (out[k]) normalizedOut[k] = out[k];
+      });
+      Object.keys(out).forEach((k) => {
+        if (!normalizedOut[k]) normalizedOut[k] = out[k];
+      });
+
+      return {
+        byStage: normalizedOut,
+        totalsByQuarter,
+        assignedTotal: assignedTotal.value,
+        unassignedTotal: unassignedTotal.value,
+      };
+    }
+
+    function renderForecastActuals(data) {
+      const sellerEl = document.getElementById('fa-seller');
+      const cutoffEl = document.getElementById('fa-cutoff');
+      const phHead = document.getElementById('fa-phasing-head');
+      const phBody = document.getElementById('fa-phasing-body');
+      const fHead = document.getElementById('fa-forecast-head');
+      const fBody = document.getElementById('fa-forecast-body');
+      const noteEl = document.getElementById('fa-forecast-note');
+      if (!sellerEl || !cutoffEl || !phHead || !phBody || !fHead || !fBody || !noteEl) return;
+
+      const sellerScope = sellerEl.value || 'Overall';
+      const cutoffIso = cutoffEl.value || '2025-07-01';
+
+      const quarters = buildNextForecastQuarters(4, new Date());
+      // Build an index map for quick (quarter label -> numeric index) lookup.
+      const quarterIndexMap = {};
+      quarters.forEach((q) => {
+        const m = String(q || '').match(/^Q(\d)\s+FY(\d{2})$/);
+        if (!m) return;
+        const quarter = Number(m[1]);
+        const fy = Number(`20${m[2]}`);
+        const idx = fiscalQuarterIndexFromInfo({ quarter, fiscalYear: fy });
+        if (idx != null) quarterIndexMap[q] = idx;
+      });
+
+      const allDealsRows = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
+      const distByIndustry = computeActualPhasingByIndustry(allDealsRows, sellerScope, cutoffIso);
+
+      // Render phasing table (industry rows, +0..+3, +4+).
+      phHead.innerHTML = '';
+      phBody.innerHTML = '';
+      const trh = document.createElement('tr');
+      trh.appendChild(makeCell('th', 'Industry'));
+      trh.appendChild(makeCell('th', 'n'));
+      ['+0Q', '+1Q', '+2Q', '+3Q', '+4Q+'].forEach((c) => trh.appendChild(makeCell('th', c)));
+      phHead.appendChild(trh);
+
+      const industries = Object.keys(distByIndustry || {}).filter((k) => k !== 'Overall').sort((a, b) => {
+        const ta = Number((distByIndustry[a] || {}).total || 0);
+        const tb = Number((distByIndustry[b] || {}).total || 0);
+        return tb - ta || a.localeCompare(b);
+      });
+      const rowsToShow = ['Overall', ...industries];
+      rowsToShow.forEach((industry) => {
+        const row = distByIndustry[industry] || { total: 0, offsets: {} };
+        const total = Number(row.total || 0);
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', industry));
+        tr.appendChild(makeCell('td', total ? money.format(total) : '0'));
+        const pct = (x) => `${(x * 100).toFixed(1)}%`;
+        const w0 = total ? Number(row.offsets[0] || 0) / total : 0;
+        const w1 = total ? Number(row.offsets[1] || 0) / total : 0;
+        const w2 = total ? Number(row.offsets[2] || 0) / total : 0;
+        const w3 = total ? Number(row.offsets[3] || 0) / total : 0;
+        const w4p = total ? Object.entries(row.offsets || {}).reduce((acc, [k, v]) => {
+          const kk = Number(k);
+          if (!Number.isFinite(kk) || kk < 4) return acc;
+          return acc + Number(v || 0);
+        }, 0) / total : 0;
+        [w0, w1, w2, w3, w4p].forEach((w) => tr.appendChild(makeCell('td', total ? pct(w) : '-')));
+        phBody.appendChild(tr);
+      });
+
+      // Forecast table (stage rows x next 4 fiscal quarters).
+      fHead.innerHTML = '';
+      fBody.innerHTML = '';
+      const frh = document.createElement('tr');
+      frh.appendChild(makeCell('th', 'Stage'));
+      quarters.forEach((q) => frh.appendChild(makeCell('th', q)));
+      fHead.appendChild(frh);
+
+      const alloc = allocateEvIntoQuartersUsingPhasing({
+        deals: allDealsRows,
+        sellerScope,
+        introCutoffIso: cutoffIso,
+        forecastQuarters: quarters,
+        quarterIndexMap,
+        distByIndustry,
+        minIndustryWins: 6,
+      });
+
+      Object.entries(alloc.byStage || {}).forEach(([stageName, byQ]) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', stageName));
+        quarters.forEach((q) => tr.appendChild(makeCell('td', forecastNumberText(byQ[q], false))));
+        fBody.appendChild(tr);
+      });
+
+      // Total row.
+      const trTotal = document.createElement('tr');
+      trTotal.className = 'forecast-total';
+      trTotal.appendChild(makeCell('td', 'RISK-ADJ EV (Forecasted)'));
+      quarters.forEach((q) => trTotal.appendChild(makeCell('td', forecastNumberText(alloc.totalsByQuarter[q], true))));
+      fBody.appendChild(trTotal);
+
+      const assigned = Number(alloc.assignedTotal || 0);
+      const unassigned = Number(alloc.unassignedTotal || 0);
+      noteEl.textContent = `Allocated into shown quarters: $ ${money.format(Math.round(assigned))}. Outside 4-quarter window (incl. later offsets): $ ${money.format(Math.round(unassigned))}.`;
+
+      const insight = [];
+      const overallN = Number((distByIndustry.Overall || {}).total || 0);
+      insight.push(`Actual phasing sample (won deals): ${money.format(overallN)} deal(s) after intro cutoff ${cutoffIso}.`);
+      if (overallN < 10) insight.push('Warning: low won-deal volume means the phasing curve may be noisy.');
+      insight.push(`Forecast scope: ${sellerScope}. Next 4 fiscal quarters start at ${quarters[0]}.`);
+      setInsight('insight-forecast-actuals', insight);
+    }
+
     function renderForecastDealDetails(title, rows) {
       const titleEl = document.getElementById('forecast-detail-title');
       const metaEl = document.getElementById('forecast-detail-meta');
@@ -7036,7 +7420,7 @@
       applyCycleTableView();
     }
 
-    async function boot() {
+        async function boot() {
       try {
         const versionEl = document.getElementById('profile-version');
         if (versionEl) versionEl.textContent = APP_VERSION;
@@ -7071,15 +7455,17 @@
         const compareLeft = document.getElementById('compare-left');
         const compareRight = document.getElementById('compare-right');
         const compareRun = document.getElementById('compare-run');
-        const comparePrev = document.getElementById('compare-prev');
-        const momentumLeft = document.getElementById('momentum-left');
-        const momentumRight = document.getElementById('momentum-right');
-        const momentumSeller = document.getElementById('momentum-seller');
-        const momentumScope = document.getElementById('momentum-scope');
-        const momentumRun = document.getElementById('momentum-run');
-        const momentumPrev = document.getElementById('momentum-prev');
-        const forecastSellerSelect = document.getElementById('forecast-seller');
-        const cycleSellerSelect = document.getElementById('cycle-seller');
+	        const comparePrev = document.getElementById('compare-prev');
+	        const momentumLeft = document.getElementById('momentum-left');
+	        const momentumRight = document.getElementById('momentum-right');
+	        const momentumSeller = document.getElementById('momentum-seller');
+	        const momentumScope = document.getElementById('momentum-scope');
+	        const momentumRun = document.getElementById('momentum-run');
+	        const momentumPrev = document.getElementById('momentum-prev');
+	        const forecastSellerSelect = document.getElementById('forecast-seller');
+	        const faSellerSelect = document.getElementById('fa-seller');
+	        const faCutoffSelect = document.getElementById('fa-cutoff');
+	        const cycleSellerSelect = document.getElementById('cycle-seller');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
         const orderedFunnelStages = getOrderedFunnelStages(data.stages || []);
@@ -7092,8 +7478,40 @@
         currentAuthStore = loadAuthStore();
         ensureOverallForecastTargets({ persist: false });
         window.__salesData = data;
-        // Chat UI currently disabled.
-        renderMomentumSellerFilter(data);
+	        // Chat UI currently disabled.
+	        renderMomentumSellerFilter(data);
+
+	        // Revenue Forecast (Actuals) controls.
+	        if (faSellerSelect) {
+	          const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+	          faSellerSelect.innerHTML = '';
+	          ['Overall', ...sellers].forEach((seller) => {
+	            const o = document.createElement('option');
+	            o.value = seller;
+	            o.textContent = seller;
+	            faSellerSelect.appendChild(o);
+	          });
+	          if (!faSellerSelect.value) faSellerSelect.value = 'Overall';
+	          faSellerSelect.addEventListener('change', () => renderForecastActuals(data));
+	        }
+	        if (faCutoffSelect) {
+	          const options = [
+	            ['2024-01-01', '>= 2024-01-01'],
+	            ['2024-10-01', '>= 2024-10-01'],
+	            ['2025-01-01', '>= 2025-01-01'],
+	            ['2025-07-01', '>= 2025-07-01 (recommended)'],
+	            ['2026-01-01', '>= 2026-01-01'],
+	          ];
+	          faCutoffSelect.innerHTML = '';
+	          options.forEach(([value, label]) => {
+	            const opt = document.createElement('option');
+	            opt.value = value;
+	            opt.textContent = label;
+	            faCutoffSelect.appendChild(opt);
+	          });
+	          faCutoffSelect.value = [...faCutoffSelect.options].some((x) => x.value === '2025-07-01') ? '2025-07-01' : (faCutoffSelect.options[0] && faCutoffSelect.options[0].value);
+	          faCutoffSelect.addEventListener('change', () => renderForecastActuals(data));
+	        }
 
         // Industry Action + Won/Lost tabs use their own intro cutoffs (client-side recompute).
         const allDealsForSliders = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
@@ -7125,19 +7543,20 @@
           () => renderScorecard(data),
         );
 
-        function rerenderAllViews() {
-          render(data, sellerSelect.value, selectedStages, orderedStages);
-          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
-          renderScorecard(data);
-          renderAdminTargets();
-          renderIndustryAction(data);
-          renderWinLoss(data, wlSellerSelect.value);
-          renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
-          renderVersionSelectors();
-          renderMomentumSellerFilter(data);
-          renderForecast(data, (forecastSellerSelect && forecastSellerSelect.value) || 'Overall');
-          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
-        }
+	        function rerenderAllViews() {
+	          render(data, sellerSelect.value, selectedStages, orderedStages);
+	          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
+	          renderScorecard(data);
+	          renderAdminTargets();
+	          renderIndustryAction(data);
+	          renderWinLoss(data, wlSellerSelect.value);
+	          renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
+	          renderVersionSelectors();
+	          renderMomentumSellerFilter(data);
+	          renderForecast(data, (forecastSellerSelect && forecastSellerSelect.value) || 'Overall');
+	          renderForecastActuals(data);
+	          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
+	        }
 
         async function runCompare() {
           const leftId = compareLeft && compareLeft.value;
