@@ -209,6 +209,13 @@ function stageNum(stage: string) {
   return m ? Number(m[1]) : null;
 }
 
+function normalizeOutcomeStage(stageNorm: string): "won" | "lost" | null {
+  const s = stageNorm;
+  if (s === "won" || s === "win" || s === "closed won" || s === "closed-won" || s === "closed won (100%)") return "won";
+  if (s === "lost" || s === "loss" || s === "closed lost" || s === "closed-lost" || s === "closed lost (0%)") return "lost";
+  return null;
+}
+
 function todayDate(): Date {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
@@ -984,13 +991,19 @@ async function buildDataset(
     }
     const stage = cleanStage(stageRaw);
     if (!stage || norm(stage) === "deal stage") continue;
-    const stageNorm = norm(stage);
+    const stageNormRaw = norm(stage);
+    const outcome = normalizeOutcomeStage(stageNormRaw);
+    const stageNorm = outcome || stageNormRaw;
     const introDate = parseDate(introDateRaw);
     const startDate = parseDate(startDateRaw);
     const startDateIso = startDate ? startDate.toISOString().slice(0, 10) : null;
     if (durationMonths != null) durationDetectedCount += 1;
     const month = introDate ? monthLabel(introDate) : null;
-    const stageLabel = FUNNEL_STAGE_MAP[stageNorm] || stage;
+    const stageLabel = outcome === "won"
+      ? "7. Win"
+      : outcome === "lost"
+        ? "8. Loss"
+        : (FUNNEL_STAGE_MAP[stageNorm] || stage);
     let dealSize = parseAmount(byId(item, adjContractNumCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, adjContractCol));
     if (dealSize == null) dealSize = parseAmount(byId(item, tcvCol));

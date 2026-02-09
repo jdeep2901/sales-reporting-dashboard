@@ -1176,16 +1176,15 @@
     .likelihood-table-wrap {
       border-top: 1px solid #e7edf7;
       background: #fcfdff;
-      overflow-x: auto;
+      overflow: hidden;
     }
 
     .likelihood-mini-table {
       width: 100%;
       border-collapse: collapse;
-      table-layout: auto;
+      table-layout: fixed;
       font-size: 12px;
       color: #1e345a;
-      min-width: 520px;
     }
 
     .likelihood-mini-table th, .likelihood-mini-table td {
@@ -1204,7 +1203,7 @@
     }
 
     .likelihood-mini-table td:nth-child(1), .likelihood-mini-table th:nth-child(1) {
-      width: 46%;
+      width: 40%;
       white-space: normal;
       word-break: break-word;
       line-height: 1.35;
@@ -1212,7 +1211,7 @@
     }
 
     .likelihood-mini-table td:nth-child(2), .likelihood-mini-table th:nth-child(2) {
-      width: 26%;
+      width: 28%;
       white-space: normal;
       word-break: break-word;
       line-height: 1.35;
@@ -1220,14 +1219,14 @@
     }
 
     .likelihood-mini-table td:nth-child(3), .likelihood-mini-table th:nth-child(3) {
-      width: 14%;
+      width: 16%;
       text-align: right;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
 
     .likelihood-mini-table td:nth-child(4), .likelihood-mini-table th:nth-child(4) {
-      width: 14%;
+      width: 16%;
       text-align: right;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -2440,6 +2439,15 @@
             <h1>Industry Action by Seller</h1>
             <div class="sub">Where activity is concentrated by industry, logo, and business function for each seller.</div>
           </div>
+          <div class="controls">
+            <div class="funnel-time" style="min-width:260px;">
+              <div class="funnel-time-head">
+                <label for="industry-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="industry-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="industry-time-slider" type="range" min="0" max="0" value="0" />
+            </div>
+          </div>
         </div>
         <div class="insight">
           <div class="insight-title">Key Insights</div>
@@ -2465,6 +2473,13 @@
             <div>
               <label for="wl-seller">Scope</label>
               <select id="wl-seller"></select>
+            </div>
+            <div class="funnel-time" style="min-width:260px;">
+              <div class="funnel-time-head">
+                <label for="wl-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="wl-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="wl-time-slider" type="range" min="0" max="0" value="0" />
             </div>
             <div class="stats" id="wl-stats"></div>
           </div>
@@ -3135,7 +3150,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.28+20260208.1';
+    const APP_VERSION = 'v0.7.29+20260209.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3209,6 +3224,11 @@
     let cycleScopeState = 'Overall';
     let cycleIntroMonthsState = [];
     let cycleIntroCutoffMonthState = null;
+
+    let industryIntroMonthsState = [];
+    let industryIntroCutoffMonthState = null;
+    let wlIntroMonthsState = [];
+    let wlIntroCutoffMonthState = null;
     let cycleTableState = {
       sortKey: 'days',
       sortDir: 'desc',
@@ -5524,8 +5544,8 @@
           const hr = document.createElement('tr');
           hr.appendChild(makeCell('th', 'Deal'));
           hr.appendChild(makeCell('th', 'Stage'));
-          hr.appendChild(makeCell('th', 'Start Date'));
-          hr.appendChild(makeCell('th', 'Deal Size'));
+          hr.appendChild(makeCell('th', 'Start'));
+          hr.appendChild(makeCell('th', 'Size'));
           thead2.appendChild(hr);
           table2.appendChild(thead2);
           const body2 = document.createElement('tbody');
@@ -5580,11 +5600,50 @@
     function renderIndustryAction(data) {
       const root = document.getElementById('industry-wrap');
       root.innerHTML = '';
-      const ia = (data.industry_action || {}).sellers || {};
-      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+      const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      const deals = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
+
+      const cutoffMonth = industryIntroCutoffMonthState || null;
+      const tok = (v) => {
+        const s = String(v || '').trim();
+        return s ? s : '(blank)';
+      };
+      const passIntroCutoff = (introDate) => {
+        if (!cutoffMonth) return true;
+        const m = String(introDate || '').slice(0, 7);
+        return !m || m >= cutoffMonth;
+      };
+      const stageN = (s) => stageNumber(String(s || ''));
+      const isStage1to6 = (s) => {
+        const n = stageN(s);
+        return n != null && n >= 1 && n <= 6;
+      };
+
+      function computeForSeller(seller) {
+        const acc = { total: 0, industries: {} };
+        deals.forEach((r) => {
+          const matched = Array.isArray(r.matched_sellers) ? r.matched_sellers : [];
+          if (!matched.includes(seller)) return;
+          if (!passIntroCutoff(r.intro_date)) return;
+          if (!isStage1to6(r.stage)) return;
+          const industry = tok(r.industry);
+          const logo = tok(r.logo);
+          const fn = tok(r.function);
+          acc.total += 1;
+          if (!acc.industries[industry]) acc.industries[industry] = { total: 0, logos: {}, functions: {} };
+          const bucket = acc.industries[industry];
+          bucket.total += 1;
+          bucket.logos[logo] = (bucket.logos[logo] || 0) + 1;
+          bucket.functions[fn] = (bucket.functions[fn] || 0) + 1;
+        });
+        const industries = Object.entries(acc.industries)
+          .map(([industry, p]) => ({ industry, total: p.total, logos: p.logos, functions: p.functions }))
+          .sort((a, b) => (b.total - a.total) || String(a.industry).localeCompare(String(b.industry)));
+        return { total: acc.total, industries };
+      }
 
       sellers.forEach((seller) => {
-        const payload = ia[seller] || { total: 0, industries: [] };
+        const payload = computeForSeller(seller);
         const card = document.createElement('div');
         card.className = 'industry-card';
 
@@ -5641,12 +5700,20 @@
             const fnTd = document.createElement('td');
             const fnWrap = document.createElement('div');
             fnWrap.className = 'pill-list';
-            topPills(row.functions, 4).forEach(([k, v]) => {
+            const fnEntries = topPills(row.functions, 4);
+            if (!fnEntries.length) {
               const span = document.createElement('span');
               span.className = 'pill';
-              span.textContent = `${k}: ${v}`;
+              span.textContent = '-';
               fnWrap.appendChild(span);
-            });
+            } else {
+              fnEntries.forEach(([k, v]) => {
+                const span = document.createElement('span');
+                span.className = 'pill';
+                span.textContent = `${k}: ${v}`;
+                fnWrap.appendChild(span);
+              });
+            }
             fnTd.appendChild(fnWrap);
             tr.appendChild(fnTd);
 
@@ -5658,7 +5725,7 @@
         root.appendChild(card);
       });
       const topBySeller = sellers.map((seller) => {
-        const payload = ia[seller] || { industries: [], total: 0 };
+        const payload = computeForSeller(seller);
         const top = (payload.industries || [])[0];
         return { seller, total: payload.total || 0, top };
       }).filter((x) => x.top);
@@ -5674,10 +5741,72 @@
     }
 
     function renderWinLoss(data, scope) {
-      const src = data.win_loss_sources || {};
-      const payload = scope === 'Overall (unique)'
-        ? (src.overall_unique || { rows: [], won_total: 0, lost_total: 0, total: 0, overall_win_rate: 0 })
-        : ((src.sellers || {})[scope] || { rows: [], won_total: 0, lost_total: 0, total: 0, overall_win_rate: 0 });
+      const deals = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
+      const cutoffMonth = wlIntroCutoffMonthState || null;
+      const tok = (v) => {
+        const s = String(v || '').trim();
+        return s ? s : '(blank)';
+      };
+      const passIntroCutoff = (introDate) => {
+        if (!cutoffMonth) return true;
+        const m = String(introDate || '').slice(0, 7);
+        return !m || m >= cutoffMonth;
+      };
+      const stageNorm = (s) => String(s || '').trim().toLowerCase();
+      const isWon = (s) => {
+        const x = stageNorm(s);
+        return x === '7. win' || x === 'won' || x === 'win';
+      };
+      const isLost = (s) => {
+        const x = stageNorm(s);
+        return x === '8. loss' || x === 'lost' || x === 'loss';
+      };
+      const matchesScope = (r) => {
+        if (scope === 'Overall (unique)') return true;
+        const matched = Array.isArray(r.matched_sellers) ? r.matched_sellers : [];
+        return matched.includes(scope);
+      };
+
+      const combos = {};
+      let won_total = 0;
+      let lost_total = 0;
+      deals.forEach((r) => {
+        if (!matchesScope(r)) return;
+        if (!passIntroCutoff(r.intro_date)) return;
+        const st = r.stage;
+        const won = isWon(st);
+        const lost = isLost(st);
+        if (!won && !lost) return;
+        const industry = tok(r.industry);
+        const logo = tok(r.logo);
+        const fn = tok(r.function);
+        const key = `${industry}||${logo}||${fn}`;
+        if (!combos[key]) combos[key] = { won: 0, lost: 0 };
+        if (won) { combos[key].won += 1; won_total += 1; }
+        if (lost) { combos[key].lost += 1; lost_total += 1; }
+      });
+      const rowsAll = Object.entries(combos).map(([k, v]) => {
+        const [industry, logo, fn] = String(k).split('||');
+        const total = Number(v.won || 0) + Number(v.lost || 0);
+        return {
+          industry,
+          logo,
+          function: fn,
+          won: Number(v.won || 0),
+          lost: Number(v.lost || 0),
+          total,
+          win_rate: total ? (Number(v.won || 0) / total) : 0,
+          loss_rate: total ? (Number(v.lost || 0) / total) : 0,
+        };
+      }).sort((a, b) => (b.total - a.total) || (b.lost - a.lost) || String(a.industry).localeCompare(String(b.industry)));
+      const total = won_total + lost_total;
+      const payload = {
+        rows: rowsAll,
+        won_total,
+        lost_total,
+        total,
+        overall_win_rate: total ? (won_total / total) : 0,
+      };
 
       const stats = document.getElementById('wl-stats');
       stats.innerHTML = '';
@@ -5741,6 +5870,46 @@
       if (topLoss) lines.push(`Highest-loss source: ${topLoss.industry} / ${topLoss.logo} / ${topLoss.function} (${topLoss.lost} lost).`);
       if (topWin) lines.push(`Highest-win source: ${topWin.industry} / ${topWin.logo} / ${topWin.function} (${topWin.won} won).`);
       setInsight('insight-winloss', lines);
+    }
+
+    function computeIntroMonthsFromDeals(deals) {
+      const set = new Set();
+      (deals || []).forEach((r) => {
+        const m = String(r.intro_date || '').slice(0, 7);
+        if (m && /^\d{4}-\d{2}$/.test(m)) set.add(m);
+      });
+      return Array.from(set).sort();
+    }
+
+    function initMonthSlider(sliderEl, valueEl, months, cutoffStateGetter, cutoffStateSetter, onChange) {
+      if (!sliderEl || !valueEl) return;
+      const ms = months || [];
+      if (!ms.length) {
+        sliderEl.min = '0';
+        sliderEl.max = '0';
+        sliderEl.value = '0';
+        valueEl.textContent = '-';
+        return;
+      }
+      sliderEl.min = '0';
+      sliderEl.max = String(ms.length - 1);
+
+      const desired = cutoffStateGetter();
+      let idx = desired ? ms.indexOf(desired) : -1;
+      if (idx < 0) {
+        // Default to 2024-10 if present, else earliest month available.
+        idx = Math.max(0, ms.indexOf('2024-10'));
+      }
+      sliderEl.value = String(idx);
+      cutoffStateSetter(ms[idx] || null);
+      valueEl.textContent = ms[idx] || '-';
+
+      sliderEl.addEventListener('input', () => {
+        const i = Math.max(0, Math.min(ms.length - 1, Number(sliderEl.value || 0)));
+        cutoffStateSetter(ms[i] || null);
+        valueEl.textContent = ms[i] || '-';
+        onChange();
+      });
     }
 
     function buildIntroSeries(data, scope, granularity) {
@@ -6697,6 +6866,27 @@
         window.__salesData = data;
         initChatAssistant(data);
         renderMomentumSellerFilter(data);
+
+        // Industry Action + Won/Lost tabs use their own intro cutoffs (client-side recompute).
+        const allDealsForSliders = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
+        industryIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+        wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+        initMonthSlider(
+          document.getElementById('industry-time-slider'),
+          document.getElementById('industry-time-value'),
+          industryIntroMonthsState,
+          () => industryIntroCutoffMonthState,
+          (v) => { industryIntroCutoffMonthState = v; },
+          () => renderIndustryAction(data),
+        );
+        initMonthSlider(
+          document.getElementById('wl-time-slider'),
+          document.getElementById('wl-time-value'),
+          wlIntroMonthsState,
+          () => wlIntroCutoffMonthState,
+          (v) => { wlIntroCutoffMonthState = v; },
+          () => renderWinLoss(data, (document.getElementById('wl-seller') || {}).value || 'Overall (unique)'),
+        );
 
         function rerenderAllViews() {
           render(data, sellerSelect.value, selectedStages, orderedStages);
