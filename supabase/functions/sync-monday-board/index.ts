@@ -586,6 +586,10 @@ async function buildDataset(
     accounts_board_id?: number | null;
     accounts_industry_col_id?: string | null;
     accounts_relation_col_id?: string | null; // deals-board connect column pointing to accounts
+    business_group_col_id?: string | null; // deals-board mirrored column (from Contacts board)
+    contacts_board_id?: number | null;
+    contacts_business_group_col_id?: string | null;
+    contacts_relation_col_id?: string | null; // deals-board connect column pointing to contacts
     monday_token?: string | null;
   },
 ) {
@@ -656,6 +660,13 @@ async function buildDataset(
   const industryCol = industryColPinned || industryColAuto;
 
   const logoCol = pickColumnId(columns, [(t) => t.includes("logo"), (t) => t.includes("account") || t.includes("company")]);
+  // Business Group (mirrored from Contacts board) is the authoritative source for "Business Function" in the UI.
+  const bizGroupCandidates = pickColumnIds(columns, [(t) => t.includes("business group")]);
+  const bizGroupPick = pickBestColumnIdByFillRate(items, bizGroupCandidates, (it, id) => byIdSmartText(it, id));
+  const bizGroupColAuto = bizGroupPick.best || pickColumnId(columns, [(t) => t.includes("business group")]);
+  const bizGroupColPinned = String(opts?.business_group_col_id || "").trim() || null;
+  const bizGroupCol = bizGroupColPinned || bizGroupColAuto;
+
   // Business Function is often a mirrored / formula / connect-backed column; pick by fill-rate across likely candidates.
   const functionCandidates = pickColumnIds(columns, [
     (t) => t.includes("business function"),
@@ -747,6 +758,103 @@ async function buildDataset(
       }
     } catch (_) {
       relationValueByDealId = null;
+    }
+  }
+
+  // Business Group is mirrored from Contacts board. Join Deals -> Contacts -> Business Group for reliability.
+  const contactsBoardId = (opts?.contacts_board_id && Number.isFinite(Number(opts.contacts_board_id))) ? Number(opts.contacts_board_id) : null;
+  const contactsBusinessGroupColPinned = String(opts?.contacts_business_group_col_id || "").trim() || null;
+  const contactsRelationColPinned = String(opts?.contacts_relation_col_id || "").trim() || null;
+  const bizGroupMirrorSettings = bizGroupCol ? parseJsonSafe(colById[bizGroupCol]?.settings_str || null) : null;
+  const contactsRelationColFromMirror: string | null =
+    (bizGroupMirrorSettings && (bizGroupMirrorSettings.relation_column_id || bizGroupMirrorSettings.relationColumnId || bizGroupMirrorSettings.board_relation_column_id || bizGroupMirrorSettings.boardRelationColumnId)) ? String(
+      bizGroupMirrorSettings.relation_column_id || bizGroupMirrorSettings.relationColumnId || bizGroupMirrorSettings.board_relation_column_id || bizGroupMirrorSettings.boardRelationColumnId,
+    ) : null;
+
+  const contactsRelPredicate = (c: MondayColumn) => {
+    const type = norm(c.type);
+    if (!(type.includes("relation") || type.includes("connect"))) return false;
+    if (!contactsBoardId) return false;
+    const st = parseJsonSafe(c.settings_str || null);
+    const target = String(Math.trunc(contactsBoardId));
+    if (st && typeof st === "object") {
+      const boardIds = st.boardIds || st.board_ids || st.connectedBoardIds || st.connected_board_ids || st.board_ids_array;
+      if (Array.isArray(boardIds) && boardIds.map((x: any) => String(x)).includes(target)) return true;
+      const boardId = st.boardId || st.board_id || st.connectedBoardId || st.connected_board_id;
+      if (boardId != null && String(boardId) === target) return true;
+      const boards = st.boards || st.linkedBoards;
+      if (Array.isArray(boards) && boards.some((b: any) => String(b?.id || b?.boardId || b?.board_id || "") === target)) return true;
+    }
+    // Title-based fallback.
+    if (norm(c.title).includes("contact")) return true;
+    return false;
+  };
+  const contactsRelationColFromSettings = (contactsBoardId ? findConnectColumnToBoard(columns, contactsBoardId) : null);
+  const contactsRelFillPick = pickBestRelationColumnByFill(items, columns, contactsRelPredicate, 200);
+  const contactsRelationColAuto = contactsRelFillPick.best || contactsRelationColFromSettings;
+  const contactsRelationColId = contactsRelationColPinned || contactsRelationColFromMirror || contactsRelationColAuto;
+
+  let contactsBusinessGroupColId: string | null = contactsBusinessGroupColPinned;
+  const contactBizGroupById: Record<string, string> = {};
+  let contactsJoinEnabled = false;
+  let contactsRelationValueByDealId: Record<string, { text: string; display_value: string; value: string | null }> | null = null;
+
+  if (opts?.monday_token && contactsRelationColId) {
+    try {
+      const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
+      const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [contactsRelationColId]);
+      contactsRelationValueByDealId = {};
+      for (const it of relOnly) {
+        const cv = (it.column_values || []).find((v) => v.id === contactsRelationColId);
+        contactsRelationValueByDealId[String(it.id)] = {
+          text: String(cv?.text || ""),
+          display_value: String((cv as any)?.display_value || ""),
+          value: cv?.value || null,
+        };
+      }
+    } catch (_) {
+      contactsRelationValueByDealId = null;
+    }
+  }
+
+  if (contactsBoardId && contactsRelationColId && opts?.monday_token) {
+    contactsJoinEnabled = true;
+    const contactIds: string[] = [];
+    for (const it of items) {
+      const fallback = contactsRelationValueByDealId ? contactsRelationValueByDealId[String(it.id)] : null;
+      const cv = fallback
+        ? ({ id: contactsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
+        : it.column_values.find((v) => v.id === contactsRelationColId);
+      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      for (const id of linked) if (!contactIds.includes(id)) contactIds.push(id);
+      if (contactIds.length > 8000) break;
+    }
+
+    if (!contactsBusinessGroupColId) {
+      const meta = await fetchBoardColumns(opts.monday_token, contactsBoardId);
+      const candidates = meta.columns.filter((c) => norm(c.title).includes("business group")).map((c) => c.id);
+      if (candidates.length) {
+        const contactItems = await fetchBoardItems(opts.monday_token, contactsBoardId, candidates);
+        const pick = pickBestColumnIdByFillRate(
+          contactItems,
+          candidates,
+          (it, id) => {
+            const cv = it.column_values.find((v) => v.id === id);
+            return smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
+          },
+          200,
+        );
+        contactsBusinessGroupColId = pick.best || candidates[0] || null;
+      }
+    }
+
+    if (contactIds.length && contactsBusinessGroupColId) {
+      const contactItems = await fetchItemsByIds(opts.monday_token, contactIds, [contactsBusinessGroupColId]);
+      for (const ci of contactItems) {
+        const cv = (ci.column_values || []).find((v) => v.id === contactsBusinessGroupColId);
+        const val = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
+        if (val) contactBizGroupById[String(ci.id)] = val;
+      }
     }
   }
 
@@ -1101,7 +1209,21 @@ async function buildDataset(
       }
     }
     const logo = primaryToken(logoRawText);
-    let bizFnRaw = byIdSmartText(item, functionCol);
+    // Prefer Contacts join-derived Business Group when available.
+    let bizFnRaw = "";
+    if (contactsJoinEnabled && contactsRelationColId) {
+      const fallback = contactsRelationValueByDealId ? contactsRelationValueByDealId[String(item.id)] : null;
+      const cv = fallback
+        ? ({ id: contactsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
+        : item.column_values.find((v) => v.id === contactsRelationColId);
+      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+      for (const cid of linked) {
+        const v = contactBizGroupById[String(cid)] || "";
+        if (v && v.trim()) { bizFnRaw = v; break; }
+      }
+    }
+    if (!bizFnRaw || !String(bizFnRaw).trim()) bizFnRaw = byIdSmartText(item, bizGroupCol) || "";
+    if (!bizFnRaw || !String(bizFnRaw).trim()) bizFnRaw = byIdSmartText(item, functionCol) || "";
     if ((!bizFnRaw || !String(bizFnRaw).trim()) && functionValueByDealId && functionCol) {
       const fallback = functionValueByDealId[String(item.id)];
       if (fallback) bizFnRaw = smartTextFromMondayColumnValue(fallback.text, fallback.display_value, fallback.value);
@@ -1409,6 +1531,10 @@ Deno.serve(async (req) => {
     const accountsBoardId = (st.settings && (st.settings as any).monday_accounts_board_id) ? Number((st.settings as any).monday_accounts_board_id) : 6218900019;
     const accountsIndustryColId = (st.settings && (st.settings as any).monday_accounts_industry_col_id) ? String((st.settings as any).monday_accounts_industry_col_id) : null;
     const accountsRelationColId = (st.settings && (st.settings as any).monday_deals_accounts_relation_col_id) ? String((st.settings as any).monday_deals_accounts_relation_col_id) : null;
+    const pinnedBusinessGroupCol = (st.settings && (st.settings as any).monday_business_group_col_id) ? String((st.settings as any).monday_business_group_col_id) : null;
+    const contactsBoardId = (st.settings && (st.settings as any).monday_contacts_board_id) ? Number((st.settings as any).monday_contacts_board_id) : 6218900012;
+    const contactsBusinessGroupColId = (st.settings && (st.settings as any).monday_contacts_business_group_col_id) ? String((st.settings as any).monday_contacts_business_group_col_id) : null;
+    const contactsRelationColId = (st.settings && (st.settings as any).monday_deals_contacts_relation_col_id) ? String((st.settings as any).monday_deals_contacts_relation_col_id) : null;
 
     // Determine which columns we need so relation columns include `value` reliably.
     const columns = meta.columns || [];
@@ -1423,6 +1549,7 @@ Deno.serve(async (req) => {
     const ownerCol = pick([(t: string) => t.includes("deal owner"), (t: string) => t.includes("owner")]);
     const nextStepCol = pick([(t: string) => t.includes("next step")]);
     const industryCol = pinnedIndustryCol || pick([(t: string) => t.includes("industry")]);
+    const businessGroupCol = pinnedBusinessGroupCol || pick([(t: string) => t.includes("business group")]);
     const logoCol = pick([(t: string) => t.includes("logo"), (t: string) => t.includes("account") || t.includes("company")]);
     const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function", (t: string) => t.includes("function")]);
     const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
@@ -1435,10 +1562,11 @@ Deno.serve(async (req) => {
       ...pickMany([(t: string) => t.includes("duration"), (t: string) => t.includes("engagement") && t.includes("month"), (t: string) => t.includes("term") && t.includes("month"), (t: string) => t === "months"]),
     ]);
     addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
-    addIf(industryCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
+    addIf(industryCol); addIf(businessGroupCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
     addIf(adjContractNumCol); addIf(adjContractCol); addIf(tcvCol);
     for (const id of durationCandidateCols) addIf(id);
     if (accountsRelationColId) addIf(accountsRelationColId);
+    if (contactsRelationColId) addIf(contactsRelationColId);
     // Also include all relation/connect columns so we can auto-pick the right one by fill-rate.
     for (const c of columns) {
       const t = norm(c.type || '');
@@ -1452,6 +1580,10 @@ Deno.serve(async (req) => {
       accounts_board_id: accountsBoardId,
       accounts_industry_col_id: accountsIndustryColId,
       accounts_relation_col_id: accountsRelationColId,
+      business_group_col_id: pinnedBusinessGroupCol,
+      contacts_board_id: contactsBoardId,
+      contacts_business_group_col_id: contactsBusinessGroupColId,
+      contacts_relation_col_id: contactsRelationColId,
       monday_token: mondayToken,
     });
     const datasetHash = await sha256Hex(JSON.stringify(dataset));
