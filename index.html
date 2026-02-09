@@ -2809,15 +2809,15 @@
             </div>
           </div>
 
-          <div class="assumption-card">
-            <div class="assumption-head">Weekly Scorecard Logic</div>
-            <div class="assumption-body">
-              1. KPI groups: stage 1-6, stage 1-2, stage 3-4, stage 5-6, stage 7-8.<br/>
-              2. Stuck proxy uses missing next step and SLA-age flags by stage category.<br/>
-              3. Seller-tagged close likelihood options are this quarter / next quarter / help needed.<br/>
-              4. Deal detail tables include stage, intro month, start date, age, deal size, and reason.
-            </div>
-          </div>
+	          <div class="assumption-card">
+	            <div class="assumption-head">Weekly Scorecard Logic</div>
+	            <div class="assumption-body">
+	              1. KPI groups: stage 1-6, stage 1-2, stage 3-4, stage 5-6, stage 7-8.<br/>
+	              2. Closures tables are auto-derived from deal <code>Start Date</code> fiscal quarter (this quarter / next quarter), irrespective of stage.<br/>
+	              3. Sellers can flag a deal as <code>Help Needed</code> (Yes/No) in the KPI drilldown; flagged deals show an alert icon in closures tables.<br/>
+	              4. KPI drilldown tables include stage, intro month, start date, age, deal size, and reason.
+	            </div>
+	          </div>
 
           <div class="assumption-card">
             <div class="assumption-head">Version Compare & Funnel Momentum</div>
@@ -3086,9 +3086,9 @@
               <th>Age (days)</th>
               <th>Deal Size</th>
               <th>Reason</th>
-              <th>Likelihood</th>
-            </tr>
-          </thead>
+	              <th>Help Needed</th>
+	            </tr>
+	          </thead>
           <tbody id="kpi-popup-body"></tbody>
         </table>
       </div>
@@ -3159,10 +3159,12 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.33+20260209.1';
-    const LIKELIHOOD_THIS_Q = 'this_q';
-    const LIKELIHOOD_NEXT_Q = 'next_q';
-    const LIKELIHOOD_HELP = 'help_needed';
+    const APP_VERSION = 'v0.7.34+20260209.1';
+    // Deal-level help flag. (We keep legacy likelihood constants around for
+    // backwards compatibility when reading previously stored state.)
+    const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
+    const LIKELIHOOD_NEXT_Q = 'next_q'; // legacy
+    const LIKELIHOOD_HELP = 'help_needed'; // legacy
     const MOMENTUM_CORE_STAGE_MAX = 6;
     const MOMENTUM_ALL_STAGE_MAX = 8;
     const FORECAST_QUARTERS = ['Q4 FY26', 'Q1 FY27', 'Q2 FY27', 'Q3 FY27', 'Q4 FY27'];
@@ -3910,34 +3912,39 @@
       ].join('||');
     }
 
-    function buildScorecardSellerUniverse(metric) {
-      const details = metric.kpi_details || {};
-      const base = [...(details.stage_1_6 || []), ...(details.stage_7_8 || [])];
-      const seen = new Set();
-      const out = [];
-      base.forEach((rec) => {
-        const key = likelihoodRecordKey(rec);
-        if (seen.has(key)) return;
-        seen.add(key);
-        out.push(rec);
-      });
-      return out;
+    function dealHelpKey(rec) {
+      // Prefer stable Monday item IDs; fall back to deal name.
+      const id = String(rec && (rec.monday_item_id || rec.item_id || rec.id || rec.deal_id) || '').trim();
+      if (id) return `id:${id}`;
+      return `deal:${String(rec && rec.deal || '').trim().toLowerCase()}`;
+    }
+
+    function isHelpFlagValue(v) {
+      return v === true || v === 1 || v === '1' || v === 'true' || v === 'yes' || v === LIKELIHOOD_HELP;
+    }
+
+    function isHelpNeeded(rec) {
+      const k = dealHelpKey(rec);
+      if (isHelpFlagValue(likelihoodState[k])) return true;
+      // Back-compat: if the old per-row likelihood key was used and set to Help.
+      const oldKey = likelihoodRecordKey(rec);
+      if (likelihoodState[oldKey] === LIKELIHOOD_HELP) return true;
+      return false;
     }
 
     function classifyLikelihoodForSeller(metric) {
-      const universe = buildScorecardSellerUniverse(metric);
+      // Weekly Scorecard: closures are derived from Start Date quarter (not manual tagging).
+      // We still keep a per-deal "Help Needed" flag that drives the alert icon.
       const out = {
         thisQuarterDeals: [],
         nextQuarterDeals: [],
-        helpNeededDeals: [],
         thisQuarterRevenue: 0,
         nextQuarterRevenue: 0,
-        pendingStage3Plus: 0,
         helpDealSet: new Set(),
       };
       const dedupe = new Set(); // dedupe within bucket lists
       const addTo = (bucketKey, rec, size) => {
-        const dkey = `${bucketKey}||${String(rec.deal || '').trim().toLowerCase()}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
+        const dkey = `${bucketKey}||${dealHelpKey(rec)}||${String(rec.stage || '').trim().toLowerCase()}||${String(rec.start_date || '').trim()}`;
         if (dedupe.has(dkey)) return;
         dedupe.add(dkey);
         if (bucketKey === 'this') {
@@ -3948,38 +3955,26 @@
           out.nextQuarterRevenue += size;
         }
       };
-      universe.forEach((rec) => {
-        const key = likelihoodRecordKey(rec);
-        const selected = likelihoodState[key] || '';
-        const size = dealSizeValue(rec.deal_size);
-        if (selected === LIKELIHOOD_THIS_Q) {
-          addTo('this', rec, size);
-        } else if (selected === LIKELIHOOD_NEXT_Q) {
-          addTo('next', rec, size);
-        } else if (selected === LIKELIHOOD_HELP) {
-          out.helpNeededDeals.push(rec);
-          out.helpDealSet.add(String(rec.deal || '').trim().toLowerCase());
+      const deals = (sharedDatasetState && Array.isArray(sharedDatasetState.all_deals_rows))
+        ? sharedDatasetState.all_deals_rows
+        : [];
+      const cutoffMonth = scorecardIntroCutoffMonthState || null;
+      const passCutoff = (introDate) => passIntroCutoffMonth(introDate, cutoffMonth);
+      const matchedSeller = (rec, sellerName) => {
+        if (!sellerName || sellerName === 'Overall') return true;
+        const matched = Array.isArray(rec.matched_sellers) ? rec.matched_sellers : [];
+        return matched.includes(sellerName);
+      };
+      deals.forEach((rec) => {
+        if (!passCutoff(rec.intro_date)) return;
+        if (!matchedSeller(rec, metric && metric.seller_label ? metric.seller_label : null)) {
+          // If metric didn't carry seller info, we'll filter in updateLikelihoodSummaryForSeller instead.
         }
-
-        const stageNum = stageNumber(rec.stage);
-        if (stageNum != null && stageNum >= 3 && stageNum <= 6 && !selected) out.pendingStage3Plus += 1;
+        if (isHelpNeeded(rec)) out.helpDealSet.add(dealHelpKey(rec));
       });
 
-      // Auto-include Won deals into quarter buckets based on Start Date (no manual tagging needed).
-      const details = metric.kpi_details || {};
-      const wl = details.stage_7_8 || [];
-      (wl || []).forEach((rec) => {
-        const stage = String(rec.stage || '').toLowerCase();
-        if (!stage.includes('win') && !stage.includes('won') && !stage.startsWith('7.')) return;
-        const q = scorecardQuarterLabelForDate(rec.start_date);
-        if (!q) return;
-        const size = dealSizeValue(rec.deal_size);
-        if (q === activeQuarterLabels.current) {
-          addTo('this', rec, size);
-        } else if (q === activeQuarterLabels.next) {
-          addTo('next', rec, size);
-        }
-      });
+      // NOTE: This function no longer populates closures; closures are computed per-seller in
+      // updateLikelihoodSummaryForSeller so we can include *all stages* (not just 1-8).
       return out;
     }
 
@@ -4005,8 +4000,8 @@
         const tr = document.createElement('tr');
         const dealTd = document.createElement('td');
         if (opts.alertDealSet) {
-          const dealKey = String(r.deal || '').trim().toLowerCase();
-          if (opts.alertDealSet.has(dealKey)) {
+          const hkey = dealHelpKey(r);
+          if (opts.alertDealSet.has(hkey)) {
             const ico = document.createElement('span');
             ico.className = 'alert-ico';
             ico.textContent = '!';
@@ -4028,12 +4023,58 @@
       const refs = scorecardSummaryEls[seller];
       if (!metric || !refs) return;
       const x = classifyLikelihoodForSeller(metric);
+
+      const deals = (sharedDatasetState && Array.isArray(sharedDatasetState.all_deals_rows))
+        ? sharedDatasetState.all_deals_rows
+        : [];
+      const cutoffMonth = scorecardIntroCutoffMonthState || null;
+      const passCutoff = (introDate) => passIntroCutoffMonth(introDate, cutoffMonth);
+      const matchedSeller = (rec) => {
+        if (!seller || seller === 'Overall') return true;
+        const matched = Array.isArray(rec.matched_sellers) ? rec.matched_sellers : [];
+        return matched.includes(seller);
+      };
+
+      const dedupe = new Set();
+      const addBucket = (arr, rec) => {
+        const k = dealHelpKey(rec);
+        if (dedupe.has(k)) return;
+        dedupe.add(k);
+        arr.push(rec);
+      };
+
+      const thisDeals = [];
+      const nextDeals = [];
+      let thisRev = 0;
+      let nextRev = 0;
+      const helpSet = new Set();
+
+      deals.forEach((rec) => {
+        if (!passCutoff(rec.intro_date)) return;
+        if (!matchedSeller(rec)) return;
+        if (isHelpNeeded(rec)) helpSet.add(dealHelpKey(rec));
+        const q = scorecardQuarterLabelForDate(rec.start_date);
+        if (!q) return;
+        const size = dealSizeValue(bestDealSize(rec));
+        if (q === activeQuarterLabels.current) {
+          addBucket(thisDeals, rec);
+          thisRev += size;
+        } else if (q === activeQuarterLabels.next) {
+          addBucket(nextDeals, rec);
+          nextRev += size;
+        }
+      });
+
+      // sort for display
+      thisDeals.sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')));
+      nextDeals.sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')));
+
       const tThis = getQuarterTarget(seller, activeQuarterLabels.current);
       const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
-      refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)} | ${pctText(x.thisQuarterRevenue, tThis.revenue)})`;
-      refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)} | ${pctText(x.nextQuarterRevenue, tNext.revenue)})`;
-      renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals, { alertDealSet: x.helpDealSet });
-      renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals, { alertDealSet: x.helpDealSet });
+      refs.thisQuarterMeta.textContent = `${money.format(thisDeals.length)} deals | ${fmtDealSize(thisRev)} (T ${fmtDealSize(tThis.revenue)} | ${pctText(thisRev, tThis.revenue)})`;
+      refs.nextQuarterMeta.textContent = `${money.format(nextDeals.length)} deals | ${fmtDealSize(nextRev)} (T ${fmtDealSize(tNext.revenue)} | ${pctText(nextRev, tNext.revenue)})`;
+      renderLikelihoodDealLines(refs.thisQuarterLines, thisDeals, { alertDealSet: helpSet });
+      renderLikelihoodDealLines(refs.nextQuarterLines, nextDeals, { alertDealSet: helpSet });
     }
 
     function loadAuthStore() {
@@ -4892,13 +4933,13 @@
       if (!rows.length) {
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', 'No rows'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
+          tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         body.appendChild(tr);
       }
@@ -5323,10 +5364,8 @@
           const select = document.createElement('select');
           select.className = 'popup-likelihood-select';
           const options = [
-            ['', '-- Select --'],
-            [LIKELIHOOD_THIS_Q, activeQuarterLabels.current],
-            [LIKELIHOOD_NEXT_Q, activeQuarterLabels.next],
-            [LIKELIHOOD_HELP, 'Help Needed / Stuck'],
+            ['', 'No'],
+            ['yes', 'Yes'],
           ];
           options.forEach(([value, label]) => {
             const opt = document.createElement('option');
@@ -5334,14 +5373,19 @@
             opt.textContent = label;
             select.appendChild(opt);
           });
-          const key = likelihoodRecordKey(r);
-          select.value = likelihoodState[key] || '';
+          const key = dealHelpKey(r);
+          const checked = isHelpNeeded(r);
+          // Opportunistic migration: if old-style key had help, write to new key.
+          if (checked && !isHelpFlagValue(likelihoodState[key]) && !isHistoricalView) {
+            likelihoodState[key] = true;
+          }
+          select.value = checked ? 'yes' : '';
           if (isHistoricalView) {
             select.disabled = true;
             select.title = 'Read-only in historical version view';
           } else {
             select.addEventListener('change', () => {
-              if (select.value) likelihoodState[key] = select.value;
+              if (select.value === 'yes') likelihoodState[key] = true;
               else delete likelihoodState[key];
               persistLocalStateBundle();
               queueSharedStorePush();
@@ -5533,8 +5577,8 @@
           const hr = document.createElement('tr');
           hr.appendChild(makeCell('th', 'Deal'));
           hr.appendChild(makeCell('th', 'Stage'));
-          hr.appendChild(makeCell('th', 'Start'));
-          hr.appendChild(makeCell('th', 'Size'));
+          hr.appendChild(makeCell('th', 'Start Date'));
+          hr.appendChild(makeCell('th', 'Deal Size'));
           thead2.appendChild(hr);
           table2.appendChild(thead2);
           const body2 = document.createElement('tbody');
