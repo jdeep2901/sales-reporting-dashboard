@@ -2907,7 +2907,9 @@
 	              <div id="fa-forecast-meta" class="detail-meta">-</div>
 	            </div>
 	            <div class="sub" style="padding:10px 12px 0;">
-	              Pipeline EV uses stage probabilities and size rules (stages 1-4 = $100k; stages 5-6 = Monday deal size). EV is allocated into quarters using the empirical industry phasing.
+	              <span id="fa-forecast-sub">
+	                Pipeline EV uses stage probabilities and size rules (stages 1-4 = $100k; stages 5-6 = Monday deal size). EV is allocated into quarters using the empirical industry phasing.
+	              </span>
 	            </div>
 	            <div class="detail-wrap">
 	              <table class="detail-table" id="fa-forecast-table">
@@ -3301,7 +3303,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.40+20260209.1';
+    const APP_VERSION = 'v0.7.41+20260209.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6678,8 +6680,11 @@
       const quarters = Array.isArray(forecastQuarters) ? forecastQuarters : [];
       const out = {}; // stageName -> { q -> val }
       const totalsByQuarter = {}; // q -> total
+      const stageEvTotals = {}; // stageName -> raw EV total (before phasing window cut)
+      const stageAssignedTotals = {}; // stageName -> within shown quarters
       const assignedTotal = { value: 0 };
       const unassignedTotal = { value: 0 };
+      const evTotal = { value: 0 };
       quarters.forEach((q) => { totalsByQuarter[q] = 0; });
 
       const distOverall = (distByIndustry && distByIndustry.Overall) ? distByIndustry.Overall : { total: 0, offsets: {} };
@@ -6707,6 +6712,7 @@
         else size = Number(r.deal_size || r.adj_deal_size || r.adjusted_deal_size || 0);
         if (!Number.isFinite(size) || size <= 0) return;
         const ev = size * p;
+        evTotal.value += ev;
 
         const introIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(intro));
         if (introIdx == null) return;
@@ -6721,6 +6727,7 @@
           out[stageName] = {};
           quarters.forEach((q) => { out[stageName][q] = 0; });
         }
+        stageEvTotals[stageName] = Number(stageEvTotals[stageName] || 0) + ev;
 
         let assigned = 0;
         quarters.forEach((q) => {
@@ -6736,6 +6743,7 @@
           assigned += v;
         });
         assignedTotal.value += assigned;
+        stageAssignedTotals[stageName] = Number(stageAssignedTotals[stageName] || 0) + assigned;
         unassignedTotal.value += Math.max(0, ev - assigned);
       });
 
@@ -6752,8 +6760,11 @@
       return {
         byStage: normalizedOut,
         totalsByQuarter,
+        stageEvTotals,
+        stageAssignedTotals,
         assignedTotal: assignedTotal.value,
         unassignedTotal: unassignedTotal.value,
+        evTotal: evTotal.value,
       };
     }
 
@@ -6766,6 +6777,7 @@
       const fBody = document.getElementById('fa-forecast-body');
       const phMeta = document.getElementById('fa-phasing-meta');
       const fMeta = document.getElementById('fa-forecast-meta');
+      const fSub = document.getElementById('fa-forecast-sub');
       const noteEl = document.getElementById('fa-forecast-note');
       if (!sellerEl || !cutoffEl || !phHead || !phBody || !fHead || !fBody || !noteEl) return;
 
@@ -6813,12 +6825,17 @@
         const w1 = total ? Number(row.offsets[1] || 0) / total : 0;
         const w2 = total ? Number(row.offsets[2] || 0) / total : 0;
         const w3 = total ? Number(row.offsets[3] || 0) / total : 0;
-        const w4p = total ? Object.entries(row.offsets || {}).reduce((acc, [k, v]) => {
+        const c4p = total ? Object.entries(row.offsets || {}).reduce((acc, [k, v]) => {
           const kk = Number(k);
           if (!Number.isFinite(kk) || kk < 4) return acc;
           return acc + Number(v || 0);
-        }, 0) / total : 0;
-        [w0, w1, w2, w3, w4p].forEach((w) => tr.appendChild(makeCell('td', total ? pct(w) : '-')));
+        }, 0) : 0;
+        const w4p = total ? (c4p / total) : 0;
+        tr.appendChild(makeCell('td', total ? pct(w0) : '-'));
+        tr.appendChild(makeCell('td', total ? pct(w1) : '-'));
+        tr.appendChild(makeCell('td', total ? pct(w2) : '-'));
+        tr.appendChild(makeCell('td', total ? pct(w3) : '-'));
+        tr.appendChild(makeCell('td', total ? `${pct(w4p)} (${money.format(c4p)})` : '-'));
         phBody.appendChild(tr);
       });
       if (phMeta) {
@@ -6832,6 +6849,7 @@
       const frh = document.createElement('tr');
       frh.appendChild(makeCell('th', 'Stage'));
       quarters.forEach((q) => frh.appendChild(makeCell('th', q)));
+      frh.appendChild(makeCell('th', 'Stage EV'));
       fHead.appendChild(frh);
 
       const alloc = allocateEvIntoQuartersUsingPhasing({
@@ -6847,7 +6865,11 @@
       Object.entries(alloc.byStage || {}).forEach(([stageName, byQ]) => {
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', stageName));
+        let stageSum = 0;
         quarters.forEach((q) => tr.appendChild(makeCell('td', forecastNumberText(byQ[q], false))));
+        const stageAssigned = Number((alloc.stageAssignedTotals || {})[stageName] || 0);
+        stageSum = stageAssigned;
+        tr.appendChild(makeCell('td', forecastNumberText(stageSum, true)));
         fBody.appendChild(tr);
       });
 
@@ -6856,11 +6878,16 @@
       trTotal.className = 'forecast-total';
       trTotal.appendChild(makeCell('td', 'RISK-ADJ EV (Forecasted)'));
       quarters.forEach((q) => trTotal.appendChild(makeCell('td', forecastNumberText(alloc.totalsByQuarter[q], true))));
+      trTotal.appendChild(makeCell('td', forecastNumberText(alloc.assignedTotal, true)));
       fBody.appendChild(trTotal);
 
       const assigned = Number(alloc.assignedTotal || 0);
       const unassigned = Number(alloc.unassignedTotal || 0);
+      const totalEv = Number(alloc.evTotal || (assigned + unassigned) || 0);
       noteEl.textContent = `Allocated into shown quarters: $ ${money.format(Math.round(assigned))}. Outside 4-quarter window (incl. later offsets): $ ${money.format(Math.round(unassigned))}.`;
+      if (fSub) {
+        fSub.textContent = `Total pipeline EV (stages 1-6) in scope: $ ${money.format(Math.round(totalEv))}. EV is allocated into quarters using the empirical industry phasing.`;
+      }
       if (fMeta) {
         fMeta.textContent = `Scope: ${sellerScope}`;
       }
