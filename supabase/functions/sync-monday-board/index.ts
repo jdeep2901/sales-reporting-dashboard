@@ -1032,28 +1032,21 @@ async function buildDataset(
     }
     const industry = primaryToken(industryRawText);
     let logoRawText = byIdSmartText(item, logoCol);
-    if (accountsJoinEnabled && accountsRelationColId) {
+    // Prefer account/company name from the Deals->Accounts relation column (usually what you want as "Logo").
+    if (accountsRelationColId) {
       const fallback = relationValueByDealId ? relationValueByDealId[String(item.id)] : null;
       const cv = fallback
         ? ({ id: accountsRelationColId, text: fallback.text, display_value: fallback.display_value, value: fallback.value } as any)
         : item.column_values.find((v) => v.id === accountsRelationColId);
-      const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
-      for (const aid of linked) {
-        const nm = accountNameById[String(aid)] || "";
-        if (nm && nm.trim()) { logoRawText = nm; break; }
-      }
-      if ((!logoRawText || !logoRawText.trim()) && cv) {
-        const cvText = (cv && (String((cv as any).text || "").trim() || String((cv as any).display_value || "").trim())) || "";
-        const nameToId = (accountNameById as any).__nameToId || null;
-        if (cvText && nameToId) {
-          const parts = String(cvText || "")
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          for (const nm of parts) {
-            const id = nameToId[norm(nm)] || "";
-            if (id && accountNameById[id]) { logoRawText = accountNameById[id]; break; }
-          }
+      const cvText = (cv && (String((cv as any).text || "").trim() || String((cv as any).display_value || "").trim())) || "";
+      if (cvText) logoRawText = cvText;
+
+      // If we also have a join-built name map, prefer the canonical Accounts item name.
+      if (accountsJoinEnabled && cv) {
+        const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
+        for (const aid of linked) {
+          const nm = accountNameById[String(aid)] || "";
+          if (nm && nm.trim()) { logoRawText = nm; break; }
         }
       }
     }
