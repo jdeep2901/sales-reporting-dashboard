@@ -1245,6 +1245,22 @@
       white-space: normal;
     }
 
+    .alert-ico {
+      display: inline-block;
+      min-width: 18px;
+      height: 18px;
+      line-height: 18px;
+      text-align: center;
+      border-radius: 999px;
+      margin-right: 6px;
+      font-weight: 800;
+      font-size: 12px;
+      color: #7a0b1d;
+      background: #ffe1e7;
+      border: 1px solid #ffb4c2;
+      vertical-align: baseline;
+    }
+
     .target-controls {
       display: flex;
       align-items: end;
@@ -3143,7 +3159,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.32+20260209.1';
+    const APP_VERSION = 'v0.7.33+20260209.1';
     const LIKELIHOOD_THIS_Q = 'this_q';
     const LIKELIHOOD_NEXT_Q = 'next_q';
     const LIKELIHOOD_HELP = 'help_needed';
@@ -3917,6 +3933,7 @@
         thisQuarterRevenue: 0,
         nextQuarterRevenue: 0,
         pendingStage3Plus: 0,
+        helpDealSet: new Set(),
       };
       const dedupe = new Set(); // dedupe within bucket lists
       const addTo = (bucketKey, rec, size) => {
@@ -3941,6 +3958,7 @@
           addTo('next', rec, size);
         } else if (selected === LIKELIHOOD_HELP) {
           out.helpNeededDeals.push(rec);
+          out.helpDealSet.add(String(rec.deal || '').trim().toLowerCase());
         }
 
         const stageNum = stageNumber(rec.stage);
@@ -3965,7 +3983,7 @@
       return out;
     }
 
-    function renderLikelihoodDealLines(bodyEl, rows) {
+    function renderLikelihoodDealLines(bodyEl, rows, opts = {}) {
       if (!bodyEl) return;
       bodyEl.innerHTML = '';
       if (!rows.length) {
@@ -3985,7 +4003,19 @@
       });
       sorted.forEach((r) => {
         const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', r.deal || '-'));
+        const dealTd = document.createElement('td');
+        if (opts.alertDealSet) {
+          const dealKey = String(r.deal || '').trim().toLowerCase();
+          if (opts.alertDealSet.has(dealKey)) {
+            const ico = document.createElement('span');
+            ico.className = 'alert-ico';
+            ico.textContent = '!';
+            ico.title = 'Help Needed';
+            dealTd.appendChild(ico);
+          }
+        }
+        dealTd.appendChild(document.createTextNode(r.deal || '-'));
+        tr.appendChild(dealTd);
         tr.appendChild(makeCell('td', r.stage || '-'));
         tr.appendChild(makeCell('td', r.start_date || '-'));
         tr.appendChild(makeCell('td', fmtDealSize(bestDealSize(r))));
@@ -4002,10 +4032,8 @@
       const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
       refs.thisQuarterMeta.textContent = `${money.format(x.thisQuarterDeals.length)} deals | ${fmtDealSize(x.thisQuarterRevenue)} (T ${fmtDealSize(tThis.revenue)} | ${pctText(x.thisQuarterRevenue, tThis.revenue)})`;
       refs.nextQuarterMeta.textContent = `${money.format(x.nextQuarterDeals.length)} deals | ${fmtDealSize(x.nextQuarterRevenue)} (T ${fmtDealSize(tNext.revenue)} | ${pctText(x.nextQuarterRevenue, tNext.revenue)})`;
-      refs.helpMeta.textContent = `${money.format(x.helpNeededDeals.length)} deals | Not updated (stage 3+): ${money.format(x.pendingStage3Plus)}`;
-      renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals);
-      renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals);
-      renderLikelihoodDealLines(refs.helpLines, x.helpNeededDeals);
+      renderLikelihoodDealLines(refs.thisQuarterLines, x.thisQuarterDeals, { alertDealSet: x.helpDealSet });
+      renderLikelihoodDealLines(refs.nextQuarterLines, x.nextQuarterDeals, { alertDealSet: x.helpDealSet });
     }
 
     function loadAuthStore() {
@@ -5518,18 +5546,14 @@
 
         const thisCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.current}`);
         const nextCard = makeLikelihoodCard(`Closures in ${activeQuarterLabels.next}`);
-        const helpCard = makeLikelihoodCard('Help Needed / Stuck');
         likelihoodGrid.appendChild(thisCard.shell);
         likelihoodGrid.appendChild(nextCard.shell);
-        likelihoodGrid.appendChild(helpCard.shell);
         card.appendChild(likelihoodGrid);
         scorecardSummaryEls[seller] = {
           thisQuarterMeta: thisCard.meta,
           nextQuarterMeta: nextCard.meta,
-          helpMeta: helpCard.meta,
           thisQuarterLines: thisCard.lines,
           nextQuarterLines: nextCard.lines,
-          helpLines: helpCard.lines,
         };
 
         wrap.appendChild(card);
@@ -6582,9 +6606,8 @@
         valueEl.textContent = '-';
         return;
       }
-      // Default cycle-time analysis to "closed since 2025" (intro >= 2025-01) when available.
       if (!cycleIntroCutoffMonthState || !months.includes(cycleIntroCutoffMonthState)) {
-        cycleIntroCutoffMonthState = months.includes('2025-01') ? '2025-01' : months[0];
+        cycleIntroCutoffMonthState = months[0];
       }
       const idx = Math.max(0, months.indexOf(cycleIntroCutoffMonthState));
       slider.min = '0';
