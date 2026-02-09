@@ -352,6 +352,30 @@
       gap: 12px;
     }
 
+    .fa-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(420px, 1fr));
+      gap: 12px;
+    }
+
+    .fa-wrap .detail-panel {
+      margin: 0;
+    }
+
+    .fa-wrap .detail-wrap {
+      max-height: 44vh;
+    }
+
+    @media (max-width: 1100px) {
+      .fa-wrap {
+        grid-template-columns: 1fr;
+      }
+      .fa-wrap .detail-wrap {
+        max-height: 52vh;
+      }
+    }
+
     .funnel-card {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -2860,13 +2884,16 @@
 	          </div>
 	        </div>
 
-	        <div class="cards">
-	          <div class="card">
-	            <div class="card-title">Actual Phasing (Won Deals, By Industry)</div>
-	            <div class="sub" style="margin-top:4px;">
+	        <div class="fa-wrap">
+	          <div class="detail-panel">
+	            <div class="detail-head">
+	              <div class="detail-title">Actual Phasing (Won Deals, By Industry)</div>
+	              <div id="fa-phasing-meta" class="detail-meta">-</div>
+	            </div>
+	            <div class="sub" style="padding:10px 12px 0;">
 	              Each % is the share of won deals starting in that quarter offset after intro (<code>+0Q</code> = same quarter as intro). If an industry has low volume, the forecast falls back to <code>Overall</code>.
 	            </div>
-	            <div class="table-wrap">
+	            <div class="detail-wrap">
 	              <table class="detail-table" id="fa-phasing-table">
 	                <thead id="fa-phasing-head"></thead>
 	                <tbody id="fa-phasing-body"></tbody>
@@ -2874,18 +2901,21 @@
 	            </div>
 	          </div>
 
-	          <div class="card">
-	            <div class="card-title">Quarterly EV Forecast (Pipeline, Industry-Phased)</div>
-	            <div class="sub" style="margin-top:4px;">
+	          <div class="detail-panel">
+	            <div class="detail-head">
+	              <div class="detail-title">Quarterly EV Forecast (Pipeline, Industry-Phased)</div>
+	              <div id="fa-forecast-meta" class="detail-meta">-</div>
+	            </div>
+	            <div class="sub" style="padding:10px 12px 0;">
 	              Pipeline EV uses stage probabilities and size rules (stages 1-4 = $100k; stages 5-6 = Monday deal size). EV is allocated into quarters using the empirical industry phasing.
 	            </div>
-	            <div class="table-wrap">
+	            <div class="detail-wrap">
 	              <table class="detail-table" id="fa-forecast-table">
 	                <thead id="fa-forecast-head"></thead>
 	                <tbody id="fa-forecast-body"></tbody>
 	              </table>
 	            </div>
-	            <div id="fa-forecast-note" class="sub" style="margin-top:8px;"></div>
+	            <div id="fa-forecast-note" class="sub" style="padding:10px 12px 12px;"></div>
 	          </div>
 	        </div>
 
@@ -3271,7 +3301,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.39+20260209.1';
+    const APP_VERSION = 'v0.7.40+20260209.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6734,6 +6764,8 @@
       const phBody = document.getElementById('fa-phasing-body');
       const fHead = document.getElementById('fa-forecast-head');
       const fBody = document.getElementById('fa-forecast-body');
+      const phMeta = document.getElementById('fa-phasing-meta');
+      const fMeta = document.getElementById('fa-forecast-meta');
       const noteEl = document.getElementById('fa-forecast-note');
       if (!sellerEl || !cutoffEl || !phHead || !phBody || !fHead || !fBody || !noteEl) return;
 
@@ -6789,6 +6821,10 @@
         [w0, w1, w2, w3, w4p].forEach((w) => tr.appendChild(makeCell('td', total ? pct(w) : '-')));
         phBody.appendChild(tr);
       });
+      if (phMeta) {
+        const overallN = Number((distByIndustry.Overall || {}).total || 0);
+        phMeta.textContent = `${money.format(overallN)} won deal(s)`;
+      }
 
       // Forecast table (stage rows x next 4 fiscal quarters).
       fHead.innerHTML = '';
@@ -6825,6 +6861,9 @@
       const assigned = Number(alloc.assignedTotal || 0);
       const unassigned = Number(alloc.unassignedTotal || 0);
       noteEl.textContent = `Allocated into shown quarters: $ ${money.format(Math.round(assigned))}. Outside 4-quarter window (incl. later offsets): $ ${money.format(Math.round(unassigned))}.`;
+      if (fMeta) {
+        fMeta.textContent = `Scope: ${sellerScope}`;
+      }
 
       const insight = [];
       const overallN = Number((distByIndustry.Overall || {}).total || 0);
