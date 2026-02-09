@@ -466,6 +466,8 @@ async function mondayGraphql(token: string, query: string, variables?: Record<st
       "Content-Type": "application/json",
       Authorization: token,
     },
+    // Avoid hanging until the edge runtime kills the request (which surfaces as 546 upstream).
+    signal: AbortSignal.timeout(25_000),
     body: JSON.stringify({ query, variables: variables || {} }),
   });
   const body = await res.json();
@@ -745,16 +747,25 @@ async function buildDataset(
   let relationValueByDealId: Record<string, { text: string; display_value: string; value: string | null }> | null = null;
   if (opts?.monday_token && accountsRelationColId) {
     try {
-      const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
-      const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [accountsRelationColId]);
-      relationValueByDealId = {};
-      for (const it of relOnly) {
+      // Only refetch if we detect the relation `value` is mostly empty in the initial payload.
+      const sample = items.slice(0, 220);
+      const nonEmpty = sample.filter((it) => {
         const cv = (it.column_values || []).find((v) => v.id === accountsRelationColId);
-        relationValueByDealId[String(it.id)] = {
-          text: String(cv?.text || ""),
-          display_value: String((cv as any)?.display_value || ""),
-          value: cv?.value || null,
-        };
+        return relationValueNonEmpty(cv?.value);
+      }).length;
+      const shouldRefetch = sample.length ? ((nonEmpty / sample.length) < 0.25) : true;
+      if (shouldRefetch) {
+        const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
+        const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [accountsRelationColId]);
+        relationValueByDealId = {};
+        for (const it of relOnly) {
+          const cv = (it.column_values || []).find((v) => v.id === accountsRelationColId);
+          relationValueByDealId[String(it.id)] = {
+            text: String(cv?.text || ""),
+            display_value: String((cv as any)?.display_value || ""),
+            value: cv?.value || null,
+          };
+        }
       }
     } catch (_) {
       relationValueByDealId = null;
@@ -801,16 +812,24 @@ async function buildDataset(
 
   if (opts?.monday_token && contactsRelationColId) {
     try {
-      const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
-      const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [contactsRelationColId]);
-      contactsRelationValueByDealId = {};
-      for (const it of relOnly) {
+      const sample = items.slice(0, 220);
+      const nonEmpty = sample.filter((it) => {
         const cv = (it.column_values || []).find((v) => v.id === contactsRelationColId);
-        contactsRelationValueByDealId[String(it.id)] = {
-          text: String(cv?.text || ""),
-          display_value: String((cv as any)?.display_value || ""),
-          value: cv?.value || null,
-        };
+        return relationValueNonEmpty(cv?.value);
+      }).length;
+      const shouldRefetch = sample.length ? ((nonEmpty / sample.length) < 0.25) : true;
+      if (shouldRefetch) {
+        const dealIds = items.map((x) => String(x.id)).filter((x) => /^\d+$/.test(x));
+        const relOnly = await fetchItemsByIds(opts.monday_token, dealIds, [contactsRelationColId]);
+        contactsRelationValueByDealId = {};
+        for (const it of relOnly) {
+          const cv = (it.column_values || []).find((v) => v.id === contactsRelationColId);
+          contactsRelationValueByDealId[String(it.id)] = {
+            text: String(cv?.text || ""),
+            display_value: String((cv as any)?.display_value || ""),
+            value: cv?.value || null,
+          };
+        }
       }
     } catch (_) {
       contactsRelationValueByDealId = null;
@@ -834,17 +853,29 @@ async function buildDataset(
       const meta = await fetchBoardColumns(opts.monday_token, contactsBoardId);
       const candidates = meta.columns.filter((c) => norm(c.title).includes("business group")).map((c) => c.id);
       if (candidates.length) {
-        const contactItems = await fetchBoardItems(opts.monday_token, contactsBoardId, candidates);
-        const pick = pickBestColumnIdByFillRate(
-          contactItems,
-          candidates,
-          (it, id) => {
-            const cv = it.column_values.find((v) => v.id === id);
-            return smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
-          },
-          200,
-        );
-        contactsBusinessGroupColId = pick.best || candidates[0] || null;
+        // Pick by fill-rate using only referenced contact IDs (avoid scanning full Contacts board).
+        const sampleIds = contactIds.slice(0, 80);
+        if (sampleIds.length) {
+          const sampleItems = await fetchItemsByIds(opts.monday_token, sampleIds, candidates);
+          const counts: Record<string, number> = {};
+          for (const id of candidates) counts[id] = 0;
+          for (const it of sampleItems) {
+            for (const id of candidates) {
+              const cv = (it.column_values || []).find((v) => v.id === id);
+              const v = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
+              if (String(v || "").trim()) counts[id] += 1;
+            }
+          }
+          let best: string | null = null;
+          let bestC = -1;
+          for (const id of candidates) {
+            const c = counts[id] || 0;
+            if (c > bestC) { bestC = c; best = id; }
+          }
+          contactsBusinessGroupColId = best || candidates[0] || null;
+        } else {
+          contactsBusinessGroupColId = candidates[0] || null;
+        }
       }
     }
 
@@ -921,17 +952,29 @@ async function buildDataset(
       const accMeta = await fetchBoardColumns(opts.monday_token, accountsBoardId);
       const candidates = accMeta.columns.filter((c) => norm(c.title).includes("industry")).map((c) => c.id);
       if (candidates.length) {
-        const accItems = await fetchBoardItems(opts.monday_token, accountsBoardId, candidates);
-        const pick = pickBestColumnIdByFillRate(
-          accItems,
-          candidates,
-          (it, id) => {
-            const cv = it.column_values.find((v) => v.id === id);
-            return smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
-          },
-          200,
-        );
-        accountsIndustryColId = pick.best || candidates[0] || null;
+        // Pick by fill-rate using only referenced account IDs (avoid scanning full Accounts board).
+        const sampleIds = accountIds.slice(0, 80);
+        if (sampleIds.length) {
+          const sampleItems = await fetchItemsByIds(opts.monday_token, sampleIds, candidates);
+          const counts: Record<string, number> = {};
+          for (const id of candidates) counts[id] = 0;
+          for (const it of sampleItems) {
+            for (const id of candidates) {
+              const cv = (it.column_values || []).find((v) => v.id === id);
+              const v = smartTextFromMondayColumnValue(cv?.text, (cv as any)?.display_value, cv?.value);
+              if (String(v || "").trim()) counts[id] += 1;
+            }
+          }
+          let best: string | null = null;
+          let bestC = -1;
+          for (const id of candidates) {
+            const c = counts[id] || 0;
+            if (c > bestC) { bestC = c; best = id; }
+          }
+          accountsIndustryColId = best || candidates[0] || null;
+        } else {
+          accountsIndustryColId = candidates[0] || null;
+        }
       }
     }
 
