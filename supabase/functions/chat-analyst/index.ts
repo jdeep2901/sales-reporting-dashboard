@@ -193,21 +193,33 @@ Deno.serve(async (req) => {
     const username = norm(body?.username);
     const password = String(body?.password || "");
     const question = String(body?.question || "").trim();
+    const versionId = body?.version_id ? String(body.version_id).trim() : "";
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!question) return j({ error: "question is required." }, 400);
 
     const supabase = createClient(supabaseUrl, serviceRole);
-    const login = await supabase.rpc("get_dashboard_state", { p_username: username, p_password: password });
-    if (login.error) return j({ error: login.error.message }, 401);
-    const st = Array.isArray(login.data) ? login.data[0] : login.data;
-    const dataset = st?.dataset;
+    let dataset: any = null;
+    let datasetVersionId: string | null = null;
+    if (versionId) {
+      const ver = await supabase.rpc("get_dashboard_version", { p_username: username, p_password: password, p_version_id: versionId });
+      if (ver.error) return j({ error: ver.error.message }, 401);
+      const row = Array.isArray(ver.data) ? ver.data[0] : ver.data;
+      dataset = row?.dataset;
+      datasetVersionId = String(row?.version_id || versionId);
+    } else {
+      const login = await supabase.rpc("get_dashboard_state", { p_username: username, p_password: password });
+      if (login.error) return j({ error: login.error.message }, 401);
+      const st = Array.isArray(login.data) ? login.data[0] : login.data;
+      dataset = st?.dataset;
+      datasetVersionId = st?.active_version_id ? String(st.active_version_id) : null;
+    }
     if (!dataset || typeof dataset !== "object") {
       return j({ error: "No synced dataset found yet. Run Monday refresh first." }, 400);
     }
 
     const context = buildContext(dataset, question);
     const answer = await askOpenAI(openAiKey, model, question, context);
-    return j({ ok: true, model, answer, context });
+    return j({ ok: true, model, version_id: datasetVersionId, answer, context });
   } catch (e) {
     return j({ error: (e as Error).message || "Unexpected error" }, 500);
   }
