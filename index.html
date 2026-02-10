@@ -3392,7 +3392,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.55+20260210.1';
+    const APP_VERSION = 'v0.7.56+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4587,7 +4587,14 @@
       const intro = introTrend || {};
       const weeks = Array.isArray(intro.weeks) ? intro.weeks : [];
       const seriesMap = (intro.series && typeof intro.series === 'object') ? intro.series : {};
-      const series = (seriesMap[scopeKey] && typeof seriesMap[scopeKey] === 'object') ? seriesMap[scopeKey] : {};
+      // Call Trends UI uses the seller scope labels (defaults to "Overall").
+      // Older datasets may store the overall key as "Overall" (not "All (unique deals)").
+      const pickSeries = (k) => (seriesMap[k] && typeof seriesMap[k] === 'object') ? seriesMap[k] : null;
+      const series =
+        pickSeries(scopeKey)
+        || pickSeries('Overall')
+        || pickSeries('All (unique deals)')
+        || {};
       const out = {};
       weeks.forEach((w) => {
         const m = String(w || '').slice(0, 7);
@@ -4665,7 +4672,7 @@
 
       // Call trends consistency (month aggregation).
       const trend = data.intro_trend || {};
-      const backendOverall = monthAggFromIntroTrend(trend, 'All (unique deals)');
+      const backendOverall = monthAggFromIntroTrend(trend, 'Overall');
       const recomputeOverall = monthAggFromDealsRows(rows, 'Overall', '2024-10');
       const months = Object.keys(backendOverall).filter((m) => m in recomputeOverall).sort().slice(-6);
       let mism = 0;
