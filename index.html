@@ -3380,7 +3380,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.52+20260210.1';
+    const APP_VERSION = 'v0.7.53+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -3792,22 +3792,24 @@
       currentUser = fresh;
     }
 
-    async function pushSharedStoreNow(options = {}) {
-      const throwOnError = !!options.throwOnError;
-      if (!currentUser || !sessionPassword) return;
-      if (sharedStorePushInFlight) return;
-      sharedStorePushInFlight = true;
-      try {
-        const out = await supabaseRpc('save_dashboard_state', {
-          p_username: currentUser.username,
-          p_password: sessionPassword,
-          p_likelihood: likelihoodState,
-          p_quarter_targets: quarterTargetsState,
-          p_users: (currentUser.role === 'admin') ? (currentAuthStore.users || {}) : null,
-          p_settings: (currentUser.role === 'admin') ? (dashboardSettingsState || {}) : null,
-        });
-        if (out) applySharedStorePayload(out);
-      } catch (e) {
+	    async function pushSharedStoreNow(options = {}) {
+	      const throwOnError = !!options.throwOnError;
+	      if (!currentUser || !sessionPassword) return;
+	      if (sharedStorePushInFlight) return;
+	      sharedStorePushInFlight = true;
+	      try {
+	        const out = await supabaseRpc('save_dashboard_state', {
+	          p_username: currentUser.username,
+	          p_password: sessionPassword,
+	          p_likelihood: likelihoodState,
+	          // Viewers should not be mutating targets; sending targets here can cause the backend
+	          // to reject the whole request, which would prevent Help Needed updates from persisting.
+	          p_quarter_targets: (currentUser.role === 'admin') ? quarterTargetsState : null,
+	          p_users: (currentUser.role === 'admin') ? (currentAuthStore.users || {}) : null,
+	          p_settings: (currentUser.role === 'admin') ? (dashboardSettingsState || {}) : null,
+	        });
+	        if (out) applySharedStorePayload(out);
+	      } catch (e) {
         console.warn('Shared store push failed:', e.message || e);
         if (throwOnError) throw e;
       } finally {
@@ -5750,6 +5752,9 @@
 	        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
 	        if (!scorecardInSellerScope(r, sellerLabel)) return;
 	        const stageNorm = normalizeStage(String(r.stage || '').trim() || String(r.deal_stage || '').trim());
+	        // Explicitly exclude latent pool stages from Weekly Scorecard KPI buckets.
+	        // Latent pool is not a closure stage and should not inflate Won/Lost counts.
+	        if (String(stageNorm || '').toLowerCase().includes('latent pool')) return;
 	        const n = stageNumber(stageNorm);
 	        if (n == null || n < 1 || n > 8) return;
 	        const rec = { ...r, stage: stageNorm };
@@ -5769,6 +5774,7 @@
 	        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
 	        if (!scorecardInSellerScope(r, sellerLabel)) return;
 	        const stageNorm = normalizeStage(String(r.stage || '').trim() || String(r.deal_stage || '').trim());
+	        if (String(stageNorm || '').toLowerCase().includes('latent pool')) return;
 	        const n = stageNumber(stageNorm);
 	        if (n == null || n < 1 || n > 8) return;
 	        const rec = { ...r, stage: stageNorm };
