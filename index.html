@@ -2481,16 +2481,17 @@
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
 	      </div>
-      <div id="tabs-appendix" class="tabs tabs-appendix" style="display:none;">
-        <button id="tab-crosstab" class="tab-btn" type="button">Crosstab</button>
-        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
-        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
-        <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
-        <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
-        <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
-        <button id="tab-cycletime" class="tab-btn" type="button">Cycle Time</button>
-        <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
-      </div>
+	      <div id="tabs-appendix" class="tabs tabs-appendix" style="display:none;">
+	        <button id="tab-crosstab" class="tab-btn" type="button">Crosstab</button>
+	        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
+	        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
+	        <button id="tab-winloss" class="tab-btn" type="button">Won/Lost Sources</button>
+	        <button id="tab-stageconv" class="tab-btn" type="button">Stage Conversion</button>
+	        <button id="tab-compare" class="tab-btn" type="button">Version Compare</button>
+	        <button id="tab-momentum" class="tab-btn" type="button">Funnel Momentum</button>
+	        <button id="tab-cycletime" class="tab-btn" type="button">Cycle Time</button>
+	        <button id="tab-assumptions" class="tab-btn" type="button">Assumptions & Logic</button>
+	      </div>
 
       <div id="view-crosstab" class="view">
         <div class="head">
@@ -2637,7 +2638,7 @@
         <div class="footnote">Same inclusion rules as other tabs. Top logos/functions are shown per industry row.</div>
       </div>
 
-      <div id="view-winloss" class="view">
+	      <div id="view-winloss" class="view">
         <div class="head">
           <div>
             <h1>Won/Lost Source Analysis</h1>
@@ -2680,9 +2681,95 @@
           </table>
         </div>
         <div class="footnote">Use high-volume high-loss rows as primary strategic focus for next year; defend high-volume high-win rows as repeatable plays.</div>
-      </div>
+	      </div>
 
-      <div id="view-introtrend" class="view">
+	      <div id="view-stageconv" class="view">
+	        <div class="head">
+	          <div>
+	            <h1>Stage Conversion (A→B)</h1>
+	            <div class="sub">Stage-level progression between two snapshots (versioned refreshes). Uses canonical stage order and intro cutoff.</div>
+	          </div>
+	          <div class="controls">
+	            <div>
+	              <label for="stageconv-seller">Seller View</label>
+	              <select id="stageconv-seller"></select>
+	            </div>
+	            <div class="funnel-time" style="min-width:260px;">
+	              <div class="funnel-time-head">
+	                <label for="stageconv-time-slider" style="margin:0;">Intro Cutoff</label>
+	                <div id="stageconv-time-value" class="funnel-time-value">-</div>
+	              </div>
+	              <input id="stageconv-time-slider" type="range" min="0" max="0" value="0" />
+	            </div>
+	            <div>
+	              <label for="stageconv-from">From (A)</label>
+	              <select id="stageconv-from"></select>
+	            </div>
+	            <div>
+	              <label for="stageconv-to">To (B)</label>
+	              <select id="stageconv-to"></select>
+	            </div>
+	            <div style="display:flex;align-items:end;">
+	              <button id="stageconv-use-viewing" type="button" style="height:42px;">Use Viewing as B</button>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="insight">
+	          <div class="insight-title">Methodology (CEO-Friendly)</div>
+	          <ul id="insight-stageconv" class="insight-list"></ul>
+	        </div>
+	        <div class="detail-panel" style="margin-top:14px;">
+	          <div class="detail-head">
+	            <div class="detail-title">Stage Progression Summary</div>
+	            <div id="stageconv-meta" class="detail-meta">Select versions A and B to compute progression.</div>
+	          </div>
+	          <div class="detail-wrap">
+	            <table class="detail-table" id="stageconv-table">
+	              <thead>
+	                <tr>
+	                  <th>Stage (in A)</th>
+	                  <th>N in A</th>
+	                  <th>Forward (any)</th>
+	                  <th>Forward %</th>
+	                  <th>Next</th>
+	                  <th>Skip</th>
+	                  <th>Back</th>
+	                  <th>Stalled</th>
+	                  <th>Gone</th>
+	                </tr>
+	              </thead>
+	              <tbody id="stageconv-body"></tbody>
+	            </table>
+	          </div>
+	        </div>
+	        <div class="detail-panel" style="margin-top:14px;">
+	          <div class="detail-head">
+	            <div id="stageconv-drill-title" class="detail-title">Deal Drilldown</div>
+	            <div id="stageconv-drill-meta" class="detail-meta">Click any number in the summary table to list deals.</div>
+	          </div>
+	          <div class="detail-wrap">
+	            <table class="detail-table" id="stageconv-drill-table">
+	              <thead>
+	                <tr>
+	                  <th>Deal</th>
+	                  <th>Stage A</th>
+	                  <th>Stage B</th>
+	                  <th>Intro Date</th>
+	                  <th>Start Date</th>
+	                  <th>Deal Size</th>
+	                  <th>Help Needed</th>
+	                </tr>
+	              </thead>
+	              <tbody id="stageconv-drill-body"></tbody>
+	            </table>
+	          </div>
+	        </div>
+	        <div class="footnote">
+	          Definitions: Forward(any) = moved to any later stage in B; Next = i→i+1; Skip = i→later than i+1; Back = moved to earlier stage; Stalled = same stage; Gone = present in A but missing in B (removed/out of scope). New deals in B are reported in meta but not counted in stage-i denominators.
+	        </div>
+	      </div>
+
+	      <div id="view-introtrend" class="view">
         <div class="head">
           <div>
             <h1>Weekly Intro Calls Trend</h1>
@@ -3392,7 +3479,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.56+20260210.1';
+    const APP_VERSION = 'v0.7.57+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -3464,12 +3551,18 @@
     let scorecardSummaryEls = {};
     let scorecardSellerLabels = [];
     let scorecardSelectedSeller = 'Overall';
-    let scorecardIntroMonthsState = [];
-    let scorecardIntroCutoffMonthState = null;
-    let scorecardClosureStageFilter = null; // null = all; else Set of stage labels
-    let scorecardClosureHelpFilter = 'all'; // all | yes | no
-    let scorecardCompareCurrentIdState = null;
-    let scorecardComparePrevIdState = null;
+	    let scorecardIntroMonthsState = [];
+	    let scorecardIntroCutoffMonthState = null;
+	    let scorecardClosureStageFilter = null; // null = all; else Set of stage labels
+	    let scorecardClosureHelpFilter = 'all'; // all | yes | no
+	    let scorecardCompareCurrentIdState = null;
+	    let scorecardComparePrevIdState = null;
+	    let stageConvIntroMonthsState = [];
+	    let stageConvIntroCutoffMonthState = null;
+	    let stageConvSelectedSeller = 'Overall';
+	    let stageConvFromIdState = null;
+	    let stageConvToIdState = null;
+	    let stageConvLastComputed = null; // cached computed payload for current controls
 
     const versionDatasetCache = new Map(); // versionId -> { dataset, likelihood, created_at, created_by }
     let cycleRowsState = [];
@@ -4956,6 +5049,8 @@
 	      const momentumRight = document.getElementById('momentum-right');
 	      const scCurr = document.getElementById('scorecard-version-current');
 	      const scPrev = document.getElementById('scorecard-version-prev');
+	      const scFrom = document.getElementById('stageconv-from');
+	      const scTo = document.getElementById('stageconv-to');
 	      if (!main || !left || !right || !momentumLeft || !momentumRight) return;
 	      const options = Array.isArray(versionsMetaState) ? versionsMetaState : [];
 	      const fill = (sel) => {
@@ -4975,15 +5070,26 @@
 	      fill(momentumRight);
 	      fill(scCurr);
 	      fill(scPrev);
+	      fill(scFrom);
+	      fill(scTo);
 	      const selected = viewedVersionIdState || activeVersionIdState || latestVersionIdState || (options[0] && String(options[0].id));
 	      if (selected) main.value = selected;
 	      if (selected) right.value = selected;
 	      if (selected) momentumRight.value = selected;
 	      if (selected && scCurr) scCurr.value = selected;
+	      if (selected && scTo) scTo.value = selected;
 	      if (!left.value && options[1]) left.value = String(options[1].id);
 	      if (!left.value && options[0]) left.value = String(options[0].id);
 	      if (!momentumLeft.value && options[1]) momentumLeft.value = String(options[1].id);
 	      if (!momentumLeft.value && options[0]) momentumLeft.value = String(options[0].id);
+	      if (scFrom) {
+	        const desired = stageConvFromIdState || choosePreviousVersionId(selected);
+	        if (desired) scFrom.value = desired;
+	        stageConvFromIdState = scFrom.value || desired || stageConvFromIdState;
+	      }
+	      if (scTo) {
+	        stageConvToIdState = scTo.value || selected || stageConvToIdState;
+	      }
 	      if (scPrev) {
 	        const desiredPrev = scorecardComparePrevIdState || choosePreviousVersionId(selected);
 	        if (desiredPrev) scPrev.value = desiredPrev;
@@ -5769,6 +5875,7 @@
 	      const tabScore = document.getElementById('tab-scorecard');
 	      const tabIndustry = document.getElementById('tab-industry');
 	      const tabWinLoss = document.getElementById('tab-winloss');
+	      const tabStageConv = document.getElementById('tab-stageconv');
 	      const tabIntroTrend = document.getElementById('tab-introtrend');
 	      const tabCompare = document.getElementById('tab-compare');
 	      const tabMomentum = document.getElementById('tab-momentum');
@@ -5778,21 +5885,22 @@
 	      const tabAssumptions = document.getElementById('tab-assumptions');
 	      const tabAppendix = document.getElementById('tab-appendix');
 	      const tabAdmin = document.getElementById('tab-admin');
-	      const viewCross = document.getElementById('view-crosstab');
-	      const viewFunnel = document.getElementById('view-funnel');
-	      const viewScore = document.getElementById('view-scorecard');
-	      const viewIndustry = document.getElementById('view-industry');
-	      const viewWinLoss = document.getElementById('view-winloss');
-	      const viewIntroTrend = document.getElementById('view-introtrend');
-	      const viewCompare = document.getElementById('view-compare');
-	      const viewMomentum = document.getElementById('view-momentum');
-	      const viewForecast = document.getElementById('view-forecast');
-	      const viewForecastActuals = document.getElementById('view-forecast-actuals');
-	      const viewCycleTime = document.getElementById('view-cycletime');
-	      const viewAssumptions = document.getElementById('view-assumptions');
-	      const viewAdmin = document.getElementById('view-admin');
-	      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'compare', 'momentum', 'cycletime', 'assumptions']);
-	      let appendixOpen = false;
+		      const viewCross = document.getElementById('view-crosstab');
+		      const viewFunnel = document.getElementById('view-funnel');
+		      const viewScore = document.getElementById('view-scorecard');
+		      const viewIndustry = document.getElementById('view-industry');
+		      const viewWinLoss = document.getElementById('view-winloss');
+		      const viewStageConv = document.getElementById('view-stageconv');
+		      const viewIntroTrend = document.getElementById('view-introtrend');
+		      const viewCompare = document.getElementById('view-compare');
+		      const viewMomentum = document.getElementById('view-momentum');
+		      const viewForecast = document.getElementById('view-forecast');
+		      const viewForecastActuals = document.getElementById('view-forecast-actuals');
+		      const viewCycleTime = document.getElementById('view-cycletime');
+		      const viewAssumptions = document.getElementById('view-assumptions');
+		      const viewAdmin = document.getElementById('view-admin');
+		      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'stageconv', 'compare', 'momentum', 'cycletime', 'assumptions']);
+		      let appendixOpen = false;
 
       function setAppendixOpen(next) {
         appendixOpen = !!next;
@@ -5800,35 +5908,37 @@
         if (tabAppendix) tabAppendix.setAttribute('aria-expanded', appendixOpen ? 'true' : 'false');
       }
 
-	      function activate(name) {
-	        const isAppendixView = appendixViews.has(name);
-	        tabAppendix.classList.toggle('active', isAppendixView);
-	        tabCross.classList.toggle('active', name === 'crosstab');
-	        tabFunnel.classList.toggle('active', name === 'funnel');
-	        tabScore.classList.toggle('active', name === 'scorecard');
-	        tabIndustry.classList.toggle('active', name === 'industry');
-	        tabWinLoss.classList.toggle('active', name === 'winloss');
-	        tabIntroTrend.classList.toggle('active', name === 'introtrend');
-	        tabCompare.classList.toggle('active', name === 'compare');
-	        tabMomentum.classList.toggle('active', name === 'momentum');
-	        tabForecast.classList.toggle('active', name === 'forecast');
-	        tabForecastActuals.classList.toggle('active', name === 'forecast-actuals');
-	        tabCycleTime.classList.toggle('active', name === 'cycletime');
-	        tabAssumptions.classList.toggle('active', name === 'assumptions');
-	        tabAdmin.classList.toggle('active', name === 'admin');
-	        viewCross.classList.toggle('active', name === 'crosstab');
-	        viewFunnel.classList.toggle('active', name === 'funnel');
-	        viewScore.classList.toggle('active', name === 'scorecard');
-	        viewIndustry.classList.toggle('active', name === 'industry');
-	        viewWinLoss.classList.toggle('active', name === 'winloss');
-	        viewIntroTrend.classList.toggle('active', name === 'introtrend');
-	        viewCompare.classList.toggle('active', name === 'compare');
-	        viewMomentum.classList.toggle('active', name === 'momentum');
-	        viewForecast.classList.toggle('active', name === 'forecast');
-	        viewForecastActuals.classList.toggle('active', name === 'forecast-actuals');
-	        viewCycleTime.classList.toggle('active', name === 'cycletime');
-	        viewAssumptions.classList.toggle('active', name === 'assumptions');
-	        viewAdmin.classList.toggle('active', name === 'admin');
+		      function activate(name) {
+		        const isAppendixView = appendixViews.has(name);
+		        tabAppendix.classList.toggle('active', isAppendixView);
+		        tabCross.classList.toggle('active', name === 'crosstab');
+		        tabFunnel.classList.toggle('active', name === 'funnel');
+		        tabScore.classList.toggle('active', name === 'scorecard');
+		        tabIndustry.classList.toggle('active', name === 'industry');
+		        tabWinLoss.classList.toggle('active', name === 'winloss');
+		        tabStageConv.classList.toggle('active', name === 'stageconv');
+		        tabIntroTrend.classList.toggle('active', name === 'introtrend');
+		        tabCompare.classList.toggle('active', name === 'compare');
+		        tabMomentum.classList.toggle('active', name === 'momentum');
+		        tabForecast.classList.toggle('active', name === 'forecast');
+		        tabForecastActuals.classList.toggle('active', name === 'forecast-actuals');
+		        tabCycleTime.classList.toggle('active', name === 'cycletime');
+		        tabAssumptions.classList.toggle('active', name === 'assumptions');
+		        tabAdmin.classList.toggle('active', name === 'admin');
+		        viewCross.classList.toggle('active', name === 'crosstab');
+		        viewFunnel.classList.toggle('active', name === 'funnel');
+		        viewScore.classList.toggle('active', name === 'scorecard');
+		        viewIndustry.classList.toggle('active', name === 'industry');
+		        viewWinLoss.classList.toggle('active', name === 'winloss');
+		        viewStageConv.classList.toggle('active', name === 'stageconv');
+		        viewIntroTrend.classList.toggle('active', name === 'introtrend');
+		        viewCompare.classList.toggle('active', name === 'compare');
+		        viewMomentum.classList.toggle('active', name === 'momentum');
+		        viewForecast.classList.toggle('active', name === 'forecast');
+		        viewForecastActuals.classList.toggle('active', name === 'forecast-actuals');
+		        viewCycleTime.classList.toggle('active', name === 'cycletime');
+		        viewAssumptions.classList.toggle('active', name === 'assumptions');
+		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
 	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals') {
@@ -5840,19 +5950,20 @@
 
       activateTab = activate;
 
-      tabCross.addEventListener('click', () => activate('crosstab'));
-      tabFunnel.addEventListener('click', () => activate('funnel'));
-      tabScore.addEventListener('click', () => activate('scorecard'));
-      tabIndustry.addEventListener('click', () => activate('industry'));
-	      tabWinLoss.addEventListener('click', () => activate('winloss'));
-	      tabIntroTrend.addEventListener('click', () => activate('introtrend'));
-	      tabCompare.addEventListener('click', () => activate('compare'));
-	      tabMomentum.addEventListener('click', () => activate('momentum'));
-	      tabForecast.addEventListener('click', () => activate('forecast'));
-	      tabForecastActuals.addEventListener('click', () => activate('forecast-actuals'));
-	      tabCycleTime.addEventListener('click', () => activate('cycletime'));
-	      tabAssumptions.addEventListener('click', () => activate('assumptions'));
-	      tabAdmin.addEventListener('click', () => activate('admin'));
+	      tabCross.addEventListener('click', () => activate('crosstab'));
+	      tabFunnel.addEventListener('click', () => activate('funnel'));
+	      tabScore.addEventListener('click', () => activate('scorecard'));
+	      tabIndustry.addEventListener('click', () => activate('industry'));
+		      tabWinLoss.addEventListener('click', () => activate('winloss'));
+		      tabStageConv.addEventListener('click', () => activate('stageconv'));
+		      tabIntroTrend.addEventListener('click', () => activate('introtrend'));
+		      tabCompare.addEventListener('click', () => activate('compare'));
+		      tabMomentum.addEventListener('click', () => activate('momentum'));
+		      tabForecast.addEventListener('click', () => activate('forecast'));
+		      tabForecastActuals.addEventListener('click', () => activate('forecast-actuals'));
+		      tabCycleTime.addEventListener('click', () => activate('cycletime'));
+		      tabAssumptions.addEventListener('click', () => activate('assumptions'));
+		      tabAdmin.addEventListener('click', () => activate('admin'));
       tabAppendix.addEventListener('click', () => setAppendixOpen(!appendixOpen));
 
       // Initialize appendix row hidden unless we start on an appendix view.
@@ -6738,8 +6849,275 @@
       }
 
       if (scorecardIntroCutoffMonthState) lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
-      setInsight('insight-scorecard', lines);
-    }
+	      setInsight('insight-scorecard', lines);
+	    }
+
+	    function stageConvCoreStages() {
+	      // Canonical order (matches the app order): Intro -> Qualification -> Capability -> Scoping -> Proposal -> Contracting -> Win -> Loss
+	      return ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','6. Commercial Proposal','5. Contracting','7. Win','8. Loss'];
+	    }
+
+	    function buildStageMapForConversion(dataset, sellerLabel, cutoffMonth) {
+	      const rows = dataset && Array.isArray(dataset.all_deals_rows) ? dataset.all_deals_rows : [];
+	      const map = new Map(); // canonicalKey -> rec
+	      rows.forEach((r) => {
+	        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
+	        if (!scorecardInSellerScope(r, sellerLabel === 'Overall' ? null : sellerLabel)) return;
+	        const stageNorm = normalizeStage(String(r.stage || r.deal_stage || '').trim());
+	        const low = String(stageNorm || '').toLowerCase();
+	        if (low.includes('latent pool')) return;
+	        if (low.includes('no show') || low.includes('reschedule')) return;
+	        if (low.includes('disqualified')) return;
+	        const n = stageNumber(stageNorm);
+	        if (n == null || n < 1 || n > 8) return;
+	        const rec = { ...r, stage: stageNorm };
+	        const key = scorecardCanonicalKey(rec);
+	        const existing = map.get(key);
+	        if (!existing) {
+	          map.set(key, rec);
+	          return;
+	        }
+	        const en = stageNumber(existing.stage);
+	        if (en == null || n > en) map.set(key, rec);
+	      });
+	      return map;
+	    }
+
+	    function computeStageConversion(datasetA, datasetB, sellerLabel, cutoffMonth) {
+	      const a = buildStageMapForConversion(datasetA, sellerLabel, cutoffMonth);
+	      const b = buildStageMapForConversion(datasetB, sellerLabel, cutoffMonth);
+	      const stages = stageConvCoreStages();
+	      const stageByNum = {}; // n -> label
+	      stages.forEach((lab) => { stageByNum[stageNumber(lab)] = lab; });
+
+	      const perStage = {}; // stageN -> stats
+	      const drill = {}; // stageN -> metric -> [{a,b}]
+	      stages.forEach((lab) => {
+	        const n = stageNumber(lab);
+	        perStage[n] = { stage: lab, N: 0, forward: 0, next: 0, skip: 0, back: 0, stalled: 0, gone: 0 };
+	        drill[n] = { forward: [], next: [], skip: [], back: [], stalled: [], gone: [] };
+	      });
+
+	      let totalA = a.size;
+	      let totalB = b.size;
+	      let newInB = 0;
+	      const newDeals = [];
+	      b.forEach((recB, key) => {
+	        if (!a.has(key)) {
+	          newInB += 1;
+	          newDeals.push({ a: null, b: recB });
+	        }
+	      });
+
+	      a.forEach((recA, key) => {
+	        const nA = stageNumber(recA.stage);
+	        if (nA == null || !perStage[nA]) return;
+	        perStage[nA].N += 1;
+	        const recB = b.get(key) || null;
+	        if (!recB) {
+	          perStage[nA].gone += 1;
+	          drill[nA].gone.push({ a: recA, b: null });
+	          return;
+	        }
+	        const nB = stageNumber(recB.stage);
+	        if (nB == null) {
+	          perStage[nA].gone += 1;
+	          drill[nA].gone.push({ a: recA, b: null });
+	          return;
+	        }
+	        if (nB === nA) {
+	          perStage[nA].stalled += 1;
+	          drill[nA].stalled.push({ a: recA, b: recB });
+	        } else if (nB > nA) {
+	          perStage[nA].forward += 1;
+	          drill[nA].forward.push({ a: recA, b: recB });
+	          if (nB === nA + 1) {
+	            perStage[nA].next += 1;
+	            drill[nA].next.push({ a: recA, b: recB });
+	          } else {
+	            perStage[nA].skip += 1;
+	            drill[nA].skip.push({ a: recA, b: recB });
+	          }
+	        } else {
+	          perStage[nA].back += 1;
+	          drill[nA].back.push({ a: recA, b: recB });
+	        }
+	      });
+
+	      return { perStage, drill, totalA, totalB, newInB, newDeals, sellerLabel, cutoffMonth };
+	    }
+
+	    function renderStageConversion(data) {
+	      const sellerSel = document.getElementById('stageconv-seller');
+	      const fromSel = document.getElementById('stageconv-from');
+	      const toSel = document.getElementById('stageconv-to');
+	      const meta = document.getElementById('stageconv-meta');
+	      const body = document.getElementById('stageconv-body');
+	      const drillBody = document.getElementById('stageconv-drill-body');
+	      const drillTitle = document.getElementById('stageconv-drill-title');
+	      const drillMeta = document.getElementById('stageconv-drill-meta');
+	      if (!sellerSel || !fromSel || !toSel || !body || !meta || !drillBody) return;
+
+	      // Fill seller options.
+	      const sellers = (data.sellers || []).filter((s) => s && s !== 'All (unique deals)');
+	      const labels = ['Overall', ...sellers];
+	      if (!sellerSel.options.length) {
+	        sellerSel.innerHTML = '';
+	        labels.forEach((s) => {
+	          const o = document.createElement('option');
+	          o.value = s;
+	          o.textContent = s;
+	          sellerSel.appendChild(o);
+	        });
+	      }
+	      if (!labels.includes(stageConvSelectedSeller)) stageConvSelectedSeller = 'Overall';
+	      sellerSel.value = stageConvSelectedSeller;
+
+	      const fromId = String(fromSel.value || stageConvFromIdState || '').trim();
+	      const toId = String(toSel.value || stageConvToIdState || '').trim();
+	      if (!fromId || !toId) {
+	        meta.textContent = 'Select versions A and B to compute progression.';
+	        body.innerHTML = '';
+	        return;
+	      }
+
+	      const cutoffMonth = stageConvIntroCutoffMonthState || scorecardIntroCutoffMonthState || null;
+	      const seller = stageConvSelectedSeller || 'Overall';
+
+	      const fromCached = versionDatasetCache.get(fromId);
+	      const toCached = versionDatasetCache.get(toId);
+	      if (!fromCached || !fromCached.dataset || !toCached || !toCached.dataset) {
+	        // Lazy-load both datasets (best-effort) and rerender.
+	        meta.textContent = 'Loading versions…';
+	        body.innerHTML = '';
+	        Promise.all([
+	          (!fromCached || !fromCached.dataset) ? fetchVersionDataCached(fromId) : Promise.resolve(fromCached),
+	          (!toCached || !toCached.dataset) ? fetchVersionDataCached(toId) : Promise.resolve(toCached),
+	        ]).then(() => {
+	          // Only rerender if the controls haven't changed mid-flight.
+	          if (String((document.getElementById('stageconv-from') || {}).value || '') === fromId
+	            && String((document.getElementById('stageconv-to') || {}).value || '') === toId) {
+	            renderStageConversion(window.__salesData);
+	          }
+	        }).catch(() => {});
+	        return;
+	      }
+
+	      const payload = computeStageConversion(fromCached.dataset, toCached.dataset, seller, cutoffMonth);
+	      stageConvLastComputed = payload;
+
+	      // Methodology lines (CEO-friendly).
+	      const method = [
+	        `We compare two snapshots: A = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === fromId))} and B = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === toId))}.`,
+	        `We match deals by Monday item id when available; otherwise by normalized deal name + intro date.`,
+	        `Scope filters: Seller = ${seller}, Intro cutoff = ${cutoffMonth || '-'}. Only canonical stages 1–8 are included (excludes Latent Pool / No Show / Disqualified).`,
+	        `Headline conversion metric: Forward(any) % = deals in stage i in A that move to any later stage in B, divided by total deals in stage i in A.`,
+	      ];
+	      setInsight('insight-stageconv', method);
+
+	      meta.textContent = `Seller: ${seller}. Deals in scope: A=${money.format(payload.totalA)} | B=${money.format(payload.totalB)} | New in B=${money.format(payload.newInB)}. Click any number below to drill down.`;
+
+	      // Render summary table.
+	      body.innerHTML = '';
+	      const stages = stageConvCoreStages();
+	      stages.forEach((lab) => {
+	        const n = stageNumber(lab);
+	        const s = payload.perStage[n];
+	        if (!s) return;
+	        const denom = Number(s.N || 0);
+	        const fwdPct = denom > 0 ? `${((Number(s.forward || 0) / denom) * 100).toFixed(1)}%` : '-';
+	        const tr = document.createElement('tr');
+	        tr.appendChild(makeCell('td', s.stage));
+
+	        const addCell = (val, metricKey) => {
+	          const td = document.createElement('td');
+	          td.textContent = money.format(Number(val || 0));
+	          td.style.cursor = 'pointer';
+	          td.dataset.stageN = String(n);
+	          td.dataset.metric = metricKey;
+	          td.addEventListener('click', () => stageConvDrilldown(Number(n), metricKey));
+	          return td;
+	        };
+	        tr.appendChild(addCell(s.N, 'N'));
+	        tr.appendChild(addCell(s.forward, 'forward'));
+	        const pctTd = document.createElement('td');
+	        pctTd.textContent = fwdPct;
+	        tr.appendChild(pctTd);
+	        tr.appendChild(addCell(s.next, 'next'));
+	        tr.appendChild(addCell(s.skip, 'skip'));
+	        tr.appendChild(addCell(s.back, 'back'));
+	        tr.appendChild(addCell(s.stalled, 'stalled'));
+	        tr.appendChild(addCell(s.gone, 'gone'));
+	        body.appendChild(tr);
+	      });
+
+	      // Reset drilldown.
+	      drillTitle.textContent = 'Deal Drilldown';
+	      drillMeta.textContent = 'Click any number in the summary table to list deals.';
+	      drillBody.innerHTML = '';
+	    }
+
+	    function stageConvDrilldown(stageN, metricKey) {
+	      const drillTitle = document.getElementById('stageconv-drill-title');
+	      const drillMeta = document.getElementById('stageconv-drill-meta');
+	      const drillBody = document.getElementById('stageconv-drill-body');
+	      if (!stageConvLastComputed || !drillBody) return;
+	      const s = stageConvLastComputed.perStage[stageN];
+	      const stageLabel = s ? s.stage : `Stage ${stageN}`;
+
+	      const rows = (stageConvLastComputed.drill[stageN] && stageConvLastComputed.drill[stageN][metricKey]) ? stageConvLastComputed.drill[stageN][metricKey] : [];
+	      const labelMap = {
+	        forward: 'Forward (any)',
+	        next: 'Next-stage',
+	        skip: 'Skipped ahead',
+	        back: 'Moved backward',
+	        stalled: 'Stalled',
+	        gone: 'Gone (missing in B)',
+	        N: 'All deals in stage (A)',
+	      };
+	      const metricLabel = labelMap[metricKey] || metricKey;
+
+	      drillTitle.textContent = `${stageConvLastComputed.sellerLabel} | ${stageLabel} | ${metricLabel}`;
+	      drillMeta.textContent = `${money.format(rows.length)} deal(s)`;
+	      drillBody.innerHTML = '';
+
+	      const renderRow = (recA, recB) => {
+	        const tr = document.createElement('tr');
+	        const deal = (recB && recB.deal) || (recA && recA.deal) || '-';
+	        tr.appendChild(makeCell('td', deal));
+	        tr.appendChild(makeCell('td', (recA && recA.stage) || '-'));
+	        tr.appendChild(makeCell('td', (recB && recB.stage) || '-'));
+	        tr.appendChild(makeCell('td', (recB && recB.intro_date) || (recA && recA.intro_date) || '-'));
+	        tr.appendChild(makeCell('td', (recB && recB.start_date) || (recA && recA.start_date) || '-'));
+	        tr.appendChild(makeCell('td', fmtDealSize(bestDealSize(recB || recA || {}))));
+	        const helpTd = document.createElement('td');
+	        helpTd.textContent = isHelpNeeded(recB || recA || {}) ? 'Yes' : 'No';
+	        tr.appendChild(helpTd);
+	        drillBody.appendChild(tr);
+	      };
+
+	      if (metricKey === 'N') {
+	        // For N, list all deals that were in stageN in A.
+	        const all = [];
+	        Object.values(stageConvLastComputed.drill[stageN]).forEach((arr) => { if (Array.isArray(arr)) all.push(...arr); });
+	        // Deduplicate by canonical key from A.
+	        const seen = new Set();
+	        const uniq = [];
+	        all.forEach((x) => {
+	          const k = scorecardCanonicalKey(x.a || x.b || {});
+	          if (seen.has(k)) return;
+	          seen.add(k);
+	          uniq.push(x);
+	        });
+	        uniq.sort((x, y) => String((x.b && x.b.deal) || (x.a && x.a.deal) || '').localeCompare(String((y.b && y.b.deal) || (y.a && y.a.deal) || '')));
+	        uniq.forEach((x) => renderRow(x.a, x.b));
+	        drillMeta.textContent = `${money.format(uniq.length)} deal(s)`;
+	        return;
+	      }
+
+	      const sorted = [...rows].sort((x, y) => String((x.b && x.b.deal) || (x.a && x.a.deal) || '').localeCompare(String((y.b && y.b.deal) || (y.a && y.a.deal) || '')));
+	      sorted.forEach((x) => renderRow(x.a, x.b));
+	    }
 
     function topPills(obj, topN = 4) {
       return Object.entries(obj || {})
@@ -8418,13 +8796,14 @@
 
         // Industry Action + Won/Lost tabs use their own intro cutoffs (client-side recompute).
         const allDealsForSliders = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
-        industryIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
-        wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
-        scorecardIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
-        initMonthSlider(
-          document.getElementById('industry-time-slider'),
-          document.getElementById('industry-time-value'),
-          industryIntroMonthsState,
+	        industryIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        scorecardIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        stageConvIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        initMonthSlider(
+	          document.getElementById('industry-time-slider'),
+	          document.getElementById('industry-time-value'),
+	          industryIntroMonthsState,
           () => industryIntroCutoffMonthState,
           (v) => { industryIntroCutoffMonthState = v; },
           () => renderIndustryAction(data),
@@ -8437,24 +8816,33 @@
           (v) => { wlIntroCutoffMonthState = v; },
           () => renderWinLoss(data, (document.getElementById('wl-seller') || {}).value || 'Overall (unique)'),
         );
-        initMonthSlider(
-          document.getElementById('scorecard-time-slider'),
-          document.getElementById('scorecard-time-value'),
-          scorecardIntroMonthsState,
-          () => scorecardIntroCutoffMonthState,
-          (v) => { scorecardIntroCutoffMonthState = v; },
-          () => renderScorecard(data),
-        );
+	        initMonthSlider(
+	          document.getElementById('scorecard-time-slider'),
+	          document.getElementById('scorecard-time-value'),
+	          scorecardIntroMonthsState,
+	          () => scorecardIntroCutoffMonthState,
+	          (v) => { scorecardIntroCutoffMonthState = v; },
+	          () => renderScorecard(data),
+	        );
+	        initMonthSlider(
+	          document.getElementById('stageconv-time-slider'),
+	          document.getElementById('stageconv-time-value'),
+	          stageConvIntroMonthsState,
+	          () => stageConvIntroCutoffMonthState,
+	          (v) => { stageConvIntroCutoffMonthState = v; },
+	          () => renderStageConversion(data),
+	        );
 
-	        function rerenderAllViews() {
-	          render(data, sellerSelect.value, selectedStages, orderedStages);
-	          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
-	          renderScorecard(data);
-	          renderAdminTargets();
-	          renderIndustryAction(data);
-	          renderWinLoss(data, wlSellerSelect.value);
-	          renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
-	          renderVersionSelectors();
+		        function rerenderAllViews() {
+		          render(data, sellerSelect.value, selectedStages, orderedStages);
+		          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
+		          renderScorecard(data);
+		          renderStageConversion(data);
+		          renderAdminTargets();
+		          renderIndustryAction(data);
+		          renderWinLoss(data, wlSellerSelect.value);
+		          renderIntroTrend(data, introSellerSelect.value, introGranularity.value);
+		          renderVersionSelectors();
 	          renderMomentumSellerFilter(data);
 	          renderForecast(data, (forecastSellerSelect && forecastSellerSelect.value) || 'Overall');
 	          renderForecastActuals(data);
@@ -8649,23 +9037,70 @@
 	            }
 	          });
 	        }
-	        if (scorecardVersionPrev) {
-	          scorecardVersionPrev.addEventListener('change', async () => {
-	            const versionId = scorecardVersionPrev.value;
-	            if (!versionId) return;
-	            scorecardComparePrevIdState = String(versionId);
-	            try {
-	              await fetchVersionDataCached(scorecardComparePrevIdState);
-	            } catch (e) {
-	              showError(e.message || 'Failed to load comparison version.');
-	            }
-	            renderScorecard(data);
-	          });
-	        }
-        versionSelect.addEventListener('change', async () => {
-          const versionId = versionSelect.value;
-          if (!versionId) return;
-          try {
+		        if (scorecardVersionPrev) {
+		          scorecardVersionPrev.addEventListener('change', async () => {
+		            const versionId = scorecardVersionPrev.value;
+		            if (!versionId) return;
+		            scorecardComparePrevIdState = String(versionId);
+		            try {
+		              await fetchVersionDataCached(scorecardComparePrevIdState);
+		            } catch (e) {
+		              showError(e.message || 'Failed to load comparison version.');
+		            }
+		            renderScorecard(data);
+		          });
+		        }
+
+		        const stageConvSellerSel = document.getElementById('stageconv-seller');
+		        const stageConvFromSel = document.getElementById('stageconv-from');
+		        const stageConvToSel = document.getElementById('stageconv-to');
+		        const stageConvUseViewing = document.getElementById('stageconv-use-viewing');
+		        if (stageConvSellerSel) {
+		          stageConvSellerSel.addEventListener('change', () => {
+		            stageConvSelectedSeller = stageConvSellerSel.value || 'Overall';
+		            renderStageConversion(data);
+		          });
+		        }
+		        if (stageConvFromSel) {
+		          stageConvFromSel.addEventListener('change', async () => {
+		            const versionId = stageConvFromSel.value;
+		            if (!versionId) return;
+		            stageConvFromIdState = String(versionId);
+		            try { await fetchVersionDataCached(stageConvFromIdState); } catch (_) {}
+		            renderStageConversion(data);
+		          });
+		        }
+		        if (stageConvToSel) {
+		          stageConvToSel.addEventListener('change', async () => {
+		            const versionId = stageConvToSel.value;
+		            if (!versionId) return;
+		            stageConvToIdState = String(versionId);
+		            try { await fetchVersionDataCached(stageConvToIdState); } catch (_) {}
+		            renderStageConversion(data);
+		          });
+		        }
+		        if (stageConvUseViewing) {
+		          stageConvUseViewing.addEventListener('click', async () => {
+		            const viewing = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
+		            if (!viewing) return;
+		            const prev = choosePreviousVersionId(viewing);
+		            if (stageConvToSel) stageConvToSel.value = viewing;
+		            if (stageConvFromSel && prev) stageConvFromSel.value = prev;
+		            stageConvToIdState = String(viewing);
+		            stageConvFromIdState = prev ? String(prev) : stageConvFromIdState;
+		            try {
+		              await Promise.all([
+		                fetchVersionDataCached(stageConvToIdState),
+		                stageConvFromIdState ? fetchVersionDataCached(stageConvFromIdState) : Promise.resolve(null),
+		              ]);
+		            } catch (_) {}
+		            renderStageConversion(data);
+		          });
+		        }
+	        versionSelect.addEventListener('change', async () => {
+	          const versionId = versionSelect.value;
+	          if (!versionId) return;
+	          try {
             const out = await fetchVersionData(versionId);
             if (!out || !out.dataset) return;
             data = out.dataset;
