@@ -1205,12 +1205,21 @@
       font-size: 12px;
     }
 
-    .popup-table th, .popup-table td {
-      padding: 7px 10px;
-      border-bottom: 1px solid #e7edf7;
-      text-align: left;
-      white-space: nowrap;
-    }
+	    .popup-table th, .popup-table td {
+	      padding: 7px 10px;
+	      border-bottom: 1px solid #e7edf7;
+	      text-align: left;
+	      white-space: nowrap;
+	    }
+
+	    .popup-section {
+	      background: #f7faff;
+	      color: #1f2c45;
+	      font-weight: 800;
+	      text-transform: uppercase;
+	      font-size: 11px;
+	      letter-spacing: 0.2px;
+	    }
 
     .popup-likelihood-select {
       min-width: 132px;
@@ -3371,7 +3380,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.47+20260210.1';
+    const APP_VERSION = 'v0.7.48+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -5817,6 +5826,20 @@
 	          prevLookup = null;
 	        }
 	      }
+
+	      const bucketKey = sellerLabel === 'Overall' ? 'All (unique deals)' : sellerLabel;
+	      const currentStageMap = new Map(); // canonicalKey -> current stage label (across all scorecard rows)
+	      const currMetric = (((window.__salesData || {}).scorecard || {}).sellers || {})[bucketKey] || {};
+	      const currDetails = (currMetric.kpi_details || {});
+	      const currAllRows = [
+	        ...(currDetails.stage_1_6 || []),
+	        ...(currDetails.stage_7_8 || []),
+	      ].filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+	      currAllRows.forEach((r) => {
+	        const key = scorecardCanonicalKey(r);
+	        if (!currentStageMap.has(key)) currentStageMap.set(key, r.stage || '-');
+	      });
+
 	      if (!records.length) {
 	        const tr = document.createElement('tr');
 	        tr.appendChild(makeCell('td', 'No deals found'));
@@ -5827,7 +5850,7 @@
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         body.appendChild(tr);
-      } else {
+	      } else {
 	        const rows = [...records].sort((a, b) => {
 	          const ad = (a.deal || '').toLowerCase();
 	          const bd = (b.deal || '').toLowerCase();
@@ -5893,12 +5916,107 @@
 	          }
           selTd.appendChild(select);
           tr.appendChild(selTd);
-          body.appendChild(tr);
-        });
-      }
-      popup.classList.add('open');
-      popup.setAttribute('aria-hidden', 'false');
-    }
+	          body.appendChild(tr);
+	        });
+	      }
+
+	      // If the card shows ▼ removed counts, those deals are no longer in the current bucket,
+	      // so they won't appear above. Add a second section listing removed deals for clarity.
+	      if (prevId) {
+	        try {
+	          const cachedPrev = versionDatasetCache.get(String(prevId));
+	          const prevDataset = cachedPrev && cachedPrev.dataset ? cachedPrev.dataset : null;
+	          const prevMetric = prevDataset && prevDataset.scorecard && prevDataset.scorecard.sellers
+	            ? (prevDataset.scorecard.sellers || {})[bucketKey] || {}
+	            : null;
+	          const prevDetails = prevMetric ? (prevMetric.kpi_details || {}) : {};
+	          // Extract the detailKey from the title suffix (we pass label text); safest is to infer by which records list was used.
+	          // We instead compute removed as: prev bucket (matching by canonical key) minus current bucket.
+	          const prevRowsAll = Array.isArray(records) ? [] : [];
+	          void prevRowsAll;
+	          const currSet = new Set((records || []).map(scorecardCanonicalKey));
+	          const prevBucketRows = (prevDetails && prevDetails.stage_1_6) ? prevDetails.stage_1_6 : [];
+	          const prevBucketFiltered = Array.isArray(prevBucketRows) ? prevBucketRows.filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth)) : [];
+	          // If this is not the stage_1_6 bucket, attempt to pick the right bucket by title.
+	          let prevBucket = prevBucketFiltered;
+	          const t = String(title || '').toLowerCase();
+	          if (t.includes('stage 1-2')) prevBucket = (prevDetails.stage_1_2 || []).filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+	          else if (t.includes('stage 3-4')) prevBucket = (prevDetails.stage_3_4 || []).filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+	          else if (t.includes('stage 5-6')) prevBucket = (prevDetails.stage_5_6 || []).filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+	          else if (t.includes('won/lost')) prevBucket = (prevDetails.stage_7_8 || []).filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+	          else if (t.includes('stage 1-6')) prevBucket = (prevDetails.stage_1_6 || []).filter((r) => !cutoffMonth || passIntroCutoffMonth(r.intro_date, cutoffMonth));
+
+	          const removed = [];
+	          const prevMap = new Map();
+	          prevBucket.forEach((r) => {
+	            const k = scorecardCanonicalKey(r);
+	            if (!prevMap.has(k)) prevMap.set(k, r);
+	          });
+	          prevMap.forEach((r, k) => {
+	            if (!currSet.has(k)) removed.push(r);
+	          });
+
+	          if (removed.length) {
+	            const sep = document.createElement('tr');
+	            const td = document.createElement('td');
+	            td.colSpan = 7; // Deal, Stage, Intro Month, Start Date, Age, Deal Size, Help Needed
+	            td.className = 'popup-section';
+	            td.textContent = `Removed since previous: ${money.format(removed.length)}`;
+	            sep.appendChild(td);
+	            body.appendChild(sep);
+	            const sortedRemoved = removed.sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')));
+	            sortedRemoved.forEach((r) => {
+	              const tr = document.createElement('tr');
+	              const dealTd = document.createElement('td');
+	              dealTd.appendChild(movementMarkerEl(stageNumber(r.stage), stageNumber(r.stage) + 1, false) || document.createTextNode(''));
+	              // Force a red down marker for removed rows.
+	              const m = document.createElement('span');
+	              m.className = 'move-marker move-down';
+	              m.textContent = '▼';
+	              dealTd.innerHTML = '';
+	              dealTd.appendChild(m);
+	              dealTd.appendChild(document.createTextNode(r.deal || '-'));
+	              tr.appendChild(dealTd);
+	              const nowStage = currentStageMap.get(scorecardCanonicalKey(r));
+	              tr.appendChild(makeCell('td', nowStage || r.stage || '-'));
+	              tr.appendChild(makeCell('td', r.created_month || '-'));
+	              tr.appendChild(makeCell('td', r.start_date || '-'));
+	              tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
+	              tr.appendChild(makeCell('td', fmtDealSize(r.deal_size)));
+	              const selTd = document.createElement('td');
+	              const select = document.createElement('select');
+	              select.className = 'popup-likelihood-select';
+	              [['', 'No'], ['yes', 'Yes']].forEach(([value, label]) => {
+	                const opt = document.createElement('option');
+	                opt.value = value;
+	                opt.textContent = label;
+	                select.appendChild(opt);
+	              });
+	              const helpKeys = dealHelpKeys(r);
+	              const checked = isHelpNeeded(r);
+	              select.value = checked ? 'yes' : '';
+	              if (isHistoricalView) {
+	                select.disabled = true;
+	                select.title = 'Read-only in historical version view';
+	              } else {
+	                select.addEventListener('change', () => {
+	                  if (select.value === 'yes') helpKeys.forEach((k) => { likelihoodState[k] = true; });
+	                  else helpKeys.forEach((k) => { delete likelihoodState[k]; });
+	                  persistLocalStateBundle();
+	                  queueSharedStorePush();
+	                  if (activePopupSeller) updateLikelihoodSummaryForSeller(activePopupSeller);
+	                });
+	              }
+	              selTd.appendChild(select);
+	              tr.appendChild(selTd);
+	              body.appendChild(tr);
+	            });
+	          }
+	        } catch (_) {}
+	      }
+	      popup.classList.add('open');
+	      popup.setAttribute('aria-hidden', 'false');
+	    }
 
 	    function renderScorecard(data) {
 	      const score = data.scorecard || {};
