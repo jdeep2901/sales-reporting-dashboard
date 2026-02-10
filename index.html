@@ -137,6 +137,12 @@
 	      width: 180px;
 	    }
 
+		    #stageconv-from,
+		    #stageconv-to {
+		      min-width: 150px;
+		      width: 150px;
+		    }
+
     .stage-filter {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -2714,6 +2720,12 @@
 	            </div>
 	          </div>
 	        </div>
+	        <div class="closure-filters" style="margin-top:10px;">
+	          <div class="pill-picker">
+	            <div class="label">Stages included</div>
+	            <div id="stageconv-stage-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+	          </div>
+	        </div>
 	        <div class="insight">
 	          <div class="insight-title">Methodology (CEO-Friendly)</div>
 	          <ul id="insight-stageconv" class="insight-list"></ul>
@@ -3479,7 +3491,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.57+20260210.1';
+    const APP_VERSION = 'v0.7.58+20260210.2';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -3562,6 +3574,7 @@
 	    let stageConvSelectedSeller = 'Overall';
 	    let stageConvFromIdState = null;
 	    let stageConvToIdState = null;
+	    let stageConvStageFilter = null; // null = all; else Set(stage labels)
 	    let stageConvLastComputed = null; // cached computed payload for current controls
 
     const versionDatasetCache = new Map(); // versionId -> { dataset, likelihood, created_at, created_by }
@@ -6857,6 +6870,26 @@
 	      return ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','6. Commercial Proposal','5. Contracting','7. Win','8. Loss'];
 	    }
 
+	    function stageRankForConversion(stageLabel) {
+	      // Use FUNNEL_ORDER first to avoid collisions like "7. Latent Pool" vs "7. Win".
+	      const raw = String(stageLabel || '').trim();
+	      const normalized = normalizeStage(raw);
+	      const idxF = FUNNEL_ORDER.indexOf(normalized);
+	      if (idxF >= 0) return idxF + 1;
+	      const idxM = MATTER_STAGE_ORDER.indexOf(normalized);
+	      if (idxM >= 0) return idxM + 1;
+	      const m = normalized.match(/^(\d+)\./);
+	      return m ? Number(m[1]) : null;
+	    }
+
+	    function stageConvOrderedStagesFromSets(stageSet) {
+	      const normalizedSet = new Set(Array.from(stageSet || []).map((s) => normalizeStage(s)));
+	      const ordered = FUNNEL_ORDER.filter((s) => normalizedSet.has(s));
+	      const remaining = Array.from(normalizedSet).filter((s) => !FUNNEL_ORDER.includes(s));
+	      remaining.sort((a, b) => a.localeCompare(b));
+	      return [...ordered, ...remaining];
+	    }
+
 	    function buildStageMapForConversion(dataset, sellerLabel, cutoffMonth) {
 	      const rows = dataset && Array.isArray(dataset.all_deals_rows) ? dataset.all_deals_rows : [];
 	      const map = new Map(); // canonicalKey -> rec
@@ -6864,12 +6897,8 @@
 	        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
 	        if (!scorecardInSellerScope(r, sellerLabel === 'Overall' ? null : sellerLabel)) return;
 	        const stageNorm = normalizeStage(String(r.stage || r.deal_stage || '').trim());
-	        const low = String(stageNorm || '').toLowerCase();
-	        if (low.includes('latent pool')) return;
-	        if (low.includes('no show') || low.includes('reschedule')) return;
-	        if (low.includes('disqualified')) return;
-	        const n = stageNumber(stageNorm);
-	        if (n == null || n < 1 || n > 8) return;
+	        const n = stageRankForConversion(stageNorm);
+	        if (n == null) return;
 	        const rec = { ...r, stage: stageNorm };
 	        const key = scorecardCanonicalKey(rec);
 	        const existing = map.get(key);
@@ -6877,25 +6906,46 @@
 	          map.set(key, rec);
 	          return;
 	        }
-	        const en = stageNumber(existing.stage);
+	        const en = stageRankForConversion(existing.stage);
 	        if (en == null || n > en) map.set(key, rec);
 	      });
 	      return map;
 	    }
 
-	    function computeStageConversion(datasetA, datasetB, sellerLabel, cutoffMonth) {
-	      const a = buildStageMapForConversion(datasetA, sellerLabel, cutoffMonth);
-	      const b = buildStageMapForConversion(datasetB, sellerLabel, cutoffMonth);
-	      const stages = stageConvCoreStages();
-	      const stageByNum = {}; // n -> label
-	      stages.forEach((lab) => { stageByNum[stageNumber(lab)] = lab; });
+		    function computeStageConversion(datasetA, datasetB, sellerLabel, cutoffMonth, stageFilterSet) {
+		      const aAll = buildStageMapForConversion(datasetA, sellerLabel, cutoffMonth);
+		      const bAll = buildStageMapForConversion(datasetB, sellerLabel, cutoffMonth);
 
-	      const perStage = {}; // stageN -> stats
-	      const drill = {}; // stageN -> metric -> [{a,b}]
+		      const stageSetAll = new Set();
+		      aAll.forEach((rec) => stageSetAll.add(normalizeStage(rec.stage)));
+		      bAll.forEach((rec) => stageSetAll.add(normalizeStage(rec.stage)));
+		      const stageOptionsAll = stageConvOrderedStagesFromSets(stageSetAll);
+
+		      const filterSet = stageFilterSet && stageFilterSet.size ? new Set(Array.from(stageFilterSet).map((s) => normalizeStage(s))) : null;
+		      const a = new Map();
+		      const b = new Map();
+		      aAll.forEach((rec, key) => {
+		        if (filterSet && !filterSet.has(normalizeStage(rec.stage))) return;
+	        a.set(key, rec);
+	      });
+	      bAll.forEach((rec, key) => {
+	        if (filterSet && !filterSet.has(normalizeStage(rec.stage))) return;
+	        b.set(key, rec);
+	      });
+
+	      const stageSet = new Set();
+	      a.forEach((rec) => stageSet.add(normalizeStage(rec.stage)));
+	      b.forEach((rec) => stageSet.add(normalizeStage(rec.stage)));
+		      // If filter is active, make sure we include those stages even if empty.
+		      if (filterSet) filterSet.forEach((s) => stageSet.add(s));
+		      const stages = stageConvOrderedStagesFromSets(stageSet);
+
+	      const perStage = {}; // stageLabel -> stats
+	      const drill = {}; // stageLabel -> metric -> [{a,b}]
 	      stages.forEach((lab) => {
-	        const n = stageNumber(lab);
-	        perStage[n] = { stage: lab, N: 0, forward: 0, next: 0, skip: 0, back: 0, stalled: 0, gone: 0 };
-	        drill[n] = { forward: [], next: [], skip: [], back: [], stalled: [], gone: [] };
+	        const key = normalizeStage(lab);
+	        perStage[key] = { stage: key, N: 0, forward: 0, next: 0, skip: 0, back: 0, stalled: 0, gone: 0, all: [] };
+	        drill[key] = { forward: [], next: [], skip: [], back: [], stalled: [], gone: [], all: [] };
 	      });
 
 	      let totalA = a.size;
@@ -6910,42 +6960,46 @@
 	      });
 
 	      a.forEach((recA, key) => {
-	        const nA = stageNumber(recA.stage);
-	        if (nA == null || !perStage[nA]) return;
-	        perStage[nA].N += 1;
+	        const stA = normalizeStage(recA.stage);
+	        const sA = perStage[stA];
+	        if (!sA) return;
+	        sA.N += 1;
 	        const recB = b.get(key) || null;
+	        drill[stA].all.push({ a: recA, b: recB });
 	        if (!recB) {
-	          perStage[nA].gone += 1;
-	          drill[nA].gone.push({ a: recA, b: null });
+	          sA.gone += 1;
+	          drill[stA].gone.push({ a: recA, b: null });
 	          return;
 	        }
-	        const nB = stageNumber(recB.stage);
-	        if (nB == null) {
-	          perStage[nA].gone += 1;
-	          drill[nA].gone.push({ a: recA, b: null });
+	        const nA = stageRankForConversion(stA);
+	        const stB = normalizeStage(recB.stage);
+	        const nB = stageRankForConversion(stB);
+	        if (nA == null || nB == null) {
+	          sA.gone += 1;
+	          drill[stA].gone.push({ a: recA, b: null });
 	          return;
 	        }
-	        if (nB === nA) {
-	          perStage[nA].stalled += 1;
-	          drill[nA].stalled.push({ a: recA, b: recB });
+	        if (nB == nA) {
+	          sA.stalled += 1;
+	          drill[stA].stalled.push({ a: recA, b: recB });
 	        } else if (nB > nA) {
-	          perStage[nA].forward += 1;
-	          drill[nA].forward.push({ a: recA, b: recB });
-	          if (nB === nA + 1) {
-	            perStage[nA].next += 1;
-	            drill[nA].next.push({ a: recA, b: recB });
+	          sA.forward += 1;
+	          drill[stA].forward.push({ a: recA, b: recB });
+	          if (nB == nA + 1) {
+	            sA.next += 1;
+	            drill[stA].next.push({ a: recA, b: recB });
 	          } else {
-	            perStage[nA].skip += 1;
-	            drill[nA].skip.push({ a: recA, b: recB });
+	            sA.skip += 1;
+	            drill[stA].skip.push({ a: recA, b: recB });
 	          }
 	        } else {
-	          perStage[nA].back += 1;
-	          drill[nA].back.push({ a: recA, b: recB });
+	          sA.back += 1;
+	          drill[stA].back.push({ a: recA, b: recB });
 	        }
 	      });
 
-	      return { perStage, drill, totalA, totalB, newInB, newDeals, sellerLabel, cutoffMonth };
-	    }
+		      return { perStage, drill, stages, stageOptionsAll, totalA, totalB, newInB, newDeals, sellerLabel, cutoffMonth, stageFilterSet: filterSet };
+		    }
 
 	    function renderStageConversion(data) {
 	      const sellerSel = document.getElementById('stageconv-seller');
@@ -7003,26 +7057,51 @@
 	        return;
 	      }
 
-	      const payload = computeStageConversion(fromCached.dataset, toCached.dataset, seller, cutoffMonth);
+	      const payload = computeStageConversion(fromCached.dataset, toCached.dataset, seller, cutoffMonth, stageConvStageFilter);
 	      stageConvLastComputed = payload;
 
-	      // Methodology lines (CEO-friendly).
-	      const method = [
-	        `We compare two snapshots: A = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === fromId))} and B = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === toId))}.`,
-	        `We match deals by Monday item id when available; otherwise by normalized deal name + intro date.`,
-	        `Scope filters: Seller = ${seller}, Intro cutoff = ${cutoffMonth || '-'}. Only canonical stages 1–8 are included (excludes Latent Pool / No Show / Disqualified).`,
-	        `Headline conversion metric: Forward(any) % = deals in stage i in A that move to any later stage in B, divided by total deals in stage i in A.`,
-	      ];
-	      setInsight('insight-stageconv', method);
+		      // Build stage pills from available stages (across A/B), independent of the current stage filter.
+		      const pillsEl = document.getElementById('stageconv-stage-pills');
+		      if (pillsEl) {
+		        pillsEl.innerHTML = '';
+		        const stageOptions = payload.stageOptionsAll && payload.stageOptionsAll.length ? payload.stageOptionsAll : (payload.stages || []);
+		        stageOptions.forEach((st) => {
+		          const btn = document.createElement('button');
+		          btn.type = 'button';
+		          btn.className = 'pill-btn';
+		          btn.textContent = st;
+	          const activeSet = stageConvStageFilter;
+	          const active = (!activeSet || activeSet.size === 0) ? true : activeSet.has(st);
+	          btn.classList.toggle('active', active);
+		          btn.addEventListener('click', () => {
+		            const next = new Set(stageConvStageFilter || stageOptions);
+		            if (next.has(st)) next.delete(st);
+		            else next.add(st);
+		            if (next.size === stageOptions.length) stageConvStageFilter = null;
+		            else stageConvStageFilter = next;
+		            renderStageConversion(window.__salesData);
+	          });
+	          pillsEl.appendChild(btn);
+	        });
+	      }
 
-	      meta.textContent = `Seller: ${seller}. Deals in scope: A=${money.format(payload.totalA)} | B=${money.format(payload.totalB)} | New in B=${money.format(payload.newInB)}. Click any number below to drill down.`;
+	      // Methodology lines (CEO-friendly).
+		      const method = [
+		        `We compare two snapshots: A = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === fromId))} and B = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === toId))}.`,
+		        `We match deals by Monday item id when available; otherwise by normalized deal name + intro date.`,
+		        `Scope filters: Seller = ${seller}, Intro cutoff = ${cutoffMonth || '-'}. Stages included are controlled by the stage pills (you can include/exclude Latent Pool / No Show / Disqualified).`,
+		        `Headline conversion metric: Forward(any) % = deals in stage i in A that move to any later stage in B, divided by total deals in stage i in A.`,
+		      ];
+		      setInsight('insight-stageconv', method);
+
+	      const filterText = (!payload.stageFilterSet || payload.stageFilterSet.size === 0) ? 'All stages' : `${money.format(payload.stageFilterSet.size)} stage(s) selected`;
+	      meta.textContent = `Seller: ${seller}. Deals in scope: A=${money.format(payload.totalA)} | B=${money.format(payload.totalB)} | New in B=${money.format(payload.newInB)}. Stage filter: ${filterText}. Click any number below to drill down.`;
 
 	      // Render summary table.
 	      body.innerHTML = '';
-	      const stages = stageConvCoreStages();
+	      const stages = payload.stages || [];
 	      stages.forEach((lab) => {
-	        const n = stageNumber(lab);
-	        const s = payload.perStage[n];
+	        const s = payload.perStage[normalizeStage(lab)];
 	        if (!s) return;
 	        const denom = Number(s.N || 0);
 	        const fwdPct = denom > 0 ? `${((Number(s.forward || 0) / denom) * 100).toFixed(1)}%` : '-';
@@ -7033,9 +7112,9 @@
 	          const td = document.createElement('td');
 	          td.textContent = money.format(Number(val || 0));
 	          td.style.cursor = 'pointer';
-	          td.dataset.stageN = String(n);
+	          td.dataset.stage = s.stage;
 	          td.dataset.metric = metricKey;
-	          td.addEventListener('click', () => stageConvDrilldown(Number(n), metricKey));
+	          td.addEventListener('click', () => stageConvDrilldown(String(s.stage), metricKey));
 	          return td;
 	        };
 	        tr.appendChild(addCell(s.N, 'N'));
@@ -7057,27 +7136,28 @@
 	      drillBody.innerHTML = '';
 	    }
 
-	    function stageConvDrilldown(stageN, metricKey) {
-	      const drillTitle = document.getElementById('stageconv-drill-title');
-	      const drillMeta = document.getElementById('stageconv-drill-meta');
-	      const drillBody = document.getElementById('stageconv-drill-body');
-	      if (!stageConvLastComputed || !drillBody) return;
-	      const s = stageConvLastComputed.perStage[stageN];
-	      const stageLabel = s ? s.stage : `Stage ${stageN}`;
+		    function stageConvDrilldown(stageLabel, metricKey) {
+		      const drillTitle = document.getElementById('stageconv-drill-title');
+		      const drillMeta = document.getElementById('stageconv-drill-meta');
+		      const drillBody = document.getElementById('stageconv-drill-body');
+		      if (!stageConvLastComputed || !drillBody) return;
+		      const stageKey = normalizeStage(stageLabel);
+		      const s = stageConvLastComputed.perStage[stageKey];
+		      const stageText = s ? s.stage : String(stageLabel || '-');
 
-	      const rows = (stageConvLastComputed.drill[stageN] && stageConvLastComputed.drill[stageN][metricKey]) ? stageConvLastComputed.drill[stageN][metricKey] : [];
-	      const labelMap = {
-	        forward: 'Forward (any)',
-	        next: 'Next-stage',
-	        skip: 'Skipped ahead',
-	        back: 'Moved backward',
+		      const rows = (stageConvLastComputed.drill[stageKey] && stageConvLastComputed.drill[stageKey][metricKey]) ? stageConvLastComputed.drill[stageKey][metricKey] : [];
+		      const labelMap = {
+		        forward: 'Forward (any)',
+		        next: 'Next-stage',
+		        skip: 'Skipped ahead',
+		        back: 'Moved backward',
 	        stalled: 'Stalled',
 	        gone: 'Gone (missing in B)',
 	        N: 'All deals in stage (A)',
 	      };
 	      const metricLabel = labelMap[metricKey] || metricKey;
 
-	      drillTitle.textContent = `${stageConvLastComputed.sellerLabel} | ${stageLabel} | ${metricLabel}`;
+	      drillTitle.textContent = `${stageConvLastComputed.sellerLabel} | ${stageText} | ${metricLabel}`;
 	      drillMeta.textContent = `${money.format(rows.length)} deal(s)`;
 	      drillBody.innerHTML = '';
 
@@ -7096,24 +7176,13 @@
 	        drillBody.appendChild(tr);
 	      };
 
-	      if (metricKey === 'N') {
-	        // For N, list all deals that were in stageN in A.
-	        const all = [];
-	        Object.values(stageConvLastComputed.drill[stageN]).forEach((arr) => { if (Array.isArray(arr)) all.push(...arr); });
-	        // Deduplicate by canonical key from A.
-	        const seen = new Set();
-	        const uniq = [];
-	        all.forEach((x) => {
-	          const k = scorecardCanonicalKey(x.a || x.b || {});
-	          if (seen.has(k)) return;
-	          seen.add(k);
-	          uniq.push(x);
-	        });
-	        uniq.sort((x, y) => String((x.b && x.b.deal) || (x.a && x.a.deal) || '').localeCompare(String((y.b && y.b.deal) || (y.a && y.a.deal) || '')));
-	        uniq.forEach((x) => renderRow(x.a, x.b));
-	        drillMeta.textContent = `${money.format(uniq.length)} deal(s)`;
-	        return;
-	      }
+		      if (metricKey === 'N') {
+		        const allRows = (stageConvLastComputed.drill[stageKey] && stageConvLastComputed.drill[stageKey].all) ? stageConvLastComputed.drill[stageKey].all : [];
+		        const sortedAll = [...allRows].sort((x, y) => String((x.b && x.b.deal) || (x.a && x.a.deal) || '').localeCompare(String((y.b && y.b.deal) || (y.a && y.a.deal) || '')));
+		        sortedAll.forEach((x) => renderRow(x.a, x.b));
+		        drillMeta.textContent = `${money.format(sortedAll.length)} deal(s)`;
+		        return;
+		      }
 
 	      const sorted = [...rows].sort((x, y) => String((x.b && x.b.deal) || (x.a && x.a.deal) || '').localeCompare(String((y.b && y.b.deal) || (y.a && y.a.deal) || '')));
 	      sorted.forEach((x) => renderRow(x.a, x.b));
