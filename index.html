@@ -3380,7 +3380,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.49+20260210.1';
+    const APP_VERSION = 'v0.7.50+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4258,11 +4258,11 @@
       });
     }
 
-    function updateLikelihoodSummaryForSeller(seller) {
-      const metric = scorecardStateBySeller[seller];
-      const refs = scorecardSummaryEls[seller];
-      if (!metric || !refs) return;
-      const x = classifyLikelihoodForSeller(metric);
+	    function updateLikelihoodSummaryForSeller(seller) {
+	      const metric = scorecardStateBySeller[seller];
+	      const refs = scorecardSummaryEls[seller];
+	      if (!metric || !refs) return;
+	      const x = classifyLikelihoodForSeller(metric);
 
       const deals = (sharedDatasetState && Array.isArray(sharedDatasetState.all_deals_rows))
         ? sharedDatasetState.all_deals_rows
@@ -4287,15 +4287,21 @@
       const nextDeals = [];
       let thisRev = 0;
       let nextRev = 0;
-      const helpSet = new Set();
+	      const helpSet = new Set();
 
-      deals.forEach((rec) => {
-        if (!passCutoff(rec.intro_date)) return;
-        if (!matchedSeller(rec)) return;
-        if (isHelpNeeded(rec)) dealHelpKeys(rec).forEach((k) => helpSet.add(k));
-        const q = scorecardQuarterLabelForDate(rec.start_date);
-        if (!q) return;
-        const size = dealSizeValue(bestDealSize(rec));
+	      const isLatentPool = (rec) => {
+	        const st = String(rec && rec.stage ? rec.stage : '').toLowerCase();
+	        return st.includes('latent');
+	      };
+
+	      deals.forEach((rec) => {
+	        if (!passCutoff(rec.intro_date)) return;
+	        if (!matchedSeller(rec)) return;
+	        if (isLatentPool(rec)) return;
+	        if (isHelpNeeded(rec)) dealHelpKeys(rec).forEach((k) => helpSet.add(k));
+	        const q = scorecardQuarterLabelForDate(rec.start_date);
+	        if (!q) return;
+	        const size = dealSizeValue(bestDealSize(rec));
         if (q === activeQuarterLabels.current) {
           addBucket(thisDeals, rec);
           thisRev += size;
@@ -6345,6 +6351,7 @@
         const deals = (sharedDatasetState && Array.isArray(sharedDatasetState.all_deals_rows)) ? sharedDatasetState.all_deals_rows : [];
         const cutoffMonth = scorecardIntroCutoffMonthState || null;
         const passCutoff = (introDate) => passIntroCutoffMonth(introDate, cutoffMonth);
+        const isLatentPool = (rec) => String(rec && rec.stage ? rec.stage : '').toLowerCase().includes('latent');
         const matchSeller = (rec) => {
           if (!sellerLabel || sellerLabel === 'Overall') return true;
           const matched = Array.isArray(rec.matched_sellers) ? rec.matched_sellers : [];
@@ -6366,6 +6373,7 @@
         deals.forEach((rec) => {
           if (!passCutoff(rec.intro_date)) return;
           if (!matchSeller(rec)) return;
+          if (isLatentPool(rec)) return;
           const stN = stageNumber(String(rec.stage || ''));
           if (stN != null && stN >= 3 && isHelpNeeded(rec)) {
             const k = dealHelpKey(rec);
