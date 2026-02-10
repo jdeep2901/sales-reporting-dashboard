@@ -133,8 +133,8 @@
 
 	    #scorecard-version-current,
 	    #scorecard-version-prev {
-	      min-width: 210px;
-	      width: 210px;
+	      min-width: 180px;
+	      width: 180px;
 	    }
 
     .stage-filter {
@@ -3371,7 +3371,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.45+20260210.1';
+    const APP_VERSION = 'v0.7.46+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -5725,23 +5725,41 @@
       return best;
     }
 
-    function deltaTickerEl(delta) {
-      const d = Number(delta || 0);
-      const span = document.createElement('span');
-      span.className = 'delta-ticker';
+	    function deltaTickerEl(delta) {
+	      const d = Number(delta || 0);
+	      const span = document.createElement('span');
+	      span.className = 'delta-ticker';
       if (d > 0) span.classList.add('delta-up');
       else if (d < 0) span.classList.add('delta-down');
       else span.classList.add('delta-flat');
       const arrow = d > 0 ? '▲' : (d < 0 ? '▼' : '–');
       const txt = d > 0 ? `+${money.format(d)}` : money.format(d);
-      span.textContent = `${arrow} ${txt}`;
-      return span;
-    }
+	      span.textContent = `${arrow} ${txt}`;
+	      return span;
+	    }
 
-    function movementMarkerEl(currentN, prevN, isNew) {
-      if (isNew) {
-        const s = document.createElement('span');
-        s.className = 'move-marker move-new';
+	    function movementTickersEl(upCount, downCount) {
+	      const wrap = document.createElement('span');
+	      wrap.style.display = 'inline-flex';
+	      wrap.style.alignItems = 'center';
+	      wrap.style.gap = '6px';
+	      const up = Number(upCount || 0);
+	      const down = Number(downCount || 0);
+	      const upEl = document.createElement('span');
+	      upEl.className = 'delta-ticker delta-up';
+	      upEl.textContent = `▲ ${money.format(up)}`;
+	      const downEl = document.createElement('span');
+	      downEl.className = 'delta-ticker delta-down';
+	      downEl.textContent = `▼ ${money.format(down)}`;
+	      wrap.appendChild(upEl);
+	      wrap.appendChild(downEl);
+	      return wrap;
+	    }
+
+	    function movementMarkerEl(currentN, prevN, isNew) {
+	      if (isNew) {
+	        const s = document.createElement('span');
+	        s.className = 'move-marker move-new';
         s.textContent = '+';
         return s;
       }
@@ -5761,31 +5779,36 @@
       return null;
     }
 
-    function closeKpiPopup() {
-      activePopupSeller = null;
-      const popup = document.getElementById('kpi-popup');
-      popup.classList.remove('open');
-      popup.setAttribute('aria-hidden', 'true');
-    }
+	    function closeKpiPopup() {
+	      activePopupSeller = null;
+	      const popup = document.getElementById('kpi-popup');
+	      popup.classList.remove('open');
+	      popup.setAttribute('aria-hidden', 'true');
+	    }
 
-    function openKpiPopup(title, records, summarySeller = null) {
-      activePopupSeller = summarySeller;
-      const popup = document.getElementById('kpi-popup');
-      const body = document.getElementById('kpi-popup-body');
-      document.getElementById('kpi-popup-title').textContent = `${title} (${money.format(records.length)})`;
-      body.innerHTML = '';
-      const cutoffMonth = scorecardIntroCutoffMonthState || null;
-      const sellerLabel = activePopupSeller || summarySeller || (scorecardSelectedSeller || 'Overall');
-      const prevId = scorecardComparePrevIdState || choosePreviousVersionId(scorecardCompareCurrentIdState || viewedVersionIdState || activeVersionIdState || latestVersionIdState);
-      let prevLookup = null;
-      if (prevId) {
-        const cached = versionDatasetCache.get(String(prevId));
-        if (cached && cached.dataset) prevLookup = buildPrevStageLookupForScorecard(cached.dataset, sellerLabel, cutoffMonth);
-      }
-      if (!records.length) {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', 'No deals found'));
-        tr.appendChild(makeCell('td', '-'));
+	    async function openKpiPopup(title, records, summarySeller = null) {
+	      activePopupSeller = summarySeller;
+	      const popup = document.getElementById('kpi-popup');
+	      const body = document.getElementById('kpi-popup-body');
+	      document.getElementById('kpi-popup-title').textContent = `${title} (${money.format(records.length)})`;
+	      body.innerHTML = '';
+	      const cutoffMonth = scorecardIntroCutoffMonthState || null;
+	      const sellerLabel = activePopupSeller || summarySeller || (scorecardSelectedSeller || 'Overall');
+	      const prevId = scorecardComparePrevIdState || choosePreviousVersionId(scorecardCompareCurrentIdState || viewedVersionIdState || activeVersionIdState || latestVersionIdState);
+	      let prevLookup = null;
+	      if (prevId) {
+	        try {
+	          const cached = await fetchVersionDataCached(String(prevId));
+	          if (cached && cached.dataset) prevLookup = buildPrevStageLookupForScorecard(cached.dataset, sellerLabel, cutoffMonth);
+	        } catch (_) {
+	          // If the comparison version fails to load, we still show the table without markers.
+	          prevLookup = null;
+	        }
+	      }
+	      if (!records.length) {
+	        const tr = document.createElement('tr');
+	        tr.appendChild(makeCell('td', 'No deals found'));
+	        tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
         tr.appendChild(makeCell('td', '-'));
@@ -5793,31 +5816,31 @@
         tr.appendChild(makeCell('td', '-'));
         body.appendChild(tr);
       } else {
-        const rows = [...records].sort((a, b) => {
-          const ad = (a.deal || '').toLowerCase();
-          const bd = (b.deal || '').toLowerCase();
-          if (ad !== bd) return ad.localeCompare(bd);
-          return (a.stage || '').localeCompare(b.stage || '');
-        });
-        rows.forEach((r) => {
-          const currentStageN = stageNumber(r.stage);
-          const keys = scorecardRecordMatchKeys(r);
-          let prevStageN = null;
-          if (prevLookup) {
-            for (const k of keys) {
-              if (prevLookup.has(k)) {
-                prevStageN = pickClosestStageCandidate(prevLookup.get(k), currentStageN);
-                break;
-              }
-            }
-          }
-          const isNew = !!prevLookup && prevStageN == null;
-          const tr = document.createElement('tr');
-          const dealTd = document.createElement('td');
-          const marker = movementMarkerEl(currentStageN, prevStageN, isNew);
-          if (marker) dealTd.appendChild(marker);
-          dealTd.appendChild(document.createTextNode(r.deal || '-'));
-          tr.appendChild(dealTd);
+	        const rows = [...records].sort((a, b) => {
+	          const ad = (a.deal || '').toLowerCase();
+	          const bd = (b.deal || '').toLowerCase();
+	          if (ad !== bd) return ad.localeCompare(bd);
+	          return (a.stage || '').localeCompare(b.stage || '');
+	        });
+	        rows.forEach((r) => {
+	          const currentStageN = stageNumber(r.stage);
+	          const keys = scorecardRecordMatchKeys(r);
+	          let prevStageN = null;
+	          if (prevLookup) {
+	            for (const k of keys) {
+	              if (prevLookup.has(k)) {
+	                prevStageN = pickClosestStageCandidate(prevLookup.get(k), currentStageN);
+	                break;
+	              }
+	            }
+	          }
+	          const isNew = !!prevLookup && prevStageN == null;
+	          const tr = document.createElement('tr');
+	          const dealTd = document.createElement('td');
+	          const marker = movementMarkerEl(currentStageN, prevStageN, isNew);
+	          if (marker) dealTd.appendChild(marker);
+	          dealTd.appendChild(document.createTextNode(r.deal || '-'));
+	          tr.appendChild(dealTd);
           tr.appendChild(makeCell('td', r.stage || '-'));
           tr.appendChild(makeCell('td', r.created_month || '-'));
           tr.appendChild(makeCell('td', r.start_date || '-'));
@@ -5906,7 +5929,7 @@
 	        renderEntries.push({ label: picked, metric: (score.sellers || {})[picked] || {} });
 	      }
 
-	      const prevId = scorecardComparePrevIdState || choosePreviousVersionId(scorecardCompareCurrentIdState);
+	        const prevId = scorecardComparePrevIdState || choosePreviousVersionId(scorecardCompareCurrentIdState);
 	      const prevCache = prevId ? versionDatasetCache.get(String(prevId)) : null;
 	      const prevDataset = prevCache && prevCache.dataset ? prevCache.dataset : null;
 	      if (prevId && !prevDataset) {
@@ -5984,6 +6007,26 @@
 	        const kpis = document.createElement('div');
 	        kpis.className = 'score-kpis';
 	        const details = filteredMetric.kpi_details || {};
+
+	        const prevLookup = prevDataset ? buildPrevStageLookupForScorecard(prevDataset, seller, cutoffMonth) : null;
+	        const countMoves = (currRows) => {
+	          let up = 0;
+	          let down = 0;
+	          (currRows || []).forEach((r) => {
+	            if (!prevLookup) return;
+	            const curN = stageNumber(r.stage);
+	            const keys = scorecardRecordMatchKeys(r);
+	            let prevN = null;
+	            for (const k of keys) {
+	              if (prevLookup.has(k)) { prevN = pickClosestStageCandidate(prevLookup.get(k), curN); break; }
+	            }
+	            if (prevN == null || curN == null) return;
+	            if (curN > prevN) up += 1;
+	            else if (curN < prevN) down += 1;
+	          });
+	          return { up, down };
+	        };
+
 	        const entries = [
 	          ['Stage 1-6 Total', Number(filteredMetric.stage_1_6_count || 0), p16, 'stage_1_6'],
 	          ['Stage 1-2', Number(filteredMetric.stage_1_2_count || 0), p12, 'stage_1_2'],
@@ -6005,8 +6048,8 @@
 	          const v = document.createElement('div');
 	          v.className = 'kpi-value';
 	          v.textContent = money.format(currCount || 0);
-	          const delta = Number(currCount || 0) - Number(prevCount || 0);
-	          const tick = deltaTickerEl(delta);
+	          const moves = countMoves(details[detailKey] || []);
+	          const tick = movementTickersEl(moves.up, moves.down);
 	          vRow.appendChild(v);
 	          vRow.appendChild(tick);
 	          box.appendChild(l);
@@ -6025,10 +6068,24 @@
         shapeTitle.textContent = 'Funnel Shape (By Stage)';
         shape.appendChild(shapeTitle);
 	        const counts = {};
+	        const moveCounts = {};
 	        const details2 = filteredMetric.kpi_details || {};
 	        [...(details2.stage_1_6 || []), ...(details2.stage_7_8 || [])].forEach((r) => {
 	          const st = String(r.stage || '').trim() || '(blank)';
 	          counts[st] = (counts[st] || 0) + 1;
+	          if (!moveCounts[st]) moveCounts[st] = { up: 0, down: 0 };
+	          if (prevLookup) {
+	            const curN = stageNumber(st);
+	            const keys = scorecardRecordMatchKeys(r);
+	            let prevN = null;
+	            for (const k of keys) {
+	              if (prevLookup.has(k)) { prevN = pickClosestStageCandidate(prevLookup.get(k), curN); break; }
+	            }
+	            if (prevN != null && curN != null) {
+	              if (curN > prevN) moveCounts[st].up += 1;
+	              else if (curN < prevN) moveCounts[st].down += 1;
+	            }
+	          }
 	        });
         const stages = ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','5. Contracting','6. Commercial Proposal','7. Win','8. Loss'];
         const maxV = Math.max(1, ...stages.map((s) => Number(counts[s] || 0)));
@@ -6053,7 +6110,8 @@
 	          const cSpan = document.createElement('span');
 	          cSpan.textContent = money.format(value);
 	          v.appendChild(cSpan);
-	          v.appendChild(deltaTickerEl(d));
+	          const m = moveCounts[label] || { up: 0, down: 0 };
+	          v.appendChild(movementTickersEl(m.up, m.down));
 	          row.appendChild(l);
 	          row.appendChild(track);
 	          row.appendChild(v);
