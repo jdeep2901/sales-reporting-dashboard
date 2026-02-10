@@ -121,15 +121,21 @@
       text-transform: uppercase;
     }
 
-    select {
-      min-width: 240px;
-      padding: 9px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      font-size: 14px;
-      background: #fff;
-      color: var(--ink);
-    }
+	    select {
+	      min-width: 240px;
+	      padding: 9px 10px;
+	      border-radius: 8px;
+	      border: 1px solid var(--line);
+	      font-size: 14px;
+	      background: #fff;
+	      color: var(--ink);
+	    }
+
+	    #scorecard-version-current,
+	    #scorecard-version-prev {
+	      min-width: 210px;
+	      width: 210px;
+	    }
 
     .stage-filter {
       border: 1px solid var(--line);
@@ -3365,7 +3371,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.44+20260210.1';
+    const APP_VERSION = 'v0.7.45+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -5680,7 +5686,10 @@
     }
 
     function buildPrevStageLookupForScorecard(prevDataset, sellerLabel, cutoffMonth) {
-      const lookup = new Map(); // key -> stageNumber
+      // key -> Set(stageNumber). We keep all candidates because the same deal
+      // can occasionally appear multiple times in scorecard details (ambiguity),
+      // and we want to pick the closest match to current stage.
+      const lookup = new Map();
       if (!prevDataset || !prevDataset.scorecard || !prevDataset.scorecard.sellers) return lookup;
       const bucketKey = sellerLabel === 'Overall' ? 'All (unique deals)' : sellerLabel;
       const metric = (prevDataset.scorecard.sellers || {})[bucketKey] || {};
@@ -5692,10 +5701,28 @@
         if (n == null) return;
         const keys = scorecardRecordMatchKeys(r);
         keys.forEach((k) => {
-          if (!lookup.has(k)) lookup.set(k, n);
+          if (!lookup.has(k)) lookup.set(k, new Set([n]));
+          else lookup.get(k).add(n);
         });
       });
       return lookup;
+    }
+
+    function pickClosestStageCandidate(stageSet, currentStageN) {
+      if (!stageSet || !stageSet.size || currentStageN == null) return null;
+      let best = null;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (const n of stageSet) {
+        const dist = Math.abs(Number(n) - Number(currentStageN));
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = n;
+        } else if (dist === bestDist && best != null) {
+          // Tie-breaker: prefer the larger stage (more conservative for "moved down" detection).
+          if (Number(n) > Number(best)) best = n;
+        }
+      }
+      return best;
     }
 
     function deltaTickerEl(delta) {
@@ -5778,7 +5805,10 @@
           let prevStageN = null;
           if (prevLookup) {
             for (const k of keys) {
-              if (prevLookup.has(k)) { prevStageN = prevLookup.get(k); break; }
+              if (prevLookup.has(k)) {
+                prevStageN = pickClosestStageCandidate(prevLookup.get(k), currentStageN);
+                break;
+              }
             }
           }
           const isNew = !!prevLookup && prevStageN == null;
