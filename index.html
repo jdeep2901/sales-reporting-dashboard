@@ -3380,7 +3380,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.48+20260210.1';
+    const APP_VERSION = 'v0.7.49+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6339,21 +6339,164 @@
       });
 
       const lines = [];
+
+      // Helper: closure totals (unfiltered by stage/help pills; only intro cutoff + seller match).
+      const closureTotals = (sellerLabel) => {
+        const deals = (sharedDatasetState && Array.isArray(sharedDatasetState.all_deals_rows)) ? sharedDatasetState.all_deals_rows : [];
+        const cutoffMonth = scorecardIntroCutoffMonthState || null;
+        const passCutoff = (introDate) => passIntroCutoffMonth(introDate, cutoffMonth);
+        const matchSeller = (rec) => {
+          if (!sellerLabel || sellerLabel === 'Overall') return true;
+          const matched = Array.isArray(rec.matched_sellers) ? rec.matched_sellers : [];
+          return matched.includes(sellerLabel);
+        };
+        const dedupe = new Set();
+        const addBucket = (arr, rec) => {
+          const k = dealHelpKey(rec);
+          if (dedupe.has(k)) return;
+          dedupe.add(k);
+          arr.push(rec);
+        };
+        const thisDeals = [];
+        const nextDeals = [];
+        let thisRev = 0;
+        let nextRev = 0;
+        let helpStage3Plus = 0;
+        const helpSeen = new Set();
+        deals.forEach((rec) => {
+          if (!passCutoff(rec.intro_date)) return;
+          if (!matchSeller(rec)) return;
+          const stN = stageNumber(String(rec.stage || ''));
+          if (stN != null && stN >= 3 && isHelpNeeded(rec)) {
+            const k = dealHelpKey(rec);
+            if (!helpSeen.has(k)) {
+              helpSeen.add(k);
+              helpStage3Plus += 1;
+            }
+          }
+          const q = scorecardQuarterLabelForDate(rec.start_date);
+          if (!q) return;
+          const size = dealSizeValue(bestDealSize(rec));
+          if (q === activeQuarterLabels.current) {
+            addBucket(thisDeals, rec);
+            thisRev += size;
+          } else if (q === activeQuarterLabels.next) {
+            addBucket(nextDeals, rec);
+            nextRev += size;
+          }
+        });
+        return { thisDeals, nextDeals, thisRev, nextRev, helpStage3Plus };
+      };
+
+      const pct = (num, den) => {
+        const n = Number(num || 0);
+        const d = Number(den || 0);
+        if (!d || !Number.isFinite(n) || !Number.isFinite(d)) return null;
+        return Math.max(0, Math.min(1, n / d));
+      };
+      const pct0 = (p) => (p == null ? '-' : `${Math.round(p * 100)}%`);
+      const gapText = (actual, target) => {
+        const a = Number(actual || 0);
+        const t = Number(target || 0);
+        if (!t) return `T ${fmtDealSize(t)} | n/a`;
+        const g = t - a;
+        const sign = g > 0 ? '-' : '+';
+        return `T ${fmtDealSize(t)} | gap ${sign}${fmtDealSize(Math.abs(g))} (${pctText(a, t)})`;
+      };
+
+      // Seller-scoped insight: funnel mix + closure gap vs target.
+      const sellerInsight = (sellerLabel) => {
+        const metric = scorecardStateBySeller[sellerLabel];
+        if (!metric) return [];
+        const d16 = Array.isArray(metric.kpi_details && metric.kpi_details.stage_1_6) ? metric.kpi_details.stage_1_6 : [];
+        const d12 = Array.isArray(metric.kpi_details && metric.kpi_details.stage_1_2) ? metric.kpi_details.stage_1_2 : [];
+        const d34 = Array.isArray(metric.kpi_details && metric.kpi_details.stage_3_4) ? metric.kpi_details.stage_3_4 : [];
+        const d56 = Array.isArray(metric.kpi_details && metric.kpi_details.stage_5_6) ? metric.kpi_details.stage_5_6 : [];
+        const d78 = Array.isArray(metric.kpi_details && metric.kpi_details.stage_7_8) ? metric.kpi_details.stage_7_8 : [];
+
+        const total = d16.length || 0;
+        const earlyShare = pct(d12.length, total);
+        const midShare = pct(d34.length, total);
+        const lateShare = pct(d56.length, total);
+
+        const c = closureTotals(sellerLabel);
+        const tThis = getQuarterTarget(sellerLabel, activeQuarterLabels.current);
+        const tNext = getQuarterTarget(sellerLabel, activeQuarterLabels.next);
+
+        const out = [];
+        out.push(
+          `${sellerLabel}: Funnel mix (1-6) = early (1-2) ${pct0(earlyShare)}, mid (3-4) ${pct0(midShare)}, late (5-6) ${pct0(lateShare)} across ${money.format(total)} deal(s).`
+        );
+
+        out.push(
+          `Closures in ${activeQuarterLabels.current}: ${money.format(c.thisDeals.length)} deal(s) | ${fmtDealSize(c.thisRev)} (${gapText(c.thisRev, tThis.revenue)}).`
+        );
+        out.push(
+          `Closures in ${activeQuarterLabels.next}: ${money.format(c.nextDeals.length)} deal(s) | ${fmtDealSize(c.nextRev)} (${gapText(c.nextRev, tNext.revenue)}).`
+        );
+
+        if (!d56.length && total) {
+          out.push(`Risk: No late-stage (5-6) volume in current filter; near-term closures likely depend on pulling deals forward or adding late-stage pipeline.`);
+        } else if (d56.length && c.thisRev < (tThis.revenue || 0)) {
+          out.push(`Watch: Late-stage (5-6) = ${money.format(d56.length)} deal(s); current-quarter target gap suggests acceleration/support needed.`);
+        }
+
+        if (c.helpStage3Plus) {
+          out.push(`Help Needed flags: ${money.format(c.helpStage3Plus)} deal(s) in stage 3+ (within current intro cutoff + seller scope).`);
+        }
+
+        // Optional: small change context if compare-to is loaded.
+        if (prevDataset && prevDataset.scorecard && prevDataset.scorecard.sellers) {
+          const bucketKey = sellerLabel === 'Overall' ? 'All (unique deals)' : sellerLabel;
+          const pm = (prevDataset.scorecard.sellers || {})[bucketKey] || {};
+          const pDetails = (pm.kpi_details || {});
+          const pd16 = filterRecords(pDetails.stage_1_6);
+          const currSet = new Set(d16.map(scorecardCanonicalKey));
+          const prevSet = new Set(pd16.map(scorecardCanonicalKey));
+          let added = 0, removed = 0;
+          currSet.forEach((k) => { if (!prevSet.has(k)) added += 1; });
+          prevSet.forEach((k) => { if (!currSet.has(k)) removed += 1; });
+          if (added || removed) out.push(`Since compare-to: Stage 1-6 changed by ▲${money.format(added)} / ▼${money.format(removed)} deal(s).`);
+        }
+
+        return out;
+      };
+
       if (picked === 'Overall') {
-        const rows = sellers.map((seller) => ({ seller, m: (score.sellers || {})[seller] || {} }));
-        const topVol = [...rows].sort((a, b) => (b.m.stage_1_6_count || 0) - (a.m.stage_1_6_count || 0))[0];
-        const topLate = [...rows].sort((a, b) => (b.m.stage_5_6_count || 0) - (a.m.stage_5_6_count || 0))[0];
-        const topWL = [...rows].sort((a, b) => (b.m.stage_7_8_count || 0) - (a.m.stage_7_8_count || 0))[0];
-        if (topVol) lines.push(`Largest active funnel (1-6): ${topVol.seller} with ${money.format(topVol.m.stage_1_6_count || 0)} deals.`);
-        if (topLate) lines.push(`Most late-stage volume (5-6): ${topLate.seller} with ${money.format(topLate.m.stage_5_6_count || 0)} deals.`);
-        if (topWL) lines.push(`Most won/lost outcomes (7-8): ${topWL.seller} with ${money.format(topWL.m.stage_7_8_count || 0)} deals.`);
+        // Overall view: provide seller-by-seller health in a compact way (top gaps + outliers).
+        lines.push(...sellerInsight('Overall'));
+
+        const rows = sellers.map((s) => {
+          const c = closureTotals(s);
+          const tThis = getQuarterTarget(s, activeQuarterLabels.current);
+          const tNext = getQuarterTarget(s, activeQuarterLabels.next);
+          const gapThis = (tThis.revenue || 0) - (c.thisRev || 0);
+          const gapNext = (tNext.revenue || 0) - (c.nextRev || 0);
+          const m = scorecardStateBySeller[s] || {};
+          const d56 = Array.isArray(m.kpi_details && m.kpi_details.stage_5_6) ? m.kpi_details.stage_5_6 : [];
+          return { seller: s, thisRev: c.thisRev, nextRev: c.nextRev, gapThis, gapNext, late: d56.length };
+        });
+
+        const worstThis = [...rows].filter(r => (getQuarterTarget(r.seller, activeQuarterLabels.current).revenue || 0) > 0)
+          .sort((a, b) => (b.gapThis - a.gapThis) || a.seller.localeCompare(b.seller))[0];
+        const worstNext = [...rows].filter(r => (getQuarterTarget(r.seller, activeQuarterLabels.next).revenue || 0) > 0)
+          .sort((a, b) => (b.gapNext - a.gapNext) || a.seller.localeCompare(b.seller))[0];
+        const thinLate = [...rows].sort((a, b) => (a.late - b.late) || a.seller.localeCompare(b.seller))[0];
+
+        if (worstThis) {
+          lines.push(`Biggest current-quarter target gap: ${worstThis.seller} (${gapText(worstThis.thisRev, getQuarterTarget(worstThis.seller, activeQuarterLabels.current).revenue)}).`);
+        }
+        if (worstNext) {
+          lines.push(`Biggest next-quarter target gap: ${worstNext.seller} (${gapText(worstNext.nextRev, getQuarterTarget(worstNext.seller, activeQuarterLabels.next).revenue)}).`);
+        }
+        if (thinLate) {
+          lines.push(`Thinnest late-stage (5-6) coverage: ${thinLate.seller} with ${money.format(thinLate.late)} deal(s) in 5-6 (within current intro cutoff).`);
+        }
       } else {
-        const m = (score.sellers || {})[picked] || {};
-        lines.push(`${picked}: Stage 1-6 = ${money.format(m.stage_1_6_count || 0)}, Stage 5-6 = ${money.format(m.stage_5_6_count || 0)}, Won/Lost = ${money.format(m.stage_7_8_count || 0)}.`);
+        lines.push(...sellerInsight(picked));
       }
-      if (scorecardIntroCutoffMonthState) {
-        lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
-      }
+
+      if (scorecardIntroCutoffMonthState) lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
       setInsight('insight-scorecard', lines);
     }
 
