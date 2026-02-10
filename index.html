@@ -3285,6 +3285,18 @@
               </table>
             </div>
           </div>
+          <div class="admin-card">
+            <label style="margin-bottom:8px;">Diagnostics (Go-Live Sanity)</label>
+            <div class="sub" style="margin-bottom:10px;">
+              Runs internal consistency checks for Weekly Scorecard and Call Trends using the currently loaded snapshot.
+              Use this before going live.
+            </div>
+            <div class="admin-grid" style="align-items:end;">
+              <button id="admin-diag-btn" type="button">Run Diagnostics</button>
+            </div>
+            <div id="admin-diag-meta" class="sync-meta" style="margin-top:10px; display:none;"></div>
+            <div id="admin-diag-out" class="admin-table-wrap" style="margin-top:10px; display:none;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -3380,7 +3392,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.54+20260210.1';
+    const APP_VERSION = 'v0.7.55+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4537,6 +4549,140 @@
       el.textContent = `Last sync: ${at}\nBoard: ${board}\nRows pulled: ${rows}\nTriggered by: ${by}\nSource: ${src}`;
     }
 
+    function diagRow(check, ok, details) {
+      return { check, status: ok ? 'PASS' : 'FAIL', details: details || '' };
+    }
+
+    function renderDiagnosticsTable(rows) {
+      const out = document.getElementById('admin-diag-out');
+      if (!out) return;
+      out.style.display = '';
+      out.innerHTML = '';
+      const table = document.createElement('table');
+      table.className = 'admin-table';
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      trh.appendChild(makeCell('th', 'Check'));
+      trh.appendChild(makeCell('th', 'Status'));
+      trh.appendChild(makeCell('th', 'Details'));
+      thead.appendChild(trh);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      rows.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', r.check || '-'));
+        const s = document.createElement('td');
+        s.textContent = r.status || '-';
+        s.style.fontWeight = '900';
+        s.style.color = (r.status === 'PASS') ? '#0f7a3b' : (r.status === 'FAIL' ? '#b42318' : '#334155');
+        tr.appendChild(s);
+        tr.appendChild(makeCell('td', r.details || ''));
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      out.appendChild(table);
+    }
+
+    function monthAggFromIntroTrend(introTrend, scopeKey) {
+      const intro = introTrend || {};
+      const weeks = Array.isArray(intro.weeks) ? intro.weeks : [];
+      const seriesMap = (intro.series && typeof intro.series === 'object') ? intro.series : {};
+      const series = (seriesMap[scopeKey] && typeof seriesMap[scopeKey] === 'object') ? seriesMap[scopeKey] : {};
+      const out = {};
+      weeks.forEach((w) => {
+        const m = String(w || '').slice(0, 7);
+        out[m] = (out[m] || 0) + Number(series[w] || 0);
+      });
+      return out;
+    }
+
+    function monthAggFromDealsRows(rows, scopeLabel, cutoffMonth) {
+      const out = {};
+      (Array.isArray(rows) ? rows : []).forEach((r) => {
+        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
+        if (!scorecardInSellerScope(r, scopeLabel === 'Overall' ? null : scopeLabel)) return;
+        const st = normalizeStage(String(r.stage || r.deal_stage || '').trim());
+        if (String(st || '').toLowerCase().includes('latent pool')) return;
+        if (String(st || '').toLowerCase().includes('no show') || String(st || '').toLowerCase().includes('reschedule')) return;
+        const m = String(r.intro_date || '').slice(0, 7);
+        if (!m) return;
+        out[m] = (out[m] || 0) + 1;
+      });
+      return out;
+    }
+
+    function runDiagnostics() {
+      const data = window.__salesData || {};
+      const rows = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
+      const sellers = (data.sellers || []).filter((s) => s && s !== 'All (unique deals)');
+      const cutoffMonth = scorecardIntroCutoffMonthState || '2024-10';
+      const out = [];
+
+      // Scorecard KPI bucket integrity.
+      const scopes = ['Overall', ...sellers];
+      scopes.forEach((scope) => {
+        const details = buildScorecardKpiDetailsFromRows(rows, scope, cutoffMonth);
+        const wl = details.stage_7_8 || [];
+        const latent = wl.filter((r) => String(r.stage || '').toLowerCase().includes('latent pool'));
+        out.push(diagRow(`Scorecard Won/Lost excludes latent pool [${scope}]`, latent.length === 0, `latent_in_7_8=${latent.length}`));
+
+        const badWL = wl.filter((r) => {
+          const st = String(r.stage || '').toLowerCase();
+          const n = stageNumber(r.stage);
+          return !(n === 7 || n === 8 || st.includes('win') || st.includes('loss') || st === 'won' || st === 'lost');
+        });
+        out.push(diagRow(`Won/Lost contains only Win/Loss [${scope}]`, badWL.length === 0, badWL.length ? `example=${String(badWL[0].deal || '-')}` : 'ok'));
+
+        // Basic dedupe sanity: bucket arrays should not contain duplicate canonical keys.
+        ['stage_1_6', 'stage_1_2', 'stage_3_4', 'stage_5_6', 'stage_7_8'].forEach((k) => {
+          const arr = details[k] || [];
+          const seen = new Set();
+          let dup = 0;
+          arr.forEach((r) => {
+            const ck = scorecardCanonicalKey(r);
+            if (seen.has(ck)) dup += 1;
+            seen.add(ck);
+          });
+          out.push(diagRow(`No duplicates in ${k} [${scope}]`, dup === 0, dup ? `dups=${dup}` : 'ok'));
+        });
+      });
+
+      // Closures quarter logic (Overall only, because seller-scope closure tables are computed in UI).
+      const asOf = (data.scorecard && data.scorecard.as_of_date) ? String(data.scorecard.as_of_date) : null;
+      const q = buildQuarterLabels(asOf);
+      const closures = { this: [], next: [] };
+      rows.forEach((r) => {
+        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
+        const st = normalizeStage(String(r.stage || r.deal_stage || '').trim());
+        if (String(st || '').toLowerCase().includes('latent')) return;
+        const qlab = scorecardQuarterLabelForDate(r.start_date);
+        if (!qlab) return;
+        if (qlab === q.current) closures.this.push(r);
+        if (qlab === q.next) closures.next.push(r);
+      });
+      const badQuarter = [...closures.this.map((r) => ({ r, want: q.current })), ...closures.next.map((r) => ({ r, want: q.next }))].filter((x) => scorecardQuarterLabelForDate(x.r.start_date) !== x.want);
+      out.push(diagRow('Closures quarter matches start date (Overall)', badQuarter.length === 0, badQuarter.length ? `example=${String(badQuarter[0].r.deal || '-')}` : 'ok'));
+
+      // Call trends consistency (month aggregation).
+      const trend = data.intro_trend || {};
+      const backendOverall = monthAggFromIntroTrend(trend, 'All (unique deals)');
+      const recomputeOverall = monthAggFromDealsRows(rows, 'Overall', '2024-10');
+      const months = Object.keys(backendOverall).filter((m) => m in recomputeOverall).sort().slice(-6);
+      let mism = 0;
+      let sample = '';
+      months.forEach((m) => {
+        const a = Number(backendOverall[m] || 0);
+        const b = Number(recomputeOverall[m] || 0);
+        if (a !== b) {
+          mism += 1;
+          if (!sample) sample = `${m}: backend=${a}, recompute=${b}`;
+        }
+      });
+      out.push(diagRow('Call Trends month aggregation matches recompute (Overall, last 6 months)', mism === 0, mism ? `mismatches=${mism}; ${sample}` : 'ok'));
+
+      return out;
+    }
+
     function parseBoardId(value) {
       const s = String(value || '').trim();
       if (!s) return null;
@@ -4652,6 +4798,25 @@
         renderAdminSyncStatus();
         renderAdminUsers();
         renderAdminTargets();
+        const diagBtn = document.getElementById('admin-diag-btn');
+        if (diagBtn && !diagBtn.dataset.bound) {
+          diagBtn.dataset.bound = '1';
+          diagBtn.addEventListener('click', () => {
+            const meta = document.getElementById('admin-diag-meta');
+            const out = document.getElementById('admin-diag-out');
+            if (meta) {
+              meta.style.display = '';
+              meta.textContent = `App: ${APP_VERSION}\nViewing: ${versionLabel(versionsMetaState.find((v) => String(v.id) === String(viewedVersionIdState || latestVersionIdState || activeVersionIdState)))}`;
+            }
+            if (out) out.style.display = '';
+            try {
+              const rows = runDiagnostics();
+              renderDiagnosticsTable(rows);
+            } catch (e) {
+              renderDiagnosticsTable([diagRow('Diagnostics runner crashed', false, String(e && (e.message || e) || 'error'))]);
+            }
+          });
+        }
       } else {
         const body = document.getElementById('admin-users-body');
         if (body) body.innerHTML = '';
