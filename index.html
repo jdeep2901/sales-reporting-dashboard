@@ -3328,8 +3328,8 @@
       '2. Qualification',
       '3. Capability',
       '4. Problem Scoping',
-      '5. Contracting',
       '6. Commercial Proposal',
+      '5. Contracting',
       '7. Win',
       '8. Loss'
     ];
@@ -3353,8 +3353,8 @@
       '2. Qualification',
       '3. Capability',
       '4. Problem Scoping',
-      '5. Contracting',
       '6. Commercial Proposal',
+      '5. Contracting',
       '7. Latent Pool - Monthly',
       '7. Win',
       '8. Loss',
@@ -3368,8 +3368,8 @@
       '2. Qualification',
       '3. Capability',
       '4. Problem Scoping',
-      '5. Contracting',
-      '6. Commercial Proposal'
+      '6. Commercial Proposal',
+      '5. Contracting'
     ]);
     const DEAL_LIKELIHOOD_KEY = 'sales_dashboard_deal_likelihood_v1';
     const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
@@ -3380,7 +3380,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.50+20260210.1';
+    const APP_VERSION = 'v0.7.51+20260210.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4007,7 +4007,16 @@
     }
 
     function stageNumber(stage) {
-      const m = String(stage || '').match(/^(\d+)\./);
+      // Canonical stage sequencing is defined by MATTER_STAGE_ORDER / FUNNEL_ORDER
+      // (not by the numeric prefix in the label). This keeps "Proposal -> Contracting"
+      // as forward movement even though Monday labels may still be "6." then "5.".
+      const raw = String(stage || '').trim();
+      const normalized = typeof normalizeStage === 'function' ? normalizeStage(raw) : raw;
+      const idxMatter = MATTER_STAGE_ORDER.indexOf(normalized);
+      if (idxMatter >= 0) return idxMatter + 1;
+      const idxFunnel = FUNNEL_ORDER.indexOf(normalized);
+      if (idxFunnel >= 0) return idxFunnel + 1;
+      const m = normalized.match(/^(\d+)\./);
       return m ? Number(m[1]) : null;
     }
 
@@ -6220,7 +6229,7 @@
 	            stagePrevSets[st].add(scorecardCanonicalKey(r));
 	          });
 	        }
-        const stages = ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','5. Contracting','6. Commercial Proposal','7. Win','8. Loss'];
+	        const stages = ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','6. Commercial Proposal','5. Contracting','7. Win','8. Loss'];
         const maxV = Math.max(1, ...stages.map((s) => Number(counts[s] || 0)));
 	        stages.forEach((label) => {
 	          const value = Number(counts[label] || 0);
@@ -7186,8 +7195,8 @@
         2: 'Qualification',
         3: 'Capabilities',
         4: 'Problem Scoping',
-        5: 'Contracting',
-        6: 'Commercial Proposal',
+        5: 'Commercial Proposal',
+        6: 'Contracting',
       };
       return stageMap[n] || `Stage ${n}`;
     }
@@ -7198,8 +7207,8 @@
         2: 0.10,
         3: 0.20,
         4: 0.50,
-        5: 0.80,
-        6: 0.70,
+        5: 0.70, // Proposal
+        6: 0.80, // Contracting
       };
       return Number(probs[stageN] || 0);
     }
