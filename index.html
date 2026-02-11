@@ -2756,15 +2756,12 @@
 	              <label for="stageconv-from">From (A)</label>
 	              <select id="stageconv-from"></select>
 	            </div>
-	            <div>
-	              <label for="stageconv-to">To (B)</label>
-	              <select id="stageconv-to"></select>
-	            </div>
-	            <div style="display:flex;align-items:end;">
-	              <button id="stageconv-use-viewing" type="button" style="height:42px;">Use Viewing as B</button>
-	            </div>
-	          </div>
-	        </div>
+		            <div>
+		              <label for="stageconv-to">To (B)</label>
+		              <select id="stageconv-to"></select>
+		            </div>
+		          </div>
+		        </div>
 	        <div class="closure-filters" style="margin-top:10px;">
 	          <div class="pill-picker">
 	            <div class="label">Stages included</div>
@@ -2799,11 +2796,11 @@
 	            </table>
 	          </div>
 	        </div>
-	        <div class="detail-panel" style="margin-top:14px;">
-	          <div class="detail-head">
-	            <div id="stageconv-drill-title" class="detail-title">Deal Drilldown</div>
-	            <div id="stageconv-drill-meta" class="detail-meta">Click any number in the summary table to list deals.</div>
-	          </div>
+		        <div class="detail-panel" style="margin-top:14px;">
+		          <div class="detail-head">
+		            <div id="stageconv-drill-title" class="detail-title">Deal Drilldown</div>
+		            <div id="stageconv-drill-meta" class="detail-meta">Click any number in the summary table to list deals.</div>
+		          </div>
 	          <div class="detail-wrap">
 	            <table class="detail-table" id="stageconv-drill-table">
 	              <thead>
@@ -2817,10 +2814,33 @@
 	                  <th>Help Needed</th>
 	                </tr>
 	              </thead>
-	              <tbody id="stageconv-drill-body"></tbody>
-	            </table>
-	          </div>
-	        </div>
+		            <tbody id="stageconv-drill-body"></tbody>
+		          </table>
+		        </div>
+		        <div class="detail-panel" style="margin-top:14px;">
+		          <div class="detail-head">
+		            <div class="detail-title">Seller Forward% Comparison</div>
+		            <div id="stageconv-sellercmp-meta" class="detail-meta">Forward% by seller and stage (A→B).</div>
+		          </div>
+		          <div class="detail-wrap">
+		            <table class="detail-table" id="stageconv-sellercmp-table">
+		              <thead>
+		                <tr>
+		                  <th>Seller</th>
+		                  <th>Overall Fwd%</th>
+		                  <th>1. Intro</th>
+		                  <th>2. Qualification</th>
+		                  <th>3. Capability</th>
+		                  <th>4. Problem Scoping</th>
+		                  <th>6. Commercial Proposal</th>
+		                  <th>5. Contracting</th>
+		                </tr>
+		              </thead>
+		              <tbody id="stageconv-sellercmp-body"></tbody>
+		            </table>
+		          </div>
+		        </div>
+		      </div>
 	        <div class="footnote">
 	          Definitions: Forward(any) = moved to any later stage in B; Next = i→i+1; Skip = i→later than i+1; Back = moved to earlier stage; Stalled = same stage; Gone = present in A but missing in B (removed/out of scope). New deals in B are reported in meta but not counted in stage-i denominators.
 	        </div>
@@ -3557,7 +3577,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.59+20260210.3';
+    const APP_VERSION = 'v0.7.60+20260210.4';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -7268,16 +7288,18 @@
 		      return { perStage, drill, stages, stageOptionsAll, totalA, totalB, newInB, newDeals, sellerLabel, cutoffMonth, stageFilterSet: filterSet };
 		    }
 
-	    function renderStageConversion(data) {
-	      const sellerSel = document.getElementById('stageconv-seller');
-	      const fromSel = document.getElementById('stageconv-from');
-	      const toSel = document.getElementById('stageconv-to');
-	      const meta = document.getElementById('stageconv-meta');
-	      const body = document.getElementById('stageconv-body');
-	      const drillBody = document.getElementById('stageconv-drill-body');
-	      const drillTitle = document.getElementById('stageconv-drill-title');
-	      const drillMeta = document.getElementById('stageconv-drill-meta');
-	      if (!sellerSel || !fromSel || !toSel || !body || !meta || !drillBody) return;
+		    function renderStageConversion(data) {
+		      const sellerSel = document.getElementById('stageconv-seller');
+		      const fromSel = document.getElementById('stageconv-from');
+		      const toSel = document.getElementById('stageconv-to');
+		      const meta = document.getElementById('stageconv-meta');
+		      const body = document.getElementById('stageconv-body');
+		      const sellerCmpMeta = document.getElementById('stageconv-sellercmp-meta');
+		      const sellerCmpBody = document.getElementById('stageconv-sellercmp-body');
+		      const drillBody = document.getElementById('stageconv-drill-body');
+		      const drillTitle = document.getElementById('stageconv-drill-title');
+		      const drillMeta = document.getElementById('stageconv-drill-meta');
+		      if (!sellerSel || !fromSel || !toSel || !body || !meta || !drillBody) return;
 
 	      // Fill seller options.
 	      const sellers = (data.sellers || []).filter((s) => s && s !== 'All (unique deals)');
@@ -7296,11 +7318,12 @@
 
 	      const fromId = String(fromSel.value || stageConvFromIdState || '').trim();
 	      const toId = String(toSel.value || stageConvToIdState || '').trim();
-	      if (!fromId || !toId) {
-	        meta.textContent = 'Select versions A and B to compute progression.';
-	        body.innerHTML = '';
-	        return;
-	      }
+		      if (!fromId || !toId) {
+		        meta.textContent = 'Select versions A and B to compute progression.';
+		        body.innerHTML = '';
+		        if (sellerCmpBody) sellerCmpBody.innerHTML = '';
+		        return;
+		      }
 
 	      const cutoffMonth = stageConvIntroCutoffMonthState || scorecardIntroCutoffMonthState || null;
 	      const seller = stageConvSelectedSeller || 'Overall';
@@ -7309,9 +7332,10 @@
 	      const toCached = versionDatasetCache.get(toId);
 	      if (!fromCached || !fromCached.dataset || !toCached || !toCached.dataset) {
 	        // Lazy-load both datasets (best-effort) and rerender.
-	        meta.textContent = 'Loading versions…';
-	        body.innerHTML = '';
-	        Promise.all([
+		        meta.textContent = 'Loading versions…';
+		        body.innerHTML = '';
+		        if (sellerCmpBody) sellerCmpBody.innerHTML = '';
+		        Promise.all([
 	          (!fromCached || !fromCached.dataset) ? fetchVersionDataCached(fromId) : Promise.resolve(fromCached),
 	          (!toCached || !toCached.dataset) ? fetchVersionDataCached(toId) : Promise.resolve(toCached),
 	        ]).then(() => {
@@ -7398,11 +7422,34 @@
 	        body.appendChild(tr);
 	      });
 
-	      // Reset drilldown.
-	      drillTitle.textContent = 'Deal Drilldown';
-	      drillMeta.textContent = 'Click any number in the summary table to list deals.';
-	      drillBody.innerHTML = '';
-	    }
+		      // Reset drilldown.
+		      drillTitle.textContent = 'Deal Drilldown';
+		      drillMeta.textContent = 'Click any number in the summary table to list deals.';
+		      drillBody.innerHTML = '';
+
+		      // Seller forward% comparison table (bottom).
+		      if (sellerCmpBody) {
+		        sellerCmpBody.innerHTML = '';
+		        const cmpSellers = ['Overall', ...((data.sellers || []).filter((s) => s && s !== 'All (unique deals)') || [])];
+		        const stageCols = ['1. Intro', '2. Qualification', '3. Capability', '4. Problem Scoping', '6. Commercial Proposal', '5. Contracting'];
+		        const fmtPct = (num, den) => (Number(den || 0) > 0 ? `${((Number(num || 0) / Number(den || 0)) * 100).toFixed(1)}%` : '-');
+
+		        cmpSellers.forEach((sLabel) => {
+		          const one = computeStageConversion(fromCached.dataset, toCached.dataset, sLabel, cutoffMonth, stageConvStageFilter);
+		          const tr = document.createElement('tr');
+		          tr.appendChild(makeCell('td', sLabel));
+		          const totalN = (one.stages || []).reduce((acc, st) => acc + Number((one.perStage[normalizeStage(st)] || {}).N || 0), 0);
+		          const totalF = (one.stages || []).reduce((acc, st) => acc + Number((one.perStage[normalizeStage(st)] || {}).forward || 0), 0);
+		          tr.appendChild(makeCell('td', fmtPct(totalF, totalN)));
+		          stageCols.forEach((st) => {
+		            const node = one.perStage[normalizeStage(st)] || {};
+		            tr.appendChild(makeCell('td', fmtPct(node.forward || 0, node.N || 0)));
+		          });
+		          sellerCmpBody.appendChild(tr);
+		        });
+		        if (sellerCmpMeta) sellerCmpMeta.textContent = `Forward% by seller and stage for selected A→B versions (Intro cutoff ${cutoffMonth || '-'}).`;
+		      }
+		    }
 
 		    function stageConvDrilldown(stageLabel, metricKey) {
 		      const drillTitle = document.getElementById('stageconv-drill-title');
@@ -7419,10 +7466,10 @@
 		        next: 'Next-stage',
 		        skip: 'Skipped ahead',
 		        back: 'Moved backward',
-	        stalled: 'Stalled',
-	        gone: 'Gone (missing in B)',
-	        N: 'All deals in stage (A)',
-	      };
+		        stalled: 'Stalled',
+		        gone: 'Gone (missing in B or moved to terminal gone stage)',
+		        N: 'All deals in stage (A)',
+		      };
 	      const metricLabel = labelMap[metricKey] || metricKey;
 
 	      drillTitle.textContent = `${stageConvLastComputed.sellerLabel} | ${stageText} | ${metricLabel}`;
@@ -9391,7 +9438,6 @@
 		        const stageConvSellerSel = document.getElementById('stageconv-seller');
 		        const stageConvFromSel = document.getElementById('stageconv-from');
 		        const stageConvToSel = document.getElementById('stageconv-to');
-		        const stageConvUseViewing = document.getElementById('stageconv-use-viewing');
 		        if (stageConvSellerSel) {
 		          stageConvSellerSel.addEventListener('change', () => {
 		            stageConvSelectedSeller = stageConvSellerSel.value || 'Overall';
@@ -9413,24 +9459,6 @@
 		            if (!versionId) return;
 		            stageConvToIdState = String(versionId);
 		            try { await fetchVersionDataCached(stageConvToIdState); } catch (_) {}
-		            renderStageConversion(data);
-		          });
-		        }
-		        if (stageConvUseViewing) {
-		          stageConvUseViewing.addEventListener('click', async () => {
-		            const viewing = viewedVersionIdState || activeVersionIdState || latestVersionIdState;
-		            if (!viewing) return;
-		            const prev = choosePreviousVersionId(viewing);
-		            if (stageConvToSel) stageConvToSel.value = viewing;
-		            if (stageConvFromSel && prev) stageConvFromSel.value = prev;
-		            stageConvToIdState = String(viewing);
-		            stageConvFromIdState = prev ? String(prev) : stageConvFromIdState;
-		            try {
-		              await Promise.all([
-		                fetchVersionDataCached(stageConvToIdState),
-		                stageConvFromIdState ? fetchVersionDataCached(stageConvFromIdState) : Promise.resolve(null),
-		              ]);
-		            } catch (_) {}
 		            renderStageConversion(data);
 		          });
 		        }
