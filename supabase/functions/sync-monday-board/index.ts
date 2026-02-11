@@ -54,6 +54,29 @@ type MondayItem = {
   column_values: Array<{ id: string; text: string; display_value?: string | null; value: string | null }>;
 };
 
+type QaSeverity = "pass" | "warn" | "fail" | "na";
+type QaCategory = "schema_presence" | "type_format" | "business_rules" | "cross_tab" | "comparative";
+type QaCheck = {
+  id: string;
+  category: QaCategory;
+  name: string;
+  severity: QaSeverity;
+  metric?: string;
+  threshold?: string;
+  result?: string;
+  details?: string;
+  affected_rows?: number;
+  affected_pct?: number;
+  samples?: string[];
+};
+
+type QaResult = {
+  status: "pass" | "warn" | "fail";
+  score: number;
+  summary: Record<string, unknown>;
+  report: Record<string, unknown>;
+};
+
 function smartTextFromMondayColumnValue(
   text: string | null | undefined,
   displayValue: string | null | undefined,
@@ -169,6 +192,592 @@ function parseMonths(raw: string | null | undefined): number | null {
   const n = Number(m[0]);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.max(1, Math.round(n));
+}
+
+function qaNormStage(stage: string | null | undefined): string {
+  return norm(String(stage || "").trim().replace(/^\s*\d+\.\s*/g, ""));
+}
+
+function qaCanonicalDealKey(r: Record<string, any>): string {
+  const itemId = String(r.item_id || "").trim();
+  if (itemId) return `id:${itemId}`;
+  const nm = norm(r.deal || r.name || "");
+  const intro = String(r.intro_date || "").slice(0, 10);
+  return `nm:${nm}||intro:${intro}`;
+}
+
+function qaSafeDate(raw: string | null | undefined): Date | null {
+  return parseDate(raw);
+}
+
+function qaBlank(v: unknown): boolean {
+  if (v == null) return true;
+  const s = String(v).trim();
+  return !s || s === "-" || s === "(blank)";
+}
+
+function qaPct(num: number, den: number): number {
+  if (!den) return 0;
+  return Number(((num / den) * 100).toFixed(1));
+}
+
+function qaRound(v: number, n = 2): number {
+  const p = 10 ** n;
+  return Math.round(v * p) / p;
+}
+
+function runDataQualityChecks(currentDataset: Record<string, any>, previousDataset: Record<string, any> | null): QaResult {
+  const checks: QaCheck[] = [];
+  const rows = Array.isArray(currentDataset?.all_deals_rows) ? currentDataset.all_deals_rows : [];
+  const prevRows = Array.isArray(previousDataset?.all_deals_rows) ? previousDataset?.all_deals_rows : [];
+  const total = rows.length;
+  const now = todayDate();
+
+  const addCheck = (c: QaCheck) => checks.push(c);
+
+  const fields: Array<{ key: string; required: boolean; label: string; warnBlankPct?: number; failBlankPct?: number }> = [
+    { key: "deal", required: true, label: "Deal", warnBlankPct: 1, failBlankPct: 5 },
+    { key: "stage", required: true, label: "Stage", warnBlankPct: 1, failBlankPct: 5 },
+    { key: "intro_date", required: true, label: "Intro Date", warnBlankPct: 1, failBlankPct: 5 },
+    { key: "seller", required: false, label: "Seller", warnBlankPct: 10, failBlankPct: 35 },
+    { key: "industry", required: false, label: "Industry", warnBlankPct: 15, failBlankPct: 40 },
+    { key: "logo", required: false, label: "Logo", warnBlankPct: 10, failBlankPct: 30 },
+    { key: "function", required: false, label: "Business Function", warnBlankPct: 15, failBlankPct: 40 },
+    { key: "deal_size", required: false, label: "Deal Size", warnBlankPct: 20, failBlankPct: 45 },
+    { key: "start_date", required: false, label: "Start Date", warnBlankPct: 40, failBlankPct: 70 },
+    { key: "duration_months", required: false, label: "Duration (months)", warnBlankPct: 35, failBlankPct: 70 },
+    { key: "source_of_lead", required: false, label: "Source of Lead", warnBlankPct: 20, failBlankPct: 50 },
+    { key: "revenue_source_mapping", required: false, label: "Revenue Source Mapping", warnBlankPct: 20, failBlankPct: 50 },
+    { key: "channel", required: false, label: "Channel", warnBlankPct: 10, failBlankPct: 30 },
+    { key: "matched_sellers", required: false, label: "Matched Sellers", warnBlankPct: 15, failBlankPct: 40 },
+  ];
+
+  for (const f of fields) {
+    const presentCount = rows.filter((r: any) => Object.prototype.hasOwnProperty.call(r || {}, f.key)).length;
+    const missingFieldRows = total - presentCount;
+    const blankRows = rows.filter((r: any) => {
+      const v = r ? r[f.key] : null;
+      if (Array.isArray(v)) return v.length === 0;
+      return qaBlank(v);
+    }).length;
+    const distinct = new Set(rows.map((r: any) => {
+      const v = r ? r[f.key] : null;
+      if (Array.isArray(v)) return JSON.stringify(v);
+      return String(v ?? "");
+    })).size;
+    const blankPct = qaPct(blankRows, total);
+
+    let sev: QaSeverity = "pass";
+    if (f.required && missingFieldRows > 0) sev = "fail";
+    else if (f.required && blankRows > 0 && blankPct >= 1) sev = "fail";
+    else if (f.failBlankPct != null && blankPct >= f.failBlankPct) sev = "fail";
+    else if (f.warnBlankPct != null && blankPct >= f.warnBlankPct) sev = "warn";
+
+    addCheck({
+      id: `presence_${f.key}`,
+      category: "schema_presence",
+      name: `${f.label}: presence + blank-rate`,
+      severity: sev,
+      metric: `blank=${blankRows}/${total}, distinct=${distinct}`,
+      threshold: f.required ? "required + non-blank" : `warn>=${f.warnBlankPct}% fail>=${f.failBlankPct}%`,
+      result: `present_rows=${presentCount}; blank_pct=${blankPct}%`,
+      affected_rows: blankRows + missingFieldRows,
+      affected_pct: qaPct(blankRows + missingFieldRows, total),
+    });
+  }
+
+  const parseFail = (key: string, label: string, parser: (x: string | null | undefined) => unknown, required = false) => {
+    const bad: string[] = [];
+    rows.forEach((r: any) => {
+      const raw = r ? r[key] : null;
+      if (qaBlank(raw)) {
+        if (required) bad.push(String(r?.deal || r?.item_id || "(unknown)"));
+        return;
+      }
+      if (parser(String(raw)) == null) bad.push(String(r?.deal || r?.item_id || "(unknown)"));
+    });
+    addCheck({
+      id: `type_${key}`,
+      category: "type_format",
+      name: `${label}: format validation`,
+      severity: bad.length ? (required ? "fail" : "warn") : "pass",
+      metric: `${bad.length}/${total} invalid`,
+      threshold: required ? "0 invalid (required field)" : "low invalid ratio",
+      result: bad.length ? "invalid values found" : "valid",
+      affected_rows: bad.length,
+      affected_pct: qaPct(bad.length, total),
+      samples: bad.slice(0, 5),
+    });
+  };
+  parseFail("intro_date", "Intro Date", qaSafeDate, true);
+  parseFail("start_date", "Start Date", qaSafeDate, false);
+  parseFail("next_step_date", "Next Step Date", qaSafeDate, false);
+  parseFail("deal_size", "Deal Size", parseAmount, false);
+  parseFail("duration_months", "Duration Months", parseMonths, false);
+  parseFail("age_days", "Age (days)", (x) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? n : null;
+  }, false);
+
+  const knownStageNorm = new Set([
+    ...Object.keys(FUNNEL_STAGE_MAP).map((k) => qaNormStage(k)),
+    ...Object.values(FUNNEL_STAGE_MAP).map((k) => qaNormStage(k)),
+    "win", "won", "loss", "lost", "disqualified", "no show/ reschedule",
+    "latent pool - monthly", "latent pool - bi-monthly", "latent pool - half yearly revisit",
+  ]);
+  const unknownStages = rows.filter((r: any) => !knownStageNorm.has(qaNormStage(r?.stage))).map((r: any) => String(r?.deal || r?.stage || "(unknown)"));
+  addCheck({
+    id: "biz_unknown_stage",
+    category: "business_rules",
+    name: "Stage normalization coverage",
+    severity: unknownStages.length ? "fail" : "pass",
+    metric: `${unknownStages.length}/${total} unknown stages`,
+    threshold: "0 unknown stage labels",
+    result: unknownStages.length ? "unknown labels present" : "all recognized",
+    affected_rows: unknownStages.length,
+    affected_pct: qaPct(unknownStages.length, total),
+    samples: unknownStages.slice(0, 5),
+  });
+
+  const stage4plusMissingStart = rows.filter((r: any) => {
+    const n = stageNum(String(r?.stage || ""));
+    if (n == null || n < 4) return false;
+    return qaBlank(r?.start_date);
+  });
+  addCheck({
+    id: "biz_stage4plus_missing_start",
+    category: "business_rules",
+    name: "Stage >= 4 should have Start Date",
+    severity: stage4plusMissingStart.length ? "warn" : "pass",
+    metric: `${stage4plusMissingStart.length}/${total} missing`,
+    threshold: "0 missing recommended",
+    result: stage4plusMissingStart.length ? "missing start date in late stages" : "ok",
+    affected_rows: stage4plusMissingStart.length,
+    affected_pct: qaPct(stage4plusMissingStart.length, total),
+    samples: stage4plusMissingStart.slice(0, 5).map((r: any) => String(r.deal || r.item_id || "(unknown)")),
+  });
+
+  const wonMissingStart = rows.filter((r: any) => qaNormStage(r?.stage).includes("win") && qaBlank(r?.start_date));
+  addCheck({
+    id: "biz_won_missing_start",
+    category: "business_rules",
+    name: "Won deals must have Start Date",
+    severity: wonMissingStart.length ? "fail" : "pass",
+    metric: `${wonMissingStart.length} won deals missing start date`,
+    threshold: "0",
+    result: wonMissingStart.length ? "missing values" : "ok",
+    affected_rows: wonMissingStart.length,
+    affected_pct: qaPct(wonMissingStart.length, total),
+    samples: wonMissingStart.slice(0, 5).map((r: any) => String(r.deal || r.item_id || "(unknown)")),
+  });
+
+  const badDuration = rows.filter((r: any) => !qaBlank(r?.start_date) && (parseMonths(String(r?.duration_months || "")) == null));
+  addCheck({
+    id: "biz_duration_with_start",
+    category: "business_rules",
+    name: "Duration must be positive when Start Date exists",
+    severity: badDuration.length ? "fail" : "pass",
+    metric: `${badDuration.length}/${total} invalid duration`,
+    threshold: "0 invalid",
+    result: badDuration.length ? "invalid durations found" : "ok",
+    affected_rows: badDuration.length,
+    affected_pct: qaPct(badDuration.length, total),
+    samples: badDuration.slice(0, 5).map((r: any) => String(r.deal || r.item_id || "(unknown)")),
+  });
+
+  const negativeDeal = rows.filter((r: any) => {
+    const n = parseAmount(String(r?.deal_size || ""));
+    return n != null && n < 0;
+  });
+  addCheck({
+    id: "biz_negative_deal_size",
+    category: "business_rules",
+    name: "Deal Size must be non-negative",
+    severity: negativeDeal.length ? "fail" : "pass",
+    metric: `${negativeDeal.length}/${total} negative`,
+    threshold: "0 negative",
+    result: negativeDeal.length ? "negative values found" : "ok",
+    affected_rows: negativeDeal.length,
+    affected_pct: qaPct(negativeDeal.length, total),
+    samples: negativeDeal.slice(0, 5).map((r: any) => String(r.deal || r.item_id || "(unknown)")),
+  });
+
+  const introFuture = rows.filter((r: any) => {
+    const d = qaSafeDate(r?.intro_date);
+    if (!d) return false;
+    const diffDays = Math.floor((d.getTime() - now.getTime()) / (24 * 3600 * 1000));
+    return diffDays > 14;
+  });
+  addCheck({
+    id: "biz_intro_future",
+    category: "business_rules",
+    name: "Intro Date too far in future",
+    severity: introFuture.length ? "warn" : "pass",
+    metric: `${introFuture.length}/${total} > 14 days future`,
+    threshold: "<=14 days future tolerance",
+    result: introFuture.length ? "future-dated records found" : "ok",
+    affected_rows: introFuture.length,
+    affected_pct: qaPct(introFuture.length, total),
+    samples: introFuture.slice(0, 5).map((r: any) => `${String(r.deal || r.item_id || "(unknown)")} | ${String(r.intro_date || "-")}`),
+  });
+
+  const badDateOrderWarn: string[] = [];
+  const badDateOrderFail: string[] = [];
+  rows.forEach((r: any) => {
+    const intro = qaSafeDate(r?.intro_date);
+    const start = qaSafeDate(r?.start_date);
+    if (!intro || !start) return;
+    const diff = Math.floor((intro.getTime() - start.getTime()) / (24 * 3600 * 1000));
+    if (diff > 30) badDateOrderFail.push(String(r.deal || r.item_id || "(unknown)"));
+    else if (diff > 0) badDateOrderWarn.push(String(r.deal || r.item_id || "(unknown)"));
+  });
+  addCheck({
+    id: "biz_start_before_intro",
+    category: "business_rules",
+    name: "Start Date before Intro Date",
+    severity: badDateOrderFail.length ? "fail" : (badDateOrderWarn.length ? "warn" : "pass"),
+    metric: `${badDateOrderWarn.length + badDateOrderFail.length}/${total} affected`,
+    threshold: "warn if >0 days; fail if >30 days",
+    result: badDateOrderFail.length ? "severe violations" : (badDateOrderWarn.length ? "minor violations" : "ok"),
+    affected_rows: badDateOrderWarn.length + badDateOrderFail.length,
+    affected_pct: qaPct(badDateOrderWarn.length + badDateOrderFail.length, total),
+    samples: [...badDateOrderFail, ...badDateOrderWarn].slice(0, 5),
+  });
+
+  const keySeen = new Map<string, number>();
+  rows.forEach((r: any) => {
+    const key = qaCanonicalDealKey(r || {});
+    keySeen.set(key, (keySeen.get(key) || 0) + 1);
+  });
+  const dupCount = Array.from(keySeen.values()).filter((v) => v > 1).reduce((a, b) => a + (b - 1), 0);
+  addCheck({
+    id: "biz_duplicate_keys",
+    category: "business_rules",
+    name: "Canonical duplicate deals",
+    severity: dupCount > 0 ? "warn" : "pass",
+    metric: `${dupCount} duplicate row(s)`,
+    threshold: "0 duplicates preferred",
+    result: dupCount > 0 ? "duplicates found" : "ok",
+    affected_rows: dupCount,
+    affected_pct: qaPct(dupCount, total),
+  });
+
+  const emptyMatchedWithOwner = rows.filter((r: any) => {
+    const ms = Array.isArray(r?.matched_sellers) ? r.matched_sellers : [];
+    const owner = String(r?.seller || "").trim();
+    return owner && ms.length === 0;
+  });
+  addCheck({
+    id: "biz_matched_sellers_empty",
+    category: "business_rules",
+    name: "Matched Sellers empty while owner exists",
+    severity: emptyMatchedWithOwner.length ? "warn" : "pass",
+    metric: `${emptyMatchedWithOwner.length}/${total}`,
+    threshold: "0 preferred",
+    result: emptyMatchedWithOwner.length ? "mapping gaps detected" : "ok",
+    affected_rows: emptyMatchedWithOwner.length,
+    affected_pct: qaPct(emptyMatchedWithOwner.length, total),
+    samples: emptyMatchedWithOwner.slice(0, 5).map((r: any) => String(r.deal || r.item_id || "(unknown)")),
+  });
+
+  const scoreAll = currentDataset?.scorecard?.sellers?.["All (unique deals)"] || {};
+  const kpi = scoreAll?.kpi_details || {};
+  const checkEq = (id: string, name: string, left: number, right: number) => {
+    const ok = Number(left || 0) === Number(right || 0);
+    addCheck({
+      id,
+      category: "cross_tab",
+      name,
+      severity: ok ? "pass" : "fail",
+      metric: `${left} vs ${right}`,
+      threshold: "exact equality",
+      result: ok ? "ok" : "mismatch",
+      affected_rows: ok ? 0 : Math.abs(Number(left || 0) - Number(right || 0)),
+      affected_pct: ok ? 0 : qaPct(Math.abs(Number(left || 0) - Number(right || 0)), Math.max(Number(left || 0), Number(right || 0), 1)),
+    });
+  };
+  checkEq("cross_12", "Scorecard Stage 1-2 count reconciles", Number(scoreAll.stage_1_2_count || 0), Array.isArray(kpi.stage_1_2) ? kpi.stage_1_2.length : 0);
+  checkEq("cross_34", "Scorecard Stage 3-4 count reconciles", Number(scoreAll.stage_3_4_count || 0), Array.isArray(kpi.stage_3_4) ? kpi.stage_3_4.length : 0);
+  checkEq("cross_56", "Scorecard Stage 5-6 count reconciles", Number(scoreAll.stage_5_6_count || 0), Array.isArray(kpi.stage_5_6) ? kpi.stage_5_6.length : 0);
+  checkEq("cross_78", "Scorecard Stage 7-8 count reconciles", Number(scoreAll.stage_7_8_count || 0), Array.isArray(kpi.stage_7_8) ? kpi.stage_7_8.length : 0);
+  checkEq("cross_16", "Scorecard Stage 1-6 count reconciles", Number(scoreAll.stage_1_6_count || 0), Array.isArray(kpi.stage_1_6) ? kpi.stage_1_6.length : 0);
+
+  const wlRows = rows.filter((r: any) => {
+    const st = qaNormStage(r?.stage);
+    return st === "won" || st === "win" || st === "lost" || st === "loss";
+  }).length;
+  const wlTotals = Number(currentDataset?.win_loss_sources?.overall_unique?.total || 0);
+  checkEq("cross_winloss", "Win/Lost source totals reconcile with raw rows", wlTotals, wlRows);
+
+  const introSeriesOverall = (currentDataset?.intro_trend?.series && (currentDataset.intro_trend.series["Overall (unique)"] || currentDataset.intro_trend.series["Overall"])) || {};
+  const introSeriesTotal = Object.values(introSeriesOverall || {}).reduce((a: number, b: any) => a + Number(b || 0), 0);
+  const introRowsTotal = rows.filter((r: any) => !qaNormStage(r?.stage).includes("no show/ reschedule") && qaSafeDate(r?.intro_date)).length;
+  checkEq("cross_introtrend", "Call trend total reconciles with eligible intro rows", introSeriesTotal, introRowsTotal);
+
+  const crosstabAll = currentDataset?.series?.["All (unique deals)"] || currentDataset?.series?.Overall || {};
+  let crossDiff = 0;
+  Object.keys(crosstabAll || {}).forEach((stage) => {
+    const monthMap = crosstabAll[stage] || {};
+    const summed = Object.values(monthMap || {}).reduce((a: number, b: any) => a + Number(b || 0), 0);
+    const raw = rows.filter((r: any) => qaNormStage(String(r?.stage || "")) === qaNormStage(stage)).length;
+    crossDiff += Math.abs(summed - raw);
+  });
+  addCheck({
+    id: "cross_crosstab_vs_rows",
+    category: "cross_tab",
+    name: "Crosstab stage totals reconcile with raw rows",
+    severity: crossDiff > 0 ? "warn" : "pass",
+    metric: `total absolute mismatch=${crossDiff}`,
+    threshold: "0 ideal",
+    result: crossDiff > 0 ? "minor mismatch" : "ok",
+    affected_rows: crossDiff,
+    affected_pct: qaPct(crossDiff, Math.max(total, 1)),
+  });
+
+  addCheck({
+    id: "cross_revenue_forecast_drilldown",
+    category: "cross_tab",
+    name: "Revenue forecast row totals = drilldown contributions",
+    severity: "na",
+    metric: "not computed in backend dataset",
+    threshold: "n/a",
+    result: "requires frontend computed artifacts",
+  });
+
+  if (!previousDataset || !prevRows.length) {
+    addCheck({
+      id: "cmp_previous_available",
+      category: "comparative",
+      name: "Previous snapshot available for drift checks",
+      severity: "na",
+      metric: "no previous version",
+      threshold: "n/a",
+      result: "comparative checks skipped",
+    });
+  } else {
+    const prevTotal = prevRows.length;
+    const rowDeltaPct = prevTotal ? qaRound(((total - prevTotal) / prevTotal) * 100, 1) : 0;
+    addCheck({
+      id: "cmp_row_count_delta",
+      category: "comparative",
+      name: "Total row count drift vs previous version",
+      severity: Math.abs(rowDeltaPct) >= 35 ? "fail" : (Math.abs(rowDeltaPct) >= 20 ? "warn" : "pass"),
+      metric: `${prevTotal} -> ${total} (${rowDeltaPct}%)`,
+      threshold: "warn>=20%, fail>=35%",
+      result: "row volume drift",
+      affected_rows: Math.abs(total - prevTotal),
+      affected_pct: Math.abs(rowDeltaPct),
+    });
+
+    const blankRate = (datasetRows: any[], key: string) => qaPct(datasetRows.filter((r: any) => qaBlank(r?.[key])).length, datasetRows.length || 1);
+    ["industry", "function", "logo", "start_date", "deal_size"].forEach((key) => {
+      const bNow = blankRate(rows, key);
+      const bPrev = blankRate(prevRows, key);
+      const diff = qaRound(bNow - bPrev, 1);
+      addCheck({
+        id: `cmp_blank_drift_${key}`,
+        category: "comparative",
+        name: `${key} blank-rate drift`,
+        severity: diff >= 20 ? "fail" : (diff >= 10 ? "warn" : "pass"),
+        metric: `${bPrev}% -> ${bNow}% (Δ ${diff}pp)`,
+        threshold: "warn>=+10pp, fail>=+20pp",
+        result: "blank-rate drift",
+        affected_rows: Math.max(0, Math.round((diff / 100) * total)),
+        affected_pct: Math.max(0, diff),
+      });
+    });
+
+    const dist = (datasetRows: any[], keyFn: (r: any) => string) => {
+      const out: Record<string, number> = {};
+      datasetRows.forEach((r: any) => {
+        const k = keyFn(r);
+        out[k] = (out[k] || 0) + 1;
+      });
+      return out;
+    };
+    const maxShareDrift = (a: Record<string, number>, b: Record<string, number>) => {
+      const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+      let max = 0;
+      keys.forEach((k) => {
+        const sa = (a[k] || 0) / Math.max(prevTotal, 1);
+        const sb = (b[k] || 0) / Math.max(total, 1);
+        max = Math.max(max, Math.abs(sb - sa));
+      });
+      return qaRound(max * 100, 1);
+    };
+    const stageDrift = maxShareDrift(
+      dist(prevRows, (r: any) => qaNormStage(String(r?.stage || ""))),
+      dist(rows, (r: any) => qaNormStage(String(r?.stage || ""))),
+    );
+    addCheck({
+      id: "cmp_stage_distribution",
+      category: "comparative",
+      name: "Stage distribution drift",
+      severity: stageDrift >= 30 ? "fail" : (stageDrift >= 15 ? "warn" : "pass"),
+      metric: `max stage share drift=${stageDrift}pp`,
+      threshold: "warn>=15pp fail>=30pp",
+      result: "distribution drift",
+      affected_pct: stageDrift,
+    });
+
+    const sellerDrift = maxShareDrift(
+      dist(prevRows, (r: any) => String(r?.seller || "(blank)")),
+      dist(rows, (r: any) => String(r?.seller || "(blank)")),
+    );
+    addCheck({
+      id: "cmp_seller_distribution",
+      category: "comparative",
+      name: "Seller distribution drift",
+      severity: sellerDrift >= 25 ? "warn" : "pass",
+      metric: `max seller share drift=${sellerDrift}pp`,
+      threshold: "warn>=25pp",
+      result: "distribution drift",
+      affected_pct: sellerDrift,
+    });
+
+    const channelDrift = maxShareDrift(
+      dist(prevRows, (r: any) => String(r?.channel || "(blank)")),
+      dist(rows, (r: any) => String(r?.channel || "(blank)")),
+    );
+    addCheck({
+      id: "cmp_channel_distribution",
+      category: "comparative",
+      name: "Channel distribution drift",
+      severity: channelDrift >= 30 ? "warn" : "pass",
+      metric: `max channel share drift=${channelDrift}pp`,
+      threshold: "warn>=30pp",
+      result: "distribution drift",
+      affected_pct: channelDrift,
+    });
+
+    const wonLostCount = (datasetRows: any[]) => datasetRows.filter((r: any) => {
+      const s = qaNormStage(r?.stage);
+      return s === "won" || s === "win" || s === "lost" || s === "loss";
+    }).length;
+    const prevWL = wonLostCount(prevRows);
+    const nowWL = wonLostCount(rows);
+    const wlPct = prevWL ? qaRound(((nowWL - prevWL) / prevWL) * 100, 1) : 0;
+    addCheck({
+      id: "cmp_won_lost_drift",
+      category: "comparative",
+      name: "Won/Lost row drift",
+      severity: Math.abs(wlPct) >= 50 ? "warn" : "pass",
+      metric: `${prevWL} -> ${nowWL} (${wlPct}%)`,
+      threshold: "warn>=50%",
+      result: "won/lost drift",
+      affected_rows: Math.abs(nowWL - prevWL),
+      affected_pct: Math.abs(wlPct),
+    });
+
+    const prevKeys = new Set(prevRows.map((r: any) => qaCanonicalDealKey(r || {})));
+    const nowKeys = new Set(rows.map((r: any) => qaCanonicalDealKey(r || {})));
+    let added = 0;
+    let removed = 0;
+    nowKeys.forEach((k) => { if (!prevKeys.has(k)) added += 1; });
+    prevKeys.forEach((k) => { if (!nowKeys.has(k)) removed += 1; });
+    addCheck({
+      id: "cmp_key_add_drop",
+      category: "comparative",
+      name: "Canonical key additions/removals",
+      severity: (added + removed) > Math.max(50, prevTotal * 0.35) ? "warn" : "pass",
+      metric: `added=${added}, removed=${removed}`,
+      threshold: "warn on unusually high churn",
+      result: "key churn measured",
+      affected_rows: added + removed,
+      affected_pct: qaPct(added + removed, Math.max(prevTotal, total)),
+    });
+
+    const prevUnknown = prevRows.filter((r: any) => !knownStageNorm.has(qaNormStage(r?.stage))).length;
+    const nowUnknown = rows.filter((r: any) => !knownStageNorm.has(qaNormStage(r?.stage))).length;
+    const unknownSpike = nowUnknown - prevUnknown;
+    addCheck({
+      id: "cmp_unknown_stage_spike",
+      category: "comparative",
+      name: "Unknown stage label spike",
+      severity: unknownSpike > 0 ? "warn" : "pass",
+      metric: `${prevUnknown} -> ${nowUnknown}`,
+      threshold: "no increase preferred",
+      result: "unknown stage tracking",
+      affected_rows: Math.max(0, unknownSpike),
+      affected_pct: qaPct(Math.max(0, unknownSpike), total),
+    });
+
+    const prevIndFnBlank = prevRows.filter((r: any) => qaBlank(r?.industry) || qaBlank(r?.function)).length;
+    const nowIndFnBlank = rows.filter((r: any) => qaBlank(r?.industry) || qaBlank(r?.function)).length;
+    const drift = nowIndFnBlank - prevIndFnBlank;
+    addCheck({
+      id: "cmp_join_blank_spike",
+      category: "comparative",
+      name: "Industry/Function blank spike after joins",
+      severity: drift > 20 ? "warn" : "pass",
+      metric: `${prevIndFnBlank} -> ${nowIndFnBlank}`,
+      threshold: "warn if +20 rows",
+      result: "join-coverage drift",
+      affected_rows: Math.max(0, drift),
+      affected_pct: qaPct(Math.max(0, drift), total),
+    });
+
+    const monthCounts = dist(rows, (r: any) => String(r?.intro_date || "").slice(0, 7) || "(blank)");
+    const prevMonthCounts = dist(prevRows, (r: any) => String(r?.intro_date || "").slice(0, 7) || "(blank)");
+    const monthDrift = maxShareDrift(prevMonthCounts, monthCounts);
+    addCheck({
+      id: "cmp_intro_window_drift",
+      category: "comparative",
+      name: "Intro-date window drift",
+      severity: monthDrift >= 35 ? "warn" : "pass",
+      metric: `max month-share drift=${monthDrift}pp`,
+      threshold: "warn>=35pp",
+      result: "intro window drift",
+      affected_pct: monthDrift,
+    });
+  }
+
+  let score = 100;
+  let failCount = 0;
+  let warnCount = 0;
+  const categoryCounts: Record<string, { pass: number; warn: number; fail: number; na: number }> = {};
+  let affectedRowsTotal = 0;
+  checks.forEach((c) => {
+    const cat = c.category || "schema_presence";
+    categoryCounts[cat] ||= { pass: 0, warn: 0, fail: 0, na: 0 };
+    categoryCounts[cat][c.severity] += 1;
+    if (c.severity === "fail") {
+      failCount += 1;
+      score -= (c.category === "schema_presence" || c.category === "type_format") ? 10 : 7;
+    } else if (c.severity === "warn") {
+      warnCount += 1;
+      score -= 3;
+    }
+    if (Number.isFinite(Number(c.affected_rows || 0))) affectedRowsTotal += Number(c.affected_rows || 0);
+  });
+  score = Math.max(0, Math.min(100, score));
+  const status: "pass" | "warn" | "fail" =
+    (failCount > 0 || score < 70) ? "fail"
+      : ((warnCount > 0 || score < 90) ? "warn" : "pass");
+
+  return {
+    status,
+    score,
+    summary: {
+      status,
+      score,
+      total_checks: checks.length,
+      fail_count: failCount,
+      warn_count: warnCount,
+      pass_count: checks.filter((c) => c.severity === "pass").length,
+      na_count: checks.filter((c) => c.severity === "na").length,
+      affected_rows_total: affectedRowsTotal,
+      row_count: total,
+      compared_previous: !!(previousDataset && prevRows.length),
+      category_counts: categoryCounts,
+    },
+    report: {
+      generated_at: new Date().toISOString(),
+      row_count: total,
+      previous_row_count: prevRows.length,
+      checks,
+    },
+  };
 }
 
 function monthLabel(d: Date): string {
@@ -1640,6 +2249,19 @@ Deno.serve(async (req) => {
       monday_board_name: meta.boardName,
     };
 
+    const prevVersion = await supabase
+      .from("dashboard_versions")
+      .select("id, dataset")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (prevVersion.error) return j({ error: prevVersion.error.message }, 500);
+    const prevDataset = prevVersion.data && typeof prevVersion.data.dataset === "object" ? (prevVersion.data.dataset as Record<string, any>) : null;
+    const qa = runDataQualityChecks(dataset as Record<string, any>, prevDataset);
+    settings.monday_last_qa_status = qa.status;
+    settings.monday_last_qa_score = qa.score;
+    settings.monday_last_qa_run_at = new Date().toISOString();
+
     const inserted = await supabase.from("dashboard_versions").insert({
       created_by: username,
       source: "monday_sync",
@@ -1650,6 +2272,11 @@ Deno.serve(async (req) => {
       dataset_hash: datasetHash,
       item_count: Number(items.length || 0),
       notes: versionName,
+      qa_status: qa.status,
+      qa_score: qa.score,
+      qa_summary: qa.summary,
+      qa_report: qa.report,
+      qa_run_at: new Date().toISOString(),
     }).select("id").single();
     if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
     const versionId = inserted.data.id;
@@ -1694,6 +2321,9 @@ Deno.serve(async (req) => {
       board_id: String(boardId),
       board_name: meta.boardName,
       item_count: items.length,
+      qa_status: qa.status,
+      qa_score: qa.score,
+      qa_summary: qa.summary,
       version_id: versionId,
       state: out,
     });

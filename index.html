@@ -1968,6 +1968,51 @@
       cursor: pointer;
     }
 
+    .qa-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #eef3ff;
+      color: #1f3f75;
+    }
+    .qa-badge.pass {
+      background: #ecfdf3;
+      color: #136a3d;
+      border-color: #b7ebcf;
+    }
+    .qa-badge.warn {
+      background: #fff7e6;
+      color: #8b5f00;
+      border-color: #f9d58a;
+    }
+    .qa-badge.fail {
+      background: #fef1f2;
+      color: #a91a24;
+      border-color: #f7b4ba;
+    }
+    .qa-kpi {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #fff;
+    }
+    .qa-kpi .k {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    .qa-kpi .v {
+      font-size: 18px;
+      font-weight: 800;
+      color: #1f3f75;
+      margin-top: 2px;
+    }
+
     .momentum-wrap {
       padding: 12px 16px 16px;
       display: grid;
@@ -3396,6 +3441,27 @@
             <div id="admin-diag-meta" class="sync-meta" style="margin-top:10px; display:none;"></div>
             <div id="admin-diag-out" class="admin-table-wrap" style="margin-top:10px; display:none;"></div>
           </div>
+          <div class="admin-card">
+            <label style="margin-bottom:8px;">Data Quality (Versioned)</label>
+            <div class="sub" style="margin-bottom:10px;">
+              Automatically computed on each Monday refresh. Shows data completeness, validity, cross-tab consistency, and drift vs previous snapshot.
+            </div>
+            <div class="admin-grid" style="align-items:end;">
+              <div>
+                <label for="admin-qa-version">Version</label>
+                <select id="admin-qa-version"></select>
+              </div>
+              <div>
+                <label for="admin-qa-compare">Compare To</label>
+                <select id="admin-qa-compare"></select>
+              </div>
+              <button id="admin-qa-load-btn" type="button">Load Data Quality</button>
+            </div>
+            <div id="admin-qa-banner" class="sync-meta" style="margin-top:10px; display:none;"></div>
+            <div id="admin-qa-kpis" class="admin-grid" style="margin-top:10px; display:none;"></div>
+            <div id="admin-qa-summary-out" class="admin-table-wrap" style="margin-top:10px; display:none;"></div>
+            <div id="admin-qa-details-out" class="admin-table-wrap" style="margin-top:10px; display:none;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -3491,7 +3557,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.58+20260210.2';
+    const APP_VERSION = 'v0.7.59+20260210.3';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -3576,8 +3642,11 @@
 	    let stageConvToIdState = null;
 	    let stageConvStageFilter = null; // null = all; else Set(stage labels)
 	    let stageConvLastComputed = null; // cached computed payload for current controls
+	    let adminQaVersionIdState = null;
+	    let adminQaCompareIdState = null;
 
     const versionDatasetCache = new Map(); // versionId -> { dataset, likelihood, created_at, created_by }
+    const versionQaCache = new Map(); // versionId -> { version_id, qa_status, qa_score, qa_summary, qa_report, qa_run_at }
     let cycleRowsState = [];
     let cycleScopeState = 'Overall';
     let cycleIntroMonthsState = [];
@@ -4655,6 +4724,29 @@
       el.textContent = `Last sync: ${at}\nBoard: ${board}\nRows pulled: ${rows}\nTriggered by: ${by}\nSource: ${src}`;
     }
 
+    async function loadAdminDataQuality(versionId, compareId) {
+      const banner = document.getElementById('admin-qa-banner');
+      if (!banner) return;
+      const vId = String(versionId || adminQaVersionIdState || viewedVersionIdState || latestVersionIdState || '').trim();
+      if (!vId) {
+        renderAdminQaPanel(null, null, null);
+        return;
+      }
+      try {
+        banner.style.display = '';
+        banner.textContent = 'Loading data quality report...';
+        const qa = await fetchVersionQaCached(vId);
+        const cmpId = String(compareId || adminQaCompareIdState || '').trim();
+        const compareQa = cmpId ? await fetchVersionQaCached(cmpId) : null;
+        const versions = Array.isArray(versionsMetaState) ? versionsMetaState : [];
+        const vMeta = versions.find((v) => String(v.id) === vId) || null;
+        const cMeta = versions.find((v) => String(v.id) === cmpId) || null;
+        renderAdminQaPanel(qa, vMeta, cMeta, compareQa);
+      } catch (e) {
+        banner.textContent = e.message || 'Failed to load data quality report.';
+      }
+    }
+
     function diagRow(check, ok, details) {
       return { check, status: ok ? 'PASS' : 'FAIL', details: details || '' };
     }
@@ -4687,6 +4779,118 @@
       });
       table.appendChild(tbody);
       out.appendChild(table);
+    }
+
+    function qaStatusClass(status) {
+      const s = String(status || '').toLowerCase();
+      if (s === 'pass') return 'pass';
+      if (s === 'warn') return 'warn';
+      if (s === 'fail') return 'fail';
+      return '';
+    }
+
+    function qaStatusText(status) {
+      const s = String(status || '').toLowerCase();
+      if (s === 'pass') return 'PASS';
+      if (s === 'warn') return 'WARN';
+      if (s === 'fail') return 'FAIL';
+      return '-';
+    }
+
+    function renderAdminQaPanel(qaPayload, versionMeta, compareMeta, compareQa) {
+      const banner = document.getElementById('admin-qa-banner');
+      const kpis = document.getElementById('admin-qa-kpis');
+      const summaryOut = document.getElementById('admin-qa-summary-out');
+      const detailsOut = document.getElementById('admin-qa-details-out');
+      if (!banner || !kpis || !summaryOut || !detailsOut) return;
+
+      if (!qaPayload || typeof qaPayload !== 'object') {
+        banner.style.display = '';
+        banner.textContent = 'No data quality report found for this version.';
+        kpis.style.display = 'none';
+        summaryOut.style.display = 'none';
+        detailsOut.style.display = 'none';
+        return;
+      }
+
+      const status = String(qaPayload.qa_status || '').toLowerCase();
+      const score = Number(qaPayload.qa_score || 0);
+      const runAt = fmtTs(qaPayload.qa_run_at);
+      const summary = (qaPayload.qa_summary && typeof qaPayload.qa_summary === 'object') ? qaPayload.qa_summary : {};
+      const report = (qaPayload.qa_report && typeof qaPayload.qa_report === 'object') ? qaPayload.qa_report : {};
+      const checks = Array.isArray(report.checks) ? report.checks : [];
+      const catCounts = (summary.category_counts && typeof summary.category_counts === 'object') ? summary.category_counts : {};
+
+      banner.style.display = '';
+      const compareScore = (compareQa && Number.isFinite(Number(compareQa.qa_score))) ? Number(compareQa.qa_score) : null;
+      const scoreDelta = compareScore == null ? null : Number((score - compareScore).toFixed(1));
+      banner.innerHTML = `<span class="qa-badge ${qaStatusClass(status)}">${qaStatusText(status)}</span> Score: ${Number.isFinite(score) ? score.toFixed(0) : '-'} / 100${scoreDelta == null ? '' : ` (Δ vs compare ${scoreDelta >= 0 ? '+' : ''}${scoreDelta})`}\nRun: ${runAt}${versionMeta ? `\nVersion: ${versionLabel(versionMeta)}` : ''}${compareMeta ? `\nCompare baseline: ${versionLabel(compareMeta)}` : ''}`;
+
+      const kv = [
+        { k: 'Total Checks', v: Number(summary.total_checks || checks.length || 0) },
+        { k: 'Fails', v: Number(summary.fail_count || 0) },
+        { k: 'Warnings', v: Number(summary.warn_count || 0) },
+        { k: 'Affected Rows', v: Number(summary.affected_rows_total || 0) },
+      ];
+      kpis.innerHTML = '';
+      kv.forEach((x) => {
+        const box = document.createElement('div');
+        box.className = 'qa-kpi';
+        box.innerHTML = `<div class="k">${x.k}</div><div class="v">${money.format(Number(x.v || 0))}</div>`;
+        kpis.appendChild(box);
+      });
+      kpis.style.display = '';
+
+      summaryOut.innerHTML = '';
+      const t1 = document.createElement('table');
+      t1.className = 'admin-table';
+      const h1 = document.createElement('thead');
+      const htr = document.createElement('tr');
+      ['Category', 'PASS', 'WARN', 'FAIL', 'N/A'].forEach((x) => htr.appendChild(makeCell('th', x)));
+      h1.appendChild(htr);
+      t1.appendChild(h1);
+      const b1 = document.createElement('tbody');
+      Object.keys(catCounts).sort().forEach((cat) => {
+        const row = catCounts[cat] || {};
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', String(cat).replace(/_/g, ' ')));
+        tr.appendChild(makeCell('td', money.format(Number(row.pass || 0))));
+        tr.appendChild(makeCell('td', money.format(Number(row.warn || 0))));
+        tr.appendChild(makeCell('td', money.format(Number(row.fail || 0))));
+        tr.appendChild(makeCell('td', money.format(Number(row.na || 0))));
+        b1.appendChild(tr);
+      });
+      t1.appendChild(b1);
+      summaryOut.appendChild(t1);
+      summaryOut.style.display = '';
+
+      detailsOut.innerHTML = '';
+      const t2 = document.createElement('table');
+      t2.className = 'admin-table';
+      const h2 = document.createElement('thead');
+      const htr2 = document.createElement('tr');
+      ['Check', 'Severity', 'Category', 'Metric', 'Threshold', 'Result', 'Affected %', 'Samples'].forEach((x) => htr2.appendChild(makeCell('th', x)));
+      h2.appendChild(htr2);
+      t2.appendChild(h2);
+      const b2 = document.createElement('tbody');
+      checks.forEach((c) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', c.name || c.id || '-'));
+        const sev = makeCell('td', qaStatusText(c.severity));
+        sev.style.fontWeight = '900';
+        sev.style.color = c.severity === 'pass' ? '#136a3d' : (c.severity === 'warn' ? '#8b5f00' : (c.severity === 'fail' ? '#a91a24' : '#334155'));
+        tr.appendChild(sev);
+        tr.appendChild(makeCell('td', String(c.category || '-').replace(/_/g, ' ')));
+        tr.appendChild(makeCell('td', c.metric || '-'));
+        tr.appendChild(makeCell('td', c.threshold || '-'));
+        tr.appendChild(makeCell('td', c.result || c.details || '-'));
+        tr.appendChild(makeCell('td', Number.isFinite(Number(c.affected_pct)) ? `${Number(c.affected_pct).toFixed(1)}%` : '-'));
+        tr.appendChild(makeCell('td', Array.isArray(c.samples) ? c.samples.join(' | ') : '-'));
+        b2.appendChild(tr);
+      });
+      t2.appendChild(b2);
+      detailsOut.appendChild(t2);
+      detailsOut.style.display = '';
     }
 
     function monthAggFromIntroTrend(introTrend, scopeKey) {
@@ -4911,6 +5115,7 @@
         renderAdminSyncStatus();
         renderAdminUsers();
         renderAdminTargets();
+        loadAdminDataQuality(adminQaVersionIdState || viewedVersionIdState || latestVersionIdState, adminQaCompareIdState);
         const diagBtn = document.getElementById('admin-diag-btn');
         if (diagBtn && !diagBtn.dataset.bound) {
           diagBtn.dataset.bound = '1';
@@ -4928,6 +5133,17 @@
             } catch (e) {
               renderDiagnosticsTable([diagRow('Diagnostics runner crashed', false, String(e && (e.message || e) || 'error'))]);
             }
+          });
+        }
+        const qaBtn = document.getElementById('admin-qa-load-btn');
+        if (qaBtn && !qaBtn.dataset.bound) {
+          qaBtn.dataset.bound = '1';
+          qaBtn.addEventListener('click', async () => {
+            const versionSel = document.getElementById('admin-qa-version');
+            const compareSel = document.getElementById('admin-qa-compare');
+            adminQaVersionIdState = versionSel ? String(versionSel.value || '') : adminQaVersionIdState;
+            adminQaCompareIdState = compareSel ? String(compareSel.value || '') : adminQaCompareIdState;
+            await loadAdminDataQuality(adminQaVersionIdState, adminQaCompareIdState);
           });
         }
       } else {
@@ -5064,6 +5280,8 @@
 	      const scPrev = document.getElementById('scorecard-version-prev');
 	      const scFrom = document.getElementById('stageconv-from');
 	      const scTo = document.getElementById('stageconv-to');
+	      const qaVersion = document.getElementById('admin-qa-version');
+	      const qaCompare = document.getElementById('admin-qa-compare');
 	      if (!main || !left || !right || !momentumLeft || !momentumRight) return;
 	      const options = Array.isArray(versionsMetaState) ? versionsMetaState : [];
 	      const fill = (sel) => {
@@ -5085,6 +5303,8 @@
 	      fill(scPrev);
 	      fill(scFrom);
 	      fill(scTo);
+	      fill(qaVersion);
+	      fill(qaCompare);
 	      const selected = viewedVersionIdState || activeVersionIdState || latestVersionIdState || (options[0] && String(options[0].id));
 	      if (selected) main.value = selected;
 	      if (selected) right.value = selected;
@@ -5107,6 +5327,16 @@
 	        const desiredPrev = scorecardComparePrevIdState || choosePreviousVersionId(selected);
 	        if (desiredPrev) scPrev.value = desiredPrev;
 	        scorecardComparePrevIdState = scPrev.value || desiredPrev || scorecardComparePrevIdState;
+	      }
+	      if (qaVersion) {
+	        const desiredQa = adminQaVersionIdState || selected;
+	        if (desiredQa) qaVersion.value = desiredQa;
+	        adminQaVersionIdState = qaVersion.value || desiredQa || adminQaVersionIdState;
+	      }
+	      if (qaCompare) {
+	        const desiredQaPrev = adminQaCompareIdState || choosePreviousVersionId(adminQaVersionIdState || selected);
+	        if (desiredQaPrev) qaCompare.value = desiredQaPrev;
+	        adminQaCompareIdState = qaCompare.value || desiredQaPrev || adminQaCompareIdState;
 	      }
 	      scorecardCompareCurrentIdState = selected;
 	    }
@@ -5135,6 +5365,23 @@
 	      if (out && typeof out === 'object') {
 	        versionDatasetCache.set(id, out);
 	      }
+	      return out;
+	    }
+
+	    async function fetchVersionQa(versionId) {
+	      return supabaseRpc('get_dashboard_version_qa', {
+	        p_username: currentUser.username,
+	        p_password: sessionPassword,
+	        p_version_id: versionId,
+	      });
+	    }
+
+	    async function fetchVersionQaCached(versionId) {
+	      const id = String(versionId || '').trim();
+	      if (!id) return null;
+	      if (versionQaCache.has(id)) return versionQaCache.get(id);
+	      const out = await fetchVersionQa(id);
+	      if (out && typeof out === 'object') versionQaCache.set(id, out);
 	      return out;
 	    }
 
@@ -9166,7 +9413,27 @@
 		            renderStageConversion(data);
 		          });
 		        }
-	        versionSelect.addEventListener('change', async () => {
+		        const adminQaVersionSel = document.getElementById('admin-qa-version');
+		        const adminQaCompareSel = document.getElementById('admin-qa-compare');
+		        if (adminQaVersionSel) {
+		          adminQaVersionSel.addEventListener('change', async () => {
+		            adminQaVersionIdState = String(adminQaVersionSel.value || '');
+		            if (!adminQaVersionIdState) return;
+		            const autoPrev = choosePreviousVersionId(adminQaVersionIdState);
+		            if (adminQaCompareSel && autoPrev) {
+		              adminQaCompareSel.value = autoPrev;
+		              adminQaCompareIdState = autoPrev;
+		            }
+		            await loadAdminDataQuality(adminQaVersionIdState, adminQaCompareIdState);
+		          });
+		        }
+		        if (adminQaCompareSel) {
+		          adminQaCompareSel.addEventListener('change', async () => {
+		            adminQaCompareIdState = String(adminQaCompareSel.value || '');
+		            await loadAdminDataQuality(adminQaVersionIdState, adminQaCompareIdState);
+		          });
+		        }
+		        versionSelect.addEventListener('change', async () => {
 	          const versionId = versionSelect.value;
 	          if (!versionId) return;
 	          try {
@@ -9180,9 +9447,13 @@
             likelihoodState = isHistoricalView
               ? JSON.parse(JSON.stringify(versionLikelihoodState))
               : JSON.parse(JSON.stringify(liveLikelihoodState || {}));
-            rerenderAllViews();
-            if (currentUser && currentUser.role === 'admin') {
-              try {
+	            rerenderAllViews();
+	            if (currentUser && currentUser.role === 'admin') {
+	              adminQaVersionIdState = viewedVersionIdState;
+	              await loadAdminDataQuality(adminQaVersionIdState, adminQaCompareIdState || choosePreviousVersionId(adminQaVersionIdState));
+	            }
+	            if (currentUser && currentUser.role === 'admin') {
+	              try {
                 await supabaseRpc('save_dashboard_state', {
                   p_username: currentUser.username,
                   p_password: sessionPassword,
@@ -9397,7 +9668,8 @@
             if (btn) btn.disabled = true;
             showAdminSyncMessage('Refreshing from Monday.com...');
             const out = await refreshFromMonday(boardRaw, versionName);
-            showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}. Reloading...`);
+            const qaTxt = out && out.qa_status ? ` QA: ${String(out.qa_status).toUpperCase()}${Number.isFinite(Number(out.qa_score)) ? ` (${Number(out.qa_score).toFixed(0)})` : ''}.` : '';
+            showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}.${qaTxt} Reloading...`);
             setTimeout(() => window.location.reload(), 600);
           } catch (e) {
             showAdminSyncMessage(e.message || 'Sync failed.');
