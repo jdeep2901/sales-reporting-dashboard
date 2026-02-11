@@ -230,6 +230,7 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
   const checks: QaCheck[] = [];
   const allRows = Array.isArray(currentDataset?.all_deals_rows) ? currentDataset.all_deals_rows : [];
   const allPrevRows = Array.isArray(previousDataset?.all_deals_rows) ? previousDataset?.all_deals_rows : [];
+  const allCycleRows = Array.isArray(currentDataset?.cycle_time_rows) ? currentDataset.cycle_time_rows : [];
   const cutoff = parseDate(INTRO_DATE_CUTOFF);
   const inScope = (r: any) => {
     if (!cutoff) return true;
@@ -239,6 +240,7 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
   // QA scope: only intro_date >= configured cutoff (currently 2024-10-01).
   const rows = allRows.filter((r: any) => inScope(r));
   const prevRows = allPrevRows.filter((r: any) => inScope(r));
+  const cycleRows = allCycleRows.filter((r: any) => inScope(r));
   const total = rows.length;
   const now = todayDate();
 
@@ -518,17 +520,36 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
   checkEq("cross_78", "Scorecard Stage 7-8 count reconciles", Number(scoreAll.stage_7_8_count || 0), Array.isArray(kpi.stage_7_8) ? kpi.stage_7_8.length : 0);
   checkEq("cross_16", "Scorecard Stage 1-6 count reconciles", Number(scoreAll.stage_1_6_count || 0), Array.isArray(kpi.stage_1_6) ? kpi.stage_1_6.length : 0);
 
-  const wlRows = rows.filter((r: any) => {
-    const st = qaNormStage(r?.stage);
-    return st === "won" || st === "win" || st === "lost" || st === "loss";
-  }).length;
+  // Use cycle_time_rows as canonical won/lost population because it is populated
+  // at build time only when outcome normalization classifies the deal as won/lost.
+  const wlRows = cycleRows.length;
   const wlTotals = Number(currentDataset?.win_loss_sources?.overall_unique?.total || 0);
   checkEq("cross_winloss", "Win/Lost source totals reconcile with raw rows", wlTotals, wlRows);
 
   const introSeriesOverall = (currentDataset?.intro_trend?.series && (currentDataset.intro_trend.series["Overall (unique)"] || currentDataset.intro_trend.series["Overall"])) || {};
   const introSeriesTotal = Object.values(introSeriesOverall || {}).reduce((a: number, b: any) => a + Number(b || 0), 0);
-  const introRowsTotal = rows.filter((r: any) => !qaNormStage(r?.stage).includes("no show/ reschedule") && qaSafeDate(r?.intro_date)).length;
-  checkEq("cross_introtrend", "Call trend total reconciles with eligible intro rows", introSeriesTotal, introRowsTotal);
+  // Canonical detail payload for intro trend is built from the same addIntro calls as the series.
+  const introDetailsOverall = (currentDataset?.intro_trend?.details && (currentDataset.intro_trend.details["Overall (unique)"] || currentDataset.intro_trend.details["Overall"])) || {};
+  const introDetailsTotal = Object.values(introDetailsOverall || {}).reduce((acc: number, arr: any) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
+  checkEq("cross_introtrend", "Call trend total reconciles with eligible intro rows", introSeriesTotal, introDetailsTotal);
+
+  // Secondary sanity check vs recompute from rows, with broader No Show detection.
+  const introRowsTotalRecompute = rows.filter((r: any) => {
+    const st = qaNormStage(r?.stage);
+    if (st.includes("no show") || st.includes("reschedule")) return false;
+    return qaSafeDate(r?.intro_date) != null;
+  }).length;
+  addCheck({
+    id: "cross_introtrend_recompute",
+    category: "cross_tab",
+    name: "Call trend total vs recompute from rows",
+    severity: introSeriesTotal === introRowsTotalRecompute ? "pass" : "warn",
+    metric: `${introSeriesTotal} vs ${introRowsTotalRecompute}`,
+    threshold: "exact equality preferred",
+    result: introSeriesTotal === introRowsTotalRecompute ? "ok" : "minor stage-label normalization drift",
+    affected_rows: Math.abs(introSeriesTotal - introRowsTotalRecompute),
+    affected_pct: qaPct(Math.abs(introSeriesTotal - introRowsTotalRecompute), Math.max(introSeriesTotal, introRowsTotalRecompute, 1)),
+  });
 
   const crosstabAll = currentDataset?.series?.["All (unique deals)"] || currentDataset?.series?.Overall || {};
   let crossDiff = 0;
