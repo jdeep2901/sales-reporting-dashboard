@@ -7112,10 +7112,25 @@
 	      setInsight('insight-scorecard', lines);
 	    }
 
-	    function stageConvCoreStages() {
-	      // Canonical order (matches the app order): Intro -> Qualification -> Capability -> Scoping -> Proposal -> Contracting -> Win -> Loss
-	      return ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','6. Commercial Proposal','5. Contracting','7. Win','8. Loss'];
-	    }
+		    function stageConvCoreStages() {
+		      // Canonical order (matches the app order): Intro -> Qualification -> Capability -> Scoping -> Proposal -> Contracting -> Win -> Loss
+		      return ['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','6. Commercial Proposal','5. Contracting','7. Win','8. Loss'];
+		    }
+
+		    function stageConvGoneStages() {
+		      // Terminal "gone" buckets for conversion: these are not modeled as progression stages.
+		      return ['9. Disqualified', '10. No Show/ Reschedule', '11. Latent Pool - Bi-monthly', '12. Latent Pool - Half yearly revisit', '7. Latent Pool - Monthly'];
+		    }
+
+		    function stageConvIsCore(stageLabel) {
+		      const s = normalizeStage(String(stageLabel || '').trim());
+		      return stageConvCoreStages().some((x) => normalizeStage(x) === s);
+		    }
+
+		    function stageConvIsGoneStage(stageLabel) {
+		      const s = normalizeStage(String(stageLabel || '').trim());
+		      return stageConvGoneStages().some((x) => normalizeStage(x) === s);
+		    }
 
 	    function stageRankForConversion(stageLabel) {
 	      // Use FUNNEL_ORDER first to avoid collisions like "7. Latent Pool" vs "7. Win".
@@ -7163,26 +7178,26 @@
 		      const aAll = buildStageMapForConversion(datasetA, sellerLabel, cutoffMonth);
 		      const bAll = buildStageMapForConversion(datasetB, sellerLabel, cutoffMonth);
 
-		      const stageSetAll = new Set();
-		      aAll.forEach((rec) => stageSetAll.add(normalizeStage(rec.stage)));
-		      bAll.forEach((rec) => stageSetAll.add(normalizeStage(rec.stage)));
-		      const stageOptionsAll = stageConvOrderedStagesFromSets(stageSetAll);
+			      const stageOptionsAll = stageConvCoreStages().map((s) => normalizeStage(s));
 
-		      const filterSet = stageFilterSet && stageFilterSet.size ? new Set(Array.from(stageFilterSet).map((s) => normalizeStage(s))) : null;
-		      const a = new Map();
-		      const b = new Map();
-		      aAll.forEach((rec, key) => {
-		        if (filterSet && !filterSet.has(normalizeStage(rec.stage))) return;
-	        a.set(key, rec);
-	      });
-	      bAll.forEach((rec, key) => {
-	        if (filterSet && !filterSet.has(normalizeStage(rec.stage))) return;
-	        b.set(key, rec);
-	      });
+			      const filterSet = stageFilterSet && stageFilterSet.size ? new Set(Array.from(stageFilterSet).map((s) => normalizeStage(s))) : null;
+			      const a = new Map();
+			      const b = new Map();
+			      aAll.forEach((rec, key) => {
+			        const st = normalizeStage(rec.stage);
+			        if (!stageConvIsCore(st)) return;
+			        if (filterSet && !filterSet.has(st)) return;
+		        a.set(key, rec);
+		      });
+			      bAll.forEach((rec, key) => {
+			        const st = normalizeStage(rec.stage);
+			        // Keep all B stages so we can classify moved-to-gone correctly.
+			        if (!stageConvIsCore(st) && !stageConvIsGoneStage(st)) return;
+		        b.set(key, rec);
+		      });
 
-	      const stageSet = new Set();
-	      a.forEach((rec) => stageSet.add(normalizeStage(rec.stage)));
-	      b.forEach((rec) => stageSet.add(normalizeStage(rec.stage)));
+		      const stageSet = new Set(stageOptionsAll);
+		      a.forEach((rec) => stageSet.add(normalizeStage(rec.stage)));
 		      // If filter is active, make sure we include those stages even if empty.
 		      if (filterSet) filterSet.forEach((s) => stageSet.add(s));
 		      const stages = stageConvOrderedStagesFromSets(stageSet);
@@ -7218,12 +7233,17 @@
 	          drill[stA].gone.push({ a: recA, b: null });
 	          return;
 	        }
-	        const nA = stageRankForConversion(stA);
-	        const stB = normalizeStage(recB.stage);
-	        const nB = stageRankForConversion(stB);
-	        if (nA == null || nB == null) {
-	          sA.gone += 1;
-	          drill[stA].gone.push({ a: recA, b: null });
+		        const nA = stageRankForConversion(stA);
+		        const stB = normalizeStage(recB.stage);
+		        if (stageConvIsGoneStage(stB)) {
+		          sA.gone += 1;
+		          drill[stA].gone.push({ a: recA, b: recB });
+		          return;
+		        }
+		        const nB = stageRankForConversion(stB);
+		        if (nA == null || nB == null) {
+		          sA.gone += 1;
+		          drill[stA].gone.push({ a: recA, b: null });
 	          return;
 	        }
 	        if (nB == nA) {
@@ -7336,7 +7356,8 @@
 		      const method = [
 		        `We compare two snapshots: A = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === fromId))} and B = ${versionLabel((versionsMetaState || []).find((v) => String(v.id) === toId))}.`,
 		        `We match deals by Monday item id when available; otherwise by normalized deal name + intro date.`,
-		        `Scope filters: Seller = ${seller}, Intro cutoff = ${cutoffMonth || '-'}. Stages included are controlled by the stage pills (you can include/exclude Latent Pool / No Show / Disqualified).`,
+		        `Scope filters: Seller = ${seller}, Intro cutoff = ${cutoffMonth || '-'}. Stage rows are 1-8 only.`,
+		        `Outcome mapping: Disqualified / No Show / Latent Pool variants are treated as "Gone" (terminal), not as forward/back progression stages.`,
 		        `Headline conversion metric: Forward(any) % = deals in stage i in A that move to any later stage in B, divided by total deals in stage i in A.`,
 		      ];
 		      setInsight('insight-stageconv', method);
