@@ -228,8 +228,17 @@ function qaRound(v: number, n = 2): number {
 
 function runDataQualityChecks(currentDataset: Record<string, any>, previousDataset: Record<string, any> | null): QaResult {
   const checks: QaCheck[] = [];
-  const rows = Array.isArray(currentDataset?.all_deals_rows) ? currentDataset.all_deals_rows : [];
-  const prevRows = Array.isArray(previousDataset?.all_deals_rows) ? previousDataset?.all_deals_rows : [];
+  const allRows = Array.isArray(currentDataset?.all_deals_rows) ? currentDataset.all_deals_rows : [];
+  const allPrevRows = Array.isArray(previousDataset?.all_deals_rows) ? previousDataset?.all_deals_rows : [];
+  const cutoff = parseDate(INTRO_DATE_CUTOFF);
+  const inScope = (r: any) => {
+    if (!cutoff) return true;
+    const d = qaSafeDate(r?.intro_date);
+    return !!d && d.getTime() >= cutoff.getTime();
+  };
+  // QA scope: only intro_date >= configured cutoff (currently 2024-10-01).
+  const rows = allRows.filter((r: any) => inScope(r));
+  const prevRows = allPrevRows.filter((r: any) => inScope(r));
   const total = rows.length;
   const now = todayDate();
 
@@ -775,13 +784,18 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
       na_count: checks.filter((c) => c.severity === "na").length,
       affected_rows_total: affectedRowsTotal,
       row_count: total,
+      row_count_all: allRows.length,
       compared_previous: !!(previousDataset && prevRows.length),
+      intro_cutoff: INTRO_DATE_CUTOFF,
       category_counts: categoryCounts,
     },
     report: {
       generated_at: new Date().toISOString(),
       row_count: total,
+      row_count_all: allRows.length,
       previous_row_count: prevRows.length,
+      previous_row_count_all: allPrevRows.length,
+      intro_cutoff: INTRO_DATE_CUTOFF,
       checks,
     },
   };
