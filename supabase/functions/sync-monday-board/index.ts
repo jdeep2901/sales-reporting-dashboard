@@ -235,33 +235,40 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
 
   const addCheck = (c: QaCheck) => checks.push(c);
 
-  const fields: Array<{ key: string; required: boolean; label: string; warnBlankPct?: number; failBlankPct?: number }> = [
-    { key: "deal", required: true, label: "Deal", warnBlankPct: 1, failBlankPct: 5 },
-    { key: "stage", required: true, label: "Stage", warnBlankPct: 1, failBlankPct: 5 },
-    { key: "intro_date", required: true, label: "Intro Date", warnBlankPct: 1, failBlankPct: 5 },
-    { key: "seller", required: false, label: "Seller", warnBlankPct: 10, failBlankPct: 35 },
-    { key: "industry", required: false, label: "Industry", warnBlankPct: 15, failBlankPct: 40 },
-    { key: "logo", required: false, label: "Logo", warnBlankPct: 10, failBlankPct: 30 },
-    { key: "function", required: false, label: "Business Function", warnBlankPct: 15, failBlankPct: 40 },
-    { key: "deal_size", required: false, label: "Deal Size", warnBlankPct: 20, failBlankPct: 45 },
-    { key: "start_date", required: false, label: "Start Date", warnBlankPct: 40, failBlankPct: 70 },
-    { key: "duration_months", required: false, label: "Duration (months)", warnBlankPct: 35, failBlankPct: 70 },
-    { key: "source_of_lead", required: false, label: "Source of Lead", warnBlankPct: 20, failBlankPct: 50 },
-    { key: "revenue_source_mapping", required: false, label: "Revenue Source Mapping", warnBlankPct: 20, failBlankPct: 50 },
-    { key: "channel", required: false, label: "Channel", warnBlankPct: 10, failBlankPct: 30 },
-    { key: "matched_sellers", required: false, label: "Matched Sellers", warnBlankPct: 15, failBlankPct: 40 },
+  const fields: Array<{ keys: string[]; required: boolean; label: string; warnBlankPct?: number; failBlankPct?: number }> = [
+    { keys: ["deal", "name"], required: true, label: "Deal", warnBlankPct: 1, failBlankPct: 5 },
+    { keys: ["stage", "deal_stage"], required: true, label: "Stage", warnBlankPct: 1, failBlankPct: 5 },
+    { keys: ["intro_date"], required: true, label: "Intro Date", warnBlankPct: 1, failBlankPct: 5 },
+    { keys: ["seller", "owner", "deal_owner"], required: false, label: "Seller", warnBlankPct: 10, failBlankPct: 35 },
+    { keys: ["industry"], required: false, label: "Industry", warnBlankPct: 15, failBlankPct: 40 },
+    { keys: ["logo"], required: false, label: "Logo", warnBlankPct: 10, failBlankPct: 30 },
+    { keys: ["function", "business_group"], required: false, label: "Business Function", warnBlankPct: 15, failBlankPct: 40 },
+    { keys: ["deal_size"], required: false, label: "Deal Size", warnBlankPct: 20, failBlankPct: 45 },
+    { keys: ["start_date"], required: false, label: "Start Date", warnBlankPct: 40, failBlankPct: 70 },
+    { keys: ["duration_months"], required: false, label: "Duration (months)", warnBlankPct: 35, failBlankPct: 70 },
+    { keys: ["source_of_lead"], required: false, label: "Source of Lead", warnBlankPct: 20, failBlankPct: 50 },
+    { keys: ["revenue_source_mapping"], required: false, label: "Revenue Source Mapping", warnBlankPct: 20, failBlankPct: 50 },
+    { keys: ["channel"], required: false, label: "Channel", warnBlankPct: 10, failBlankPct: 30 },
+    { keys: ["matched_sellers"], required: false, label: "Matched Sellers", warnBlankPct: 15, failBlankPct: 40 },
   ];
 
   for (const f of fields) {
-    const presentCount = rows.filter((r: any) => Object.prototype.hasOwnProperty.call(r || {}, f.key)).length;
+    const getVal = (r: any): any => {
+      for (const k of f.keys) {
+        if (Object.prototype.hasOwnProperty.call(r || {}, k)) return r ? r[k] : null;
+      }
+      return undefined;
+    };
+    const presentCount = rows.filter((r: any) => f.keys.some((k) => Object.prototype.hasOwnProperty.call(r || {}, k))).length;
     const missingFieldRows = total - presentCount;
     const blankRows = rows.filter((r: any) => {
-      const v = r ? r[f.key] : null;
+      const v = getVal(r);
+      if (typeof v === "undefined") return false; // count as missing, not blank
       if (Array.isArray(v)) return v.length === 0;
       return qaBlank(v);
     }).length;
     const distinct = new Set(rows.map((r: any) => {
-      const v = r ? r[f.key] : null;
+      const v = getVal(r);
       if (Array.isArray(v)) return JSON.stringify(v);
       return String(v ?? "");
     })).size;
@@ -274,15 +281,15 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
     else if (f.warnBlankPct != null && blankPct >= f.warnBlankPct) sev = "warn";
 
     addCheck({
-      id: `presence_${f.key}`,
+      id: `presence_${f.keys[0]}`,
       category: "schema_presence",
       name: `${f.label}: presence + blank-rate`,
       severity: sev,
       metric: `blank=${blankRows}/${total}, distinct=${distinct}`,
       threshold: f.required ? "required + non-blank" : `warn>=${f.warnBlankPct}% fail>=${f.failBlankPct}%`,
       result: `present_rows=${presentCount}; blank_pct=${blankPct}%`,
-      affected_rows: blankRows + missingFieldRows,
-      affected_pct: qaPct(blankRows + missingFieldRows, total),
+      affected_rows: Math.min(total, blankRows + missingFieldRows),
+      affected_pct: qaPct(Math.min(total, blankRows + missingFieldRows), total),
     });
   }
 
@@ -464,7 +471,7 @@ function runDataQualityChecks(currentDataset: Record<string, any>, previousDatas
 
   const emptyMatchedWithOwner = rows.filter((r: any) => {
     const ms = Array.isArray(r?.matched_sellers) ? r.matched_sellers : [];
-    const owner = String(r?.seller || "").trim();
+    const owner = String(r?.seller || r?.owner || r?.deal_owner || "").trim();
     return owner && ms.length === 0;
   });
   addCheck({
