@@ -3578,7 +3578,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.63+20260212.1';
+    const APP_VERSION = 'v0.7.64+20260212.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6632,7 +6632,14 @@
 	              const nowStage = currentStageMap.get(scorecardCanonicalKey(r));
                 const fromStage = r.stage || '-';
                 const toStage = nowStage || '-';
-                const marker = movementMarkerEl(stageNumber(toStage), stageNumber(fromStage), false);
+                const toN = stageNumber(toStage);
+                const fromN = stageNumber(fromStage);
+                let marker = movementMarkerEl(toN, fromN, false);
+                if (!marker && toN == null && fromN != null) {
+                  marker = document.createElement('span');
+                  marker.className = 'move-marker move-down';
+                  marker.textContent = '▼';
+                }
                 if (marker) dealTd.appendChild(marker);
 	              dealTd.appendChild(document.createTextNode(r.deal || '-'));
 	              tr.appendChild(dealTd);
