@@ -3578,7 +3578,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.64+20260212.1';
+    const APP_VERSION = 'v0.7.65+20260212.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6514,13 +6514,7 @@
 	        tr.appendChild(makeCell('td', '-'));
 	        body.appendChild(tr);
 	      } else {
-	        const rows = [...records].sort((a, b) => {
-	          const ad = (a.deal || '').toLowerCase();
-	          const bd = (b.deal || '').toLowerCase();
-	          if (ad !== bd) return ad.localeCompare(bd);
-	          return (a.stage || '').localeCompare(b.stage || '');
-	        });
-	        rows.forEach((r) => {
+	        const enrichedRows = [...records].map((r) => {
 	          const currentStageN = stageNumber(r.stage);
 	          const keys = scorecardRecordMatchKeys(r);
 	          let prevStageN = null;
@@ -6533,7 +6527,23 @@
 	            }
 	          }
 	          const isNew = !!prevLookup && prevStageN == null;
-          const prevStageLabel = (prevStageN != null && MATTER_STAGE_ORDER[Number(prevStageN) - 1]) ? MATTER_STAGE_ORDER[Number(prevStageN) - 1] : (isNew ? '-' : '-');
+	          let movementRank = 0; // unchanged
+	          if (isNew) movementRank = 3;
+	          else if (currentStageN != null && prevStageN != null) {
+	            if (currentStageN > prevStageN) movementRank = 1; // moved up
+	            else if (currentStageN < prevStageN) movementRank = 2; // moved down
+	          }
+	          return { r, currentStageN, prevStageN, isNew, movementRank };
+	        });
+	        const rows = enrichedRows.sort((a, b) => {
+	          if (a.movementRank !== b.movementRank) return a.movementRank - b.movementRank;
+	          const ad = (a.r.deal || '').toLowerCase();
+	          const bd = (b.r.deal || '').toLowerCase();
+	          if (ad !== bd) return ad.localeCompare(bd);
+	          return (a.r.stage || '').localeCompare(b.r.stage || '');
+	        });
+	        rows.forEach(({ r, currentStageN, prevStageN, isNew }) => {
+	          const prevStageLabel = (prevStageN != null && MATTER_STAGE_ORDER[Number(prevStageN) - 1]) ? MATTER_STAGE_ORDER[Number(prevStageN) - 1] : (isNew ? '-' : '-');
 	          const tr = document.createElement('tr');
 	          const dealTd = document.createElement('td');
 	          const marker = movementMarkerEl(currentStageN, prevStageN, isNew);
