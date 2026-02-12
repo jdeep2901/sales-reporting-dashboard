@@ -3578,7 +3578,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.0.1';
+    const APP_VERSION = 'v1.0.2';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -6611,7 +6611,6 @@
 		          // We instead compute removed as: prev bucket (matching by canonical key) minus current bucket.
 		          const prevRowsAll = Array.isArray(records) ? [] : [];
 		          void prevRowsAll;
-		          const currSet = new Set((records || []).map(scorecardCanonicalKey));
 		          // Default to stage_1_6 bucket; adjust based on the title.
 		          let prevBucket = (prevDetails && prevDetails.stage_1_6) ? prevDetails.stage_1_6 : [];
 		          const t = String(title || '').toLowerCase();
@@ -6621,21 +6620,17 @@
 		          else if (t.includes('won/lost')) prevBucket = (prevDetails.stage_7_8 || []);
 		          else if (t.includes('stage 1-6')) prevBucket = (prevDetails.stage_1_6 || []);
 
-	          const removed = [];
-	          const prevMap = new Map();
-	          prevBucket.forEach((r) => {
+		          const prevMap = new Map();
+		          prevBucket.forEach((r) => {
 		            const k = scorecardCanonicalKey(r);
 	            if (!prevMap.has(k)) prevMap.set(k, r);
 	          });
-	          prevMap.forEach((r, k) => {
-	            if (!currSet.has(k)) removed.push(r);
-	          });
-
-	          const movedDownOnly = removed.filter((r) => {
+	          const movedDownOnly = [];
+	          prevMap.forEach((r) => {
 	            const nowStage = currentStageMap.get(scorecardCanonicalKey(r));
 	            const fromN = stageNumber(r.stage || '-');
 	            const toN = stageNumber(nowStage || '-');
-	            return fromN != null && toN != null && toN < fromN;
+	            if (fromN != null && toN != null && toN < fromN) movedDownOnly.push(r);
 	          });
 
 	          if (movedDownOnly.length) {
