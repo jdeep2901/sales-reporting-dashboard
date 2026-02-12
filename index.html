@@ -3499,7 +3499,8 @@
 	          <thead>
 	            <tr>
 	              <th>Deal</th>
-	              <th>Stage</th>
+	              <th>From</th>
+	              <th>To</th>
 	              <th>Intro Month</th>
 	              <th>Start Date</th>
 	              <th>Age (days)</th>
@@ -3577,7 +3578,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.60+20260210.4';
+    const APP_VERSION = 'v0.7.61+20260211.2';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4616,15 +4617,34 @@
       const filterRows = (arr) => arr.filter((rec) => passStage(rec) && passHelp(rec));
       const filteredThis = filterRows(thisDeals);
       const filteredNext = filterRows(nextDeals);
+      const closureDealKeys = new Set([
+        ...thisDeals.map((rec) => dealHelpKey(rec)),
+        ...nextDeals.map((rec) => dealHelpKey(rec)),
+      ]);
+      const otherHelpMap = new Map();
+      deals.forEach((rec) => {
+        if (!passCutoff(rec.intro_date)) return;
+        if (!matchedSeller(rec)) return;
+        if (isLatentPool(rec)) return;
+        if (!isHelpNeeded(rec)) return;
+        const dkey = dealHelpKey(rec);
+        if (closureDealKeys.has(dkey)) return;
+        if (!otherHelpMap.has(dkey)) otherHelpMap.set(dkey, rec);
+      });
+      const otherHelpDeals = Array.from(otherHelpMap.values());
+      const filteredOtherHelp = filterRows(otherHelpDeals);
       const filteredThisRev = filteredThis.reduce((acc, rec) => acc + dealSizeValue(bestDealSize(rec)), 0);
       const filteredNextRev = filteredNext.reduce((acc, rec) => acc + dealSizeValue(bestDealSize(rec)), 0);
+      const filteredOtherHelpRev = filteredOtherHelp.reduce((acc, rec) => acc + dealSizeValue(bestDealSize(rec)), 0);
 
       const tThis = getQuarterTarget(seller, activeQuarterLabels.current);
       const tNext = getQuarterTarget(seller, activeQuarterLabels.next);
       refs.thisQuarterMeta.textContent = `${money.format(filteredThis.length)} deals | ${fmtDealSize(filteredThisRev)} (T ${fmtDealSize(tThis.revenue)} | ${pctText(filteredThisRev, tThis.revenue)})`;
       refs.nextQuarterMeta.textContent = `${money.format(filteredNext.length)} deals | ${fmtDealSize(filteredNextRev)} (T ${fmtDealSize(tNext.revenue)} | ${pctText(filteredNextRev, tNext.revenue)})`;
+      refs.otherHelpMeta.textContent = `${money.format(filteredOtherHelp.length)} deals | ${fmtDealSize(filteredOtherHelpRev)}`;
       renderLikelihoodDealLines(refs.thisQuarterLines, filteredThis, { alertDealSet: helpSet });
       renderLikelihoodDealLines(refs.nextQuarterLines, filteredNext, { alertDealSet: helpSet });
+      renderLikelihoodDealLines(refs.otherHelpLines, filteredOtherHelp, { alertDealSet: helpSet });
     }
 
     function loadAuthStore() {
@@ -6486,12 +6506,13 @@
 	        const tr = document.createElement('tr');
 	        tr.appendChild(makeCell('td', 'No deals found'));
 	        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        tr.appendChild(makeCell('td', '-'));
-        body.appendChild(tr);
+	        tr.appendChild(makeCell('td', '-'));
+	        tr.appendChild(makeCell('td', '-'));
+	        tr.appendChild(makeCell('td', '-'));
+	        tr.appendChild(makeCell('td', '-'));
+	        tr.appendChild(makeCell('td', '-'));
+	        tr.appendChild(makeCell('td', '-'));
+	        body.appendChild(tr);
 	      } else {
 	        const rows = [...records].sort((a, b) => {
 	          const ad = (a.deal || '').toLowerCase();
@@ -6512,12 +6533,14 @@
 	            }
 	          }
 	          const isNew = !!prevLookup && prevStageN == null;
+          const prevStageLabel = (prevStageN != null && MATTER_STAGE_ORDER[Number(prevStageN) - 1]) ? MATTER_STAGE_ORDER[Number(prevStageN) - 1] : (isNew ? '-' : '-');
 	          const tr = document.createElement('tr');
 	          const dealTd = document.createElement('td');
 	          const marker = movementMarkerEl(currentStageN, prevStageN, isNew);
 	          if (marker) dealTd.appendChild(marker);
 	          dealTd.appendChild(document.createTextNode(r.deal || '-'));
 	          tr.appendChild(dealTd);
+          tr.appendChild(makeCell('td', prevStageLabel));
           tr.appendChild(makeCell('td', r.stage || '-'));
           tr.appendChild(makeCell('td', r.created_month || '-'));
           tr.appendChild(makeCell('td', r.start_date || '-'));
@@ -6597,7 +6620,7 @@
 	          if (removed.length) {
 	            const sep = document.createElement('tr');
 	            const td = document.createElement('td');
-	            td.colSpan = 7; // Deal, Stage, Intro Month, Start Date, Age, Deal Size, Help Needed
+	            td.colSpan = 8; // Deal, From, To, Intro Month, Start Date, Age, Deal Size, Help Needed
 	            td.className = 'popup-section';
 	            td.textContent = `Removed since previous: ${money.format(removed.length)}`;
 	            sep.appendChild(td);
@@ -6616,7 +6639,8 @@
 	              dealTd.appendChild(document.createTextNode(r.deal || '-'));
 	              tr.appendChild(dealTd);
 	              const nowStage = currentStageMap.get(scorecardCanonicalKey(r));
-	              tr.appendChild(makeCell('td', nowStage || r.stage || '-'));
+	              tr.appendChild(makeCell('td', r.stage || '-'));
+	              tr.appendChild(makeCell('td', nowStage || '-'));
 	              tr.appendChild(makeCell('td', r.created_month || '-'));
 	              tr.appendChild(makeCell('td', r.start_date || '-'));
 	              tr.appendChild(makeCell('td', r.age_days == null ? '-' : money.format(r.age_days)));
@@ -6957,11 +6981,16 @@
         likelihoodGrid.appendChild(thisCard.shell);
         likelihoodGrid.appendChild(nextCard.shell);
         card.appendChild(likelihoodGrid);
+        const otherHelpCard = makeLikelihoodCard('Other Help Needed (Outside Current/Next Closures)');
+        otherHelpCard.shell.style.marginTop = '10px';
+        card.appendChild(otherHelpCard.shell);
         scorecardSummaryEls[seller] = {
           thisQuarterMeta: thisCard.meta,
           nextQuarterMeta: nextCard.meta,
+          otherHelpMeta: otherHelpCard.meta,
           thisQuarterLines: thisCard.lines,
           nextQuarterLines: nextCard.lines,
+          otherHelpLines: otherHelpCard.lines,
           closureStagePillsEl: stagePills,
           closureHelpPillsEl: helpPills,
         };
