@@ -3578,7 +3578,7 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v0.7.62+20260211.2';
+    const APP_VERSION = 'v0.7.63+20260212.1';
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -4125,7 +4125,7 @@
     function getTargetSellers() {
       const labels = (scorecardSellerLabels || []).filter((s) => String(s || '').trim());
       const out = labels.filter((s) => s !== 'Overall');
-      const base = out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor'];
+      const base = out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor', 'Sahana'];
       return ['Overall', ...base];
     }
 

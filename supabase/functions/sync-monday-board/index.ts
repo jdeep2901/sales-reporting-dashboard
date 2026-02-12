@@ -45,6 +45,7 @@ const SELLERS: Array<[string, string]> = [
   ["abhinav kishore", "Abhinav Kishore"],
   ["maruti peri", "Maruti Peri"],
   ["vitor quirino", "Vitor Quirino"],
+  ["sahana", "Sahana"],
 ];
 
 type MondayColumn = { id: string; title: string; type: string; settings_str?: string | null };
