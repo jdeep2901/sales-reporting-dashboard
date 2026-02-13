@@ -3720,9 +3720,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.0';
+    const APP_VERSION = 'v1.1.1';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.0', date: '2026-02-12', commit: '-', changes: 'Added About tab with persistent context document and version history subtab.' },
+      { version: 'v1.1.1', date: '2026-02-12', commit: '-', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
+      { version: 'v1.1.0', date: '2026-02-12', commit: '4303814', changes: 'Added About tab with persistent context document and version history subtab.' },
       { version: 'v1.0.3', date: '2026-02-12', commit: '8378f21', changes: 'Aligned weekly scorecard ticker counts with popup movement breakdown.' },
       { version: 'v1.0.2', date: '2026-02-12', commit: '0a77d93', changes: 'Fixed backward movement detection for within-bucket stage regressions.' },
       { version: 'v1.0.1', date: '2026-02-12', commit: '8b0f21a', changes: 'Showed up-moves in destination rows and down-moves in origin section.' },
@@ -3733,6 +3734,28 @@
       { version: 'v0.7.62+20260211.2', date: '2026-02-11', commit: 'e683b9c', changes: 'Fixed popup marker derivation using From->To in removed rows.' },
       { version: 'v0.7.61+20260211.2', date: '2026-02-11', commit: '2587fe3', changes: 'Added popup From/To stage columns and other help-needed table.' },
       { version: 'v0.7.60', date: '2026-02-11', commit: 'aa50b74', changes: 'Rollback baseline used to stabilize stage conversion and scorecard behavior.' },
+      { version: 'pre-v0.7.60', date: '2026-02-10', commit: '52061be', changes: "Stage conversion: treated disqualified/no-show/latent as 'gone'." },
+      { version: 'pre-v0.7.60', date: '2026-02-10', commit: '0902651', changes: 'Added versioned data quality framework with sync-time QA checks.' },
+      { version: 'pre-v0.7.60', date: '2026-02-10', commit: '1b3571a', changes: 'Added stage conversion tab for version-to-version progression.' },
+      { version: 'pre-v0.7.60', date: '2026-02-10', commit: '93a6346', changes: 'Fixed help-needed toggle persistence behavior.' },
+      { version: 'pre-v0.7.60', date: '2026-02-09', commit: 'f42b394', changes: 'Canonicalized stage order (proposal before contracting) across app.' },
+      { version: 'pre-v0.7.60', date: '2026-02-09', commit: 'd2a2f9d', changes: 'Added Revenue Forecast (Actuals) tab.' },
+      { version: 'pre-v0.7.60', date: '2026-02-09', commit: '441b298', changes: 'Weekly scorecard: help alert icon and closure table behavior changes.' },
+      { version: 'pre-v0.7.60', date: '2026-02-09', commit: '0ce7e4e', changes: 'Cycle time tab: intro slider and historical retention.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: 'f30e0a8', changes: 'Won/lost normalization and intro sliders for industry/winloss.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: '3c94175', changes: 'Logo names resolved via Accounts relation text.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: '3c70a3f', changes: 'Closure table layout fixes + logo/industry join improvements.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: 'cf43d57', changes: 'Added version naming + revenue-only targets and stage funnel update.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: '0ea2d51', changes: 'Topbar/profile refactor; removed shared refresh action.' },
+      { version: 'pre-v0.7.60', date: '2026-02-08', commit: '3442b73', changes: 'Branding rollout: MathCo logo and app naming.' },
+      { version: 'pre-v0.7.60', date: '2026-02-07', commit: 'b418a61', changes: 'Moved non-core tabs under Appendix for cleaner main navigation.' },
+      { version: 'pre-v0.7.60', date: '2026-02-07', commit: '23c708b', changes: 'Forecast logic: Proposal/Contracting allocated by start date + duration.' },
+      { version: 'pre-v0.7.60', date: '2026-02-07', commit: 'a00407c', changes: 'Added cycle time analysis tab and summaries.' },
+      { version: 'pre-v0.7.60', date: '2026-02-06', commit: '3cd171a', changes: 'Added Monday board sync via Supabase edge function from Admin.' },
+      { version: 'pre-v0.7.60', date: '2026-02-06', commit: '17f2d32', changes: 'Migrated shared state to Supabase RPC with auth model.' },
+      { version: 'pre-v0.7.60', date: '2026-02-06', commit: '416e9e1', changes: 'Added single-seller scorecard and shared state sync.' },
+      { version: 'pre-v0.7.60', date: '2026-02-06', commit: '9893dcb', changes: 'Introduced login gate and admin user management.' },
+      { version: 'pre-v0.7.60', date: '2026-02-06', commit: '78ea260', changes: 'Initial dashboard foundation.' },
     ];
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
@@ -6450,9 +6473,15 @@
       const el = document.getElementById('about-context-content');
       if (!el || aboutContextLoaded) return;
       try {
-        const resp = await fetch('HANDOVER_CONTEXT.md', { cache: 'no-store' });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const txt = await resp.text();
+        let txt = '';
+        let resp = await fetch('HANDOVER_CONTEXT.md', { cache: 'no-store' });
+        if (resp.ok) {
+          txt = await resp.text();
+        } else {
+          resp = await fetch('https://raw.githubusercontent.com/jdeep2901/sales-reporting-dashboard/main/HANDOVER_CONTEXT.md', { cache: 'no-store' });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          txt = await resp.text();
+        }
         el.textContent = txt || 'No context content found.';
       } catch (err) {
         el.textContent = `Unable to load HANDOVER_CONTEXT.md (${err && err.message ? err.message : 'unknown error'}).`;
