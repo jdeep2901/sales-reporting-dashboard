@@ -82,6 +82,108 @@
       display: block;
     }
 
+    .about-wrap {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .about-subtabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .about-subtab {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: #264069;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+
+    .about-subtab.active {
+      background: #0b5fff;
+      border-color: #0b5fff;
+      color: #fff;
+    }
+
+    .about-panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .about-panel-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f7faff;
+      font-size: 13px;
+      font-weight: 700;
+      color: #1f2c45;
+    }
+
+    .about-panel-body {
+      padding: 12px;
+    }
+
+    .about-doc {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #21334e;
+      font-size: 12px;
+      line-height: 1.45;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+      max-height: 64vh;
+      overflow: auto;
+    }
+
+    .about-history-wrap {
+      max-height: 64vh;
+      overflow: auto;
+    }
+
+    .about-history-table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .about-history-table th, .about-history-table td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+    }
+
+    .about-history-table th:first-child, .about-history-table td:first-child {
+      position: static;
+      left: auto;
+      min-width: auto;
+      max-width: none;
+      overflow: visible;
+      text-overflow: clip;
+      background: inherit;
+    }
+
+    .about-history-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f1f6ff;
+      color: #1f2c45;
+      font-weight: 700;
+    }
+
     .head {
       padding: 16px 18px;
       border-bottom: 1px solid var(--line);
@@ -2529,6 +2631,7 @@
 	        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
 	        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
 	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
+	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
 	      </div>
@@ -3169,6 +3272,45 @@
 	        </div>
 	      </div>
 
+      <div id="view-about" class="view">
+        <div class="head">
+          <div>
+            <h1>About</h1>
+            <div class="sub">Persistent context for this product and release-by-release change history.</div>
+          </div>
+        </div>
+        <div class="about-wrap">
+          <div class="about-subtabs">
+            <button id="about-sub-context" class="about-subtab active" type="button">Context Document</button>
+            <button id="about-sub-history" class="about-subtab" type="button">Version History</button>
+          </div>
+          <div id="about-panel-context" class="about-panel">
+            <div class="about-panel-head">Persistent Context</div>
+            <div class="about-panel-body">
+              <pre id="about-context-content" class="about-doc">Loading HANDOVER_CONTEXT.md ...</pre>
+            </div>
+          </div>
+          <div id="about-panel-history" class="about-panel" style="display:none;">
+            <div class="about-panel-head">Version History</div>
+            <div class="about-panel-body">
+              <div class="about-history-wrap">
+                <table class="about-history-table">
+                  <thead>
+                    <tr>
+                      <th>App Version</th>
+                      <th>Date</th>
+                      <th>Commit</th>
+                      <th>What Changed</th>
+                    </tr>
+                  </thead>
+                  <tbody id="about-history-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="view-assumptions" class="view">
         <div class="head">
           <div>
@@ -3578,7 +3720,20 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.0.3';
+    const APP_VERSION = 'v1.1.0';
+    const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.0', date: '2026-02-12', commit: '-', changes: 'Added About tab with persistent context document and version history subtab.' },
+      { version: 'v1.0.3', date: '2026-02-12', commit: '8378f21', changes: 'Aligned weekly scorecard ticker counts with popup movement breakdown.' },
+      { version: 'v1.0.2', date: '2026-02-12', commit: '0a77d93', changes: 'Fixed backward movement detection for within-bucket stage regressions.' },
+      { version: 'v1.0.1', date: '2026-02-12', commit: '8b0f21a', changes: 'Showed up-moves in destination rows and down-moves in origin section.' },
+      { version: 'v1', date: '2026-02-12', commit: '440b2b4', changes: 'Promoted release label to v1 baseline.' },
+      { version: 'v0.7.65+20260212.1', date: '2026-02-12', commit: '72da62d', changes: 'Sorted scorecard popup rows by movement state before name.' },
+      { version: 'v0.7.64+20260212.1', date: '2026-02-12', commit: 'b209f22', changes: 'Restored removed-row movement arrow when current stage is missing.' },
+      { version: 'v0.7.63+20260212.1', date: '2026-02-12', commit: 'f01ec91', changes: 'Added Sahana seller to frontend filters and sync owner mapping.' },
+      { version: 'v0.7.62+20260211.2', date: '2026-02-11', commit: 'e683b9c', changes: 'Fixed popup marker derivation using From->To in removed rows.' },
+      { version: 'v0.7.61+20260211.2', date: '2026-02-11', commit: '2587fe3', changes: 'Added popup From/To stage columns and other help-needed table.' },
+      { version: 'v0.7.60', date: '2026-02-11', commit: 'aa50b74', changes: 'Rollback baseline used to stabilize stage conversion and scorecard behavior.' },
+    ];
     // Deal-level help flag. (We keep legacy likelihood constants around for
     // backwards compatibility when reading previously stored state.)
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
@@ -3668,6 +3823,7 @@
 
     const versionDatasetCache = new Map(); // versionId -> { dataset, likelihood, created_at, created_by }
     const versionQaCache = new Map(); // versionId -> { version_id, qa_status, qa_score, qa_summary, qa_report, qa_run_at }
+    let aboutContextLoaded = false;
     let cycleRowsState = [];
     let cycleScopeState = 'Overall';
     let cycleIntroMonthsState = [];
@@ -6173,6 +6329,7 @@
 	      const tabCross = document.getElementById('tab-crosstab');
 	      const tabFunnel = document.getElementById('tab-funnel');
 	      const tabScore = document.getElementById('tab-scorecard');
+	      const tabAbout = document.getElementById('tab-about');
 	      const tabIndustry = document.getElementById('tab-industry');
 	      const tabWinLoss = document.getElementById('tab-winloss');
 	      const tabStageConv = document.getElementById('tab-stageconv');
@@ -6188,6 +6345,7 @@
 		      const viewCross = document.getElementById('view-crosstab');
 		      const viewFunnel = document.getElementById('view-funnel');
 		      const viewScore = document.getElementById('view-scorecard');
+		      const viewAbout = document.getElementById('view-about');
 		      const viewIndustry = document.getElementById('view-industry');
 		      const viewWinLoss = document.getElementById('view-winloss');
 		      const viewStageConv = document.getElementById('view-stageconv');
@@ -6214,6 +6372,7 @@
 		        tabCross.classList.toggle('active', name === 'crosstab');
 		        tabFunnel.classList.toggle('active', name === 'funnel');
 		        tabScore.classList.toggle('active', name === 'scorecard');
+		        tabAbout.classList.toggle('active', name === 'about');
 		        tabIndustry.classList.toggle('active', name === 'industry');
 		        tabWinLoss.classList.toggle('active', name === 'winloss');
 		        tabStageConv.classList.toggle('active', name === 'stageconv');
@@ -6228,6 +6387,7 @@
 		        viewCross.classList.toggle('active', name === 'crosstab');
 		        viewFunnel.classList.toggle('active', name === 'funnel');
 		        viewScore.classList.toggle('active', name === 'scorecard');
+		        viewAbout.classList.toggle('active', name === 'about');
 		        viewIndustry.classList.toggle('active', name === 'industry');
 		        viewWinLoss.classList.toggle('active', name === 'winloss');
 		        viewStageConv.classList.toggle('active', name === 'stageconv');
@@ -6241,11 +6401,12 @@
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals') {
+	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'about') {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
 	        }
+	        if (name === 'about') renderAboutTab();
 	      }
 
       activateTab = activate;
@@ -6253,6 +6414,7 @@
 	      tabCross.addEventListener('click', () => activate('crosstab'));
 	      tabFunnel.addEventListener('click', () => activate('funnel'));
 	      tabScore.addEventListener('click', () => activate('scorecard'));
+	      tabAbout.addEventListener('click', () => activate('about'));
 	      tabIndustry.addEventListener('click', () => activate('industry'));
 		      tabWinLoss.addEventListener('click', () => activate('winloss'));
 		      tabStageConv.addEventListener('click', () => activate('stageconv'));
@@ -6268,6 +6430,58 @@
 
       // Initialize appendix row hidden unless we start on an appendix view.
       setAppendixOpen(false);
+    }
+
+    function renderAboutHistory() {
+      const body = document.getElementById('about-history-body');
+      if (!body) return;
+      body.innerHTML = '';
+      VERSION_HISTORY_ITEMS.forEach((item) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', item.version || '-'));
+        tr.appendChild(makeCell('td', item.date || '-'));
+        tr.appendChild(makeCell('td', item.commit || '-'));
+        tr.appendChild(makeCell('td', item.changes || '-'));
+        body.appendChild(tr);
+      });
+    }
+
+    async function renderAboutContext() {
+      const el = document.getElementById('about-context-content');
+      if (!el || aboutContextLoaded) return;
+      try {
+        const resp = await fetch('HANDOVER_CONTEXT.md', { cache: 'no-store' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const txt = await resp.text();
+        el.textContent = txt || 'No context content found.';
+      } catch (err) {
+        el.textContent = `Unable to load HANDOVER_CONTEXT.md (${err && err.message ? err.message : 'unknown error'}).`;
+      }
+      aboutContextLoaded = true;
+    }
+
+    function renderAboutTab() {
+      const btnContext = document.getElementById('about-sub-context');
+      const btnHistory = document.getElementById('about-sub-history');
+      const panelContext = document.getElementById('about-panel-context');
+      const panelHistory = document.getElementById('about-panel-history');
+      if (!btnContext || !btnHistory || !panelContext || !panelHistory) return;
+      const activateSub = (name) => {
+        const isContext = name === 'context';
+        btnContext.classList.toggle('active', isContext);
+        btnHistory.classList.toggle('active', !isContext);
+        panelContext.style.display = isContext ? '' : 'none';
+        panelHistory.style.display = isContext ? 'none' : '';
+      };
+      if (!btnContext.dataset.bound) {
+        btnContext.addEventListener('click', () => activateSub('context'));
+        btnHistory.addEventListener('click', () => activateSub('history'));
+        btnContext.dataset.bound = '1';
+        btnHistory.dataset.bound = '1';
+      }
+      renderAboutHistory();
+      renderAboutContext();
+      activateSub('context');
     }
 
     function pct(x) {
