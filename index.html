@@ -2983,6 +2983,13 @@
                 <option value="month">Month</option>
               </select>
             </div>
+            <div class="funnel-time" style="min-width:260px;">
+              <div class="funnel-time-head">
+                <label for="intro-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="intro-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="intro-time-slider" type="range" min="0" max="0" value="0" />
+            </div>
             <div class="stats" id="intro-stats"></div>
           </div>
           <div class="chart-card">
@@ -3731,9 +3738,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.3';
+    const APP_VERSION = 'v1.1.4';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.3', date: '2026-02-12', commit: '-', changes: 'Restyled Call Trends chart to match requested classic look (compact labels, muted bars, square geometry, tighter layout).' },
+      { version: 'v1.1.4', date: '2026-02-12', commit: '-', changes: 'Restored Intro Date cutoff slider on Call Trends and wired chart filtering by cutoff month.' },
+      { version: 'v1.1.3', date: '2026-02-12', commit: '52df167', changes: 'Restyled Call Trends chart to match requested classic look (compact labels, muted bars, square geometry, tighter layout).' },
       { version: 'v1.1.2', date: '2026-02-12', commit: '4872736', changes: 'Refined Call Trends chart spacing and typography for cleaner labels/legend proximity.' },
       { version: 'v1.1.1', date: '2026-02-12', commit: 'c3dbd79', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
       { version: 'v1.1.0', date: '2026-02-12', commit: '4303814', changes: 'Added About tab with persistent context document and version history subtab.' },
@@ -3869,6 +3877,8 @@
     let industryIntroCutoffMonthState = null;
     let wlIntroMonthsState = [];
     let wlIntroCutoffMonthState = null;
+    let introTrendIntroMonthsState = [];
+    let introTrendIntroCutoffMonthState = null;
     let cycleTableState = {
       sortKey: 'days',
       sortDir: 'desc',
@@ -8248,16 +8258,28 @@
 
     function renderIntroTrend(data, scope, granularity) {
       const { labels, points, target, targetLabel } = buildIntroSeries(data, scope, granularity);
-      const detailSeries = buildIntroDetailSeries(data, scope, granularity);
-      const total = points.reduce((a, b) => a + b, 0);
-      const peak = points.length ? Math.max(...points) : 0;
-      const peakIdx = points.indexOf(peak);
-      const peakLabel = peakIdx >= 0 ? labels[peakIdx] : '-';
-      const avg = points.length ? total / points.length : 0;
+      const detailSeriesRaw = buildIntroDetailSeries(data, scope, granularity);
+      const cutoffMonth = introTrendIntroCutoffMonthState || null;
+      const keepIdx = [];
+      for (let i = 0; i < labels.length; i += 1) {
+        const monthKey = granularity === 'month'
+          ? String(labels[i] || '').slice(0, 7)
+          : String(labels[i] || '').slice(0, 7);
+        if (!cutoffMonth || !monthKey || monthKey >= cutoffMonth) keepIdx.push(i);
+      }
+      const labelsF = keepIdx.map((i) => labels[i]);
+      const pointsF = keepIdx.map((i) => Number(points[i] || 0));
+      const detailSeries = {};
+      labelsF.forEach((k) => { detailSeries[k] = detailSeriesRaw[k] || []; });
+      const total = pointsF.reduce((a, b) => a + b, 0);
+      const peak = pointsF.length ? Math.max(...pointsF) : 0;
+      const peakIdx = pointsF.indexOf(peak);
+      const peakLabel = peakIdx >= 0 ? labelsF[peakIdx] : '-';
+      const avg = pointsF.length ? total / pointsF.length : 0;
 
       const stats = document.getElementById('intro-stats');
       stats.innerHTML = '';
-      stats.appendChild(makeCell('div', `${granularity === 'month' ? 'Months' : 'Weeks'}: ${money.format(labels.length)}`, 'chip'));
+      stats.appendChild(makeCell('div', `${granularity === 'month' ? 'Months' : 'Weeks'}: ${money.format(labelsF.length)}`, 'chip'));
       stats.appendChild(makeCell('div', `Intro calls: ${money.format(total)}`, 'chip'));
       stats.appendChild(makeCell('div', `${granularity === 'month' ? 'Monthly' : 'Weekly'} avg: ${avg.toFixed(1)}`, 'chip'));
       stats.appendChild(makeCell('div', `Peak: ${money.format(peak)} (${peakLabel})`, 'chip'));
@@ -8271,7 +8293,7 @@
       const roughMax = Math.max(peak, target, 1);
       const yStep = roughMax <= 10 ? 2 : roughMax <= 30 ? 5 : roughMax <= 60 ? 10 : Math.ceil((roughMax / 6) / 5) * 5;
       const yMax = Math.max(yStep, Math.ceil(roughMax / yStep) * yStep);
-      const xStep = labels.length > 0 ? pw / labels.length : 0;
+      const xStep = labelsF.length > 0 ? pw / labelsF.length : 0;
       const barW = Math.max(6, Math.min(34, xStep * 0.72));
 
       const plotBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -8346,8 +8368,8 @@
       targetTxt.textContent = targetLabel;
       svg.appendChild(targetTxt);
 
-      if (labels.length) {
-        points.forEach((v, i) => {
+      if (labelsF.length) {
+        pointsF.forEach((v, i) => {
           const x = L + (i * xStep) + ((xStep - barW) / 2);
           const h = ph * (v / yMax);
           const y = T + (ph - h);
@@ -8365,11 +8387,11 @@
           const dPart = String(weekStart.getDate()).padStart(2, '0');
           const currentWeekLabel = `${yPart}-${mPart}-${dPart}`;
           const currentMonthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-          const isCurrent = (granularity === 'week' && labels[i] === currentWeekLabel) || (granularity === 'month' && labels[i] === currentMonthLabel);
+          const isCurrent = (granularity === 'week' && labelsF[i] === currentWeekLabel) || (granularity === 'month' && labelsF[i] === currentMonthLabel);
           bar.setAttribute('class', isCurrent ? 'chart-bar chart-bar-current' : 'chart-bar');
           bar.addEventListener('mouseenter', (evt) => {
             tooltip.style.display = 'block';
-            tooltip.innerHTML = `<strong>${labels[i]}</strong><br/>Intro calls: ${money.format(v)}`;
+            tooltip.innerHTML = `<strong>${labelsF[i]}</strong><br/>Intro calls: ${money.format(v)}`;
             const mx = evt.clientX + 12;
             const my = evt.clientY - 10;
             tooltip.style.left = `${mx}px`;
@@ -8383,8 +8405,8 @@
             tooltip.style.display = 'none';
           });
           bar.addEventListener('click', () => {
-            const recs = detailSeries[labels[i]] || [];
-            renderIntroDetailTable(`${scope} | ${granularity === 'month' ? 'Month' : 'Week'} ${labels[i]}`, recs);
+            const recs = detailSeries[labelsF[i]] || [];
+            renderIntroDetailTable(`${scope} | ${granularity === 'month' ? 'Month' : 'Week'} ${labelsF[i]}`, recs);
           });
           svg.appendChild(bar);
 
@@ -8400,11 +8422,11 @@
           }
         });
 
-          const maxXTicks = granularity === 'month' ? 12 : 14;
-        const tickEvery = Math.max(1, Math.ceil(labels.length / maxXTicks));
+        const maxXTicks = granularity === 'month' ? 12 : 14;
+        const tickEvery = Math.max(1, Math.ceil(labelsF.length / maxXTicks));
         const tickIdxs = [];
-        for (let i = 0; i < labels.length; i += tickEvery) tickIdxs.push(i);
-        if (tickIdxs[tickIdxs.length - 1] !== labels.length - 1) tickIdxs.push(labels.length - 1);
+        for (let i = 0; i < labelsF.length; i += tickEvery) tickIdxs.push(i);
+        if (tickIdxs.length && tickIdxs[tickIdxs.length - 1] !== labelsF.length - 1) tickIdxs.push(labelsF.length - 1);
         const rotate = false;
         const labelFormatter = (raw) => {
           if (granularity === 'month') {
@@ -8422,7 +8444,7 @@
           txt.setAttribute('y', String(H - 10));
           txt.setAttribute('text-anchor', rotate ? 'end' : 'middle');
           txt.setAttribute('class', 'chart-label');
-          txt.textContent = labelFormatter(labels[i]);
+          txt.textContent = labelFormatter(labelsF[i]);
           svg.appendChild(txt);
         });
       }
@@ -8446,10 +8468,10 @@
       svg.appendChild(yTitle);
 
       const lines = [
-        `${scope}: ${money.format(total)} intro calls across ${money.format(labels.length)} ${granularity}(s).`,
+        `${scope}: ${money.format(total)} intro calls across ${money.format(labelsF.length)} ${granularity}(s).`,
         `Peak ${granularity}: ${peakLabel} with ${money.format(peak)} intro call(s).`,
         `Average ${granularity} intro calls: ${avg.toFixed(1)} (target ${target} per ${granularity}).`,
-        `Intro trend window: Intro Date >= 2024-10-01.`
+        `Intro trend window: Intro Date >= ${(cutoffMonth || '2024-10')}-01.`
       ];
       setInsight('insight-introtrend', lines);
       renderIntroDetailTable('Intro Deals', []);
@@ -9514,6 +9536,7 @@
 	        wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        scorecardIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        stageConvIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        introTrendIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        initMonthSlider(
 	          document.getElementById('industry-time-slider'),
 	          document.getElementById('industry-time-value'),
@@ -9545,6 +9568,14 @@
 	          () => stageConvIntroCutoffMonthState,
 	          (v) => { stageConvIntroCutoffMonthState = v; },
 	          () => renderStageConversion(data),
+	        );
+	        initMonthSlider(
+	          document.getElementById('intro-time-slider'),
+	          document.getElementById('intro-time-value'),
+	          introTrendIntroMonthsState,
+	          () => introTrendIntroCutoffMonthState,
+	          (v) => { introTrendIntroCutoffMonthState = v; },
+	          () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value),
 	        );
 
 		        function rerenderAllViews() {
