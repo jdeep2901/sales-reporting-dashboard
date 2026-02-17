@@ -937,26 +937,26 @@
     }
 
     .chart-card {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border: 1px solid #cfd4dc;
+      border-radius: 4px;
+      background: #eceff4;
       overflow: hidden;
-      padding: 8px 10px 6px;
+      padding: 8px 10px 4px;
     }
 
     .chart-svg {
       width: 100%;
-      height: 330px;
+      height: 300px;
       display: block;
     }
 
     .chart-axis {
-      stroke: #b7c6e3;
-      stroke-width: 1;
+      stroke: #3c3f45;
+      stroke-width: 1.2;
     }
 
     .chart-grid {
-      stroke: #e3ebfb;
+      stroke: #c8cdd6;
       stroke-width: 1;
     }
 
@@ -971,38 +971,38 @@
     }
 
     .chart-bar {
-      fill: #6f96ff;
+      fill: #9cb1c9;
       cursor: pointer;
       transition: fill 120ms ease, opacity 120ms ease;
-      opacity: 0.92;
+      opacity: 1;
     }
 
     .chart-bar:hover {
-      fill: #0b5fff;
+      fill: #5f88b8;
       opacity: 1;
     }
 
     .chart-bar-current {
-      fill: #ff8a3d;
+      fill: #1e66c4;
     }
 
     .chart-bar-current:hover {
-      fill: #ff6f1a;
+      fill: #1855a4;
     }
 
     .chart-label {
-      fill: #2b446e;
-      font-size: 11.5px;
-      font-weight: 600;
-      letter-spacing: 0.1px;
-      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      fill: #1f2430;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0;
+      font-family: "Arial", "Helvetica Neue", sans-serif;
     }
 
     .chart-value-label {
-      fill: #1f3d72;
-      font-size: 11px;
-      font-weight: 800;
-      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      fill: #1f2430;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: "Arial", "Helvetica Neue", sans-serif;
     }
 
     .chart-target {
@@ -1013,9 +1013,17 @@
 
     .chart-target-label {
       fill: #a02f2f;
-      font-size: 12px;
-      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
-      font-weight: 800;
+      font-size: 10px;
+      font-family: "Arial", "Helvetica Neue", sans-serif;
+      font-weight: 700;
+    }
+
+    .chart-source {
+      margin-top: 2px;
+      color: #2f3338;
+      font-size: 10px;
+      font-family: "Arial", "Helvetica Neue", sans-serif;
+      padding-left: 2px;
     }
 
     .chart-tooltip {
@@ -2979,6 +2987,7 @@
           </div>
           <div class="chart-card">
             <svg id="intro-chart" class="chart-svg" viewBox="0 0 1000 360" preserveAspectRatio="none"></svg>
+            <div class="chart-source">Data from Monday.com</div>
           </div>
           <div class="intro-detail">
             <div class="intro-detail-head">
@@ -3722,9 +3731,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.2';
+    const APP_VERSION = 'v1.1.3';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.2', date: '2026-02-12', commit: '-', changes: 'Refined Call Trends chart spacing and typography for cleaner labels/legend proximity.' },
+      { version: 'v1.1.3', date: '2026-02-12', commit: '-', changes: 'Restyled Call Trends chart to match requested classic look (compact labels, muted bars, square geometry, tighter layout).' },
+      { version: 'v1.1.2', date: '2026-02-12', commit: '4872736', changes: 'Refined Call Trends chart spacing and typography for cleaner labels/legend proximity.' },
       { version: 'v1.1.1', date: '2026-02-12', commit: 'c3dbd79', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
       { version: 'v1.1.0', date: '2026-02-12', commit: '4303814', changes: 'Added About tab with persistent context document and version history subtab.' },
       { version: 'v1.0.3', date: '2026-02-12', commit: '8378f21', changes: 'Aligned weekly scorecard ticker counts with popup movement breakdown.' },
@@ -8255,7 +8265,7 @@
       const svg = document.getElementById('intro-chart');
       svg.innerHTML = '';
       const tooltip = document.getElementById('chart-tooltip');
-      const W = 1000, H = 360, L = 68, R = 22, T = 16, B = 58;
+      const W = 1000, H = 360, L = 58, R = 16, T = 10, B = 38;
       const pw = W - L - R;
       const ph = H - T - B;
       const roughMax = Math.max(peak, target, 1);
@@ -8269,8 +8279,8 @@
       plotBg.setAttribute('y', String(T));
       plotBg.setAttribute('width', String(pw));
       plotBg.setAttribute('height', String(ph));
-      plotBg.setAttribute('fill', '#fcfdff');
-      plotBg.setAttribute('rx', '8');
+      plotBg.setAttribute('fill', '#eceff4');
+      plotBg.setAttribute('rx', '0');
       svg.appendChild(plotBg);
 
       const axisX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -8312,7 +8322,7 @@
 
         const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         lbl.setAttribute('x', String(L - 8));
-        lbl.setAttribute('y', String(y + 4));
+        lbl.setAttribute('y', String(y + 3));
         lbl.setAttribute('text-anchor', 'end');
         lbl.setAttribute('class', 'chart-label');
         lbl.textContent = String(tv);
@@ -8329,8 +8339,8 @@
       svg.appendChild(targetLine);
 
       const targetTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      targetTxt.setAttribute('x', String(W - R - 6));
-      targetTxt.setAttribute('y', String(Math.max(T + 12, targetY - 5)));
+      targetTxt.setAttribute('x', String(W - R - 8));
+      targetTxt.setAttribute('y', String(Math.max(T + 10, targetY - 4)));
       targetTxt.setAttribute('text-anchor', 'end');
       targetTxt.setAttribute('class', 'chart-target-label');
       targetTxt.textContent = targetLabel;
@@ -8346,7 +8356,7 @@
           bar.setAttribute('y', String(y));
           bar.setAttribute('width', String(barW));
           bar.setAttribute('height', String(Math.max(1, h)));
-          bar.setAttribute('rx', '2');
+          bar.setAttribute('rx', '0');
           const now = new Date();
           const weekStart = new Date(now);
           weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -8390,12 +8400,12 @@
           }
         });
 
-        const maxXTicks = granularity === 'month' ? 10 : 12;
+          const maxXTicks = granularity === 'month' ? 12 : 14;
         const tickEvery = Math.max(1, Math.ceil(labels.length / maxXTicks));
         const tickIdxs = [];
         for (let i = 0; i < labels.length; i += tickEvery) tickIdxs.push(i);
         if (tickIdxs[tickIdxs.length - 1] !== labels.length - 1) tickIdxs.push(labels.length - 1);
-        const rotate = labels.length > maxXTicks || xStep < 42;
+        const rotate = false;
         const labelFormatter = (raw) => {
           if (granularity === 'month') {
             const d = new Date(`${raw}-01T00:00:00`);
@@ -8409,9 +8419,8 @@
           const x = L + (i * xStep) + (xStep / 2);
           const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           txt.setAttribute('x', String(x));
-          txt.setAttribute('y', String(H - (rotate ? 16 : 12)));
+          txt.setAttribute('y', String(H - 10));
           txt.setAttribute('text-anchor', rotate ? 'end' : 'middle');
-          if (rotate) txt.setAttribute('transform', `rotate(-24 ${x} ${H - 16})`);
           txt.setAttribute('class', 'chart-label');
           txt.textContent = labelFormatter(labels[i]);
           svg.appendChild(txt);
