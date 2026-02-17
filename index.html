@@ -941,12 +941,12 @@
       border-radius: 10px;
       background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
       overflow: hidden;
-      padding: 10px;
+      padding: 8px 10px 6px;
     }
 
     .chart-svg {
       width: 100%;
-      height: 360px;
+      height: 330px;
       display: block;
     }
 
@@ -991,16 +991,18 @@
     }
 
     .chart-label {
-      fill: #3a5685;
-      font-size: 10.5px;
-      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      fill: #2b446e;
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.1px;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
     }
 
     .chart-value-label {
-      fill: #274777;
-      font-size: 10px;
-      font-weight: 700;
-      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      fill: #1f3d72;
+      font-size: 11px;
+      font-weight: 800;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
     }
 
     .chart-target {
@@ -1011,9 +1013,9 @@
 
     .chart-target-label {
       fill: #a02f2f;
-      font-size: 11px;
-      font-family: "Avenir Next", "Segoe UI", sans-serif;
-      font-weight: 700;
+      font-size: 12px;
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+      font-weight: 800;
     }
 
     .chart-tooltip {
@@ -3720,9 +3722,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.1';
+    const APP_VERSION = 'v1.1.2';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.1', date: '2026-02-12', commit: '-', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
+      { version: 'v1.1.2', date: '2026-02-12', commit: '-', changes: 'Refined Call Trends chart spacing and typography for cleaner labels/legend proximity.' },
+      { version: 'v1.1.1', date: '2026-02-12', commit: 'c3dbd79', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
       { version: 'v1.1.0', date: '2026-02-12', commit: '4303814', changes: 'Added About tab with persistent context document and version history subtab.' },
       { version: 'v1.0.3', date: '2026-02-12', commit: '8378f21', changes: 'Aligned weekly scorecard ticker counts with popup movement breakdown.' },
       { version: 'v1.0.2', date: '2026-02-12', commit: '0a77d93', changes: 'Fixed backward movement detection for within-bucket stage regressions.' },
@@ -8252,7 +8255,7 @@
       const svg = document.getElementById('intro-chart');
       svg.innerHTML = '';
       const tooltip = document.getElementById('chart-tooltip');
-      const W = 1000, H = 360, L = 68, R = 26, T = 18, B = 78;
+      const W = 1000, H = 360, L = 68, R = 22, T = 16, B = 58;
       const pw = W - L - R;
       const ph = H - T - B;
       const roughMax = Math.max(peak, target, 1);
@@ -8326,8 +8329,8 @@
       svg.appendChild(targetLine);
 
       const targetTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      targetTxt.setAttribute('x', String(W - R - 4));
-      targetTxt.setAttribute('y', String(Math.max(T + 10, targetY - 4)));
+      targetTxt.setAttribute('x', String(W - R - 6));
+      targetTxt.setAttribute('y', String(Math.max(T + 12, targetY - 5)));
       targetTxt.setAttribute('text-anchor', 'end');
       targetTxt.setAttribute('class', 'chart-target-label');
       targetTxt.textContent = targetLabel;
@@ -8406,9 +8409,9 @@
           const x = L + (i * xStep) + (xStep / 2);
           const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           txt.setAttribute('x', String(x));
-          txt.setAttribute('y', String(H - (rotate ? 22 : 16)));
+          txt.setAttribute('y', String(H - (rotate ? 16 : 12)));
           txt.setAttribute('text-anchor', rotate ? 'end' : 'middle');
-          if (rotate) txt.setAttribute('transform', `rotate(-28 ${x} ${H - 22})`);
+          if (rotate) txt.setAttribute('transform', `rotate(-24 ${x} ${H - 16})`);
           txt.setAttribute('class', 'chart-label');
           txt.textContent = labelFormatter(labels[i]);
           svg.appendChild(txt);
@@ -8418,7 +8421,7 @@
       // Axis titles
       const xTitle = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       xTitle.setAttribute('x', String(L + (pw / 2)));
-      xTitle.setAttribute('y', String(H - 6));
+      xTitle.setAttribute('y', String(H - 2));
       xTitle.setAttribute('text-anchor', 'middle');
       xTitle.setAttribute('class', 'chart-label');
       xTitle.textContent = granularity === 'month' ? 'Month' : 'Week';
