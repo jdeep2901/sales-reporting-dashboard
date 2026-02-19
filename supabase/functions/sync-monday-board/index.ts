@@ -1837,6 +1837,7 @@ async function buildDataset(
     const introDate = parseDate(introDateRaw);
     const startDate = parseDate(startDateRaw);
     const startDateIso = startDate ? startDate.toISOString().slice(0, 10) : null;
+    const ageDays = introDate ? Math.floor((todayDate().getTime() - introDate.getTime()) / 86400000) : null;
     if (durationMonths != null) durationDetectedCount += 1;
     const month = introDate ? monthLabel(introDate) : null;
     const stageLabel = outcome === "won"
@@ -1938,6 +1939,7 @@ async function buildDataset(
       intro_date: introDate ? introDate.toISOString().slice(0, 10) : null,
       created_month: month,
       start_date: startDateIso,
+      age_days: ageDays,
       duration_months: durationMonths,
       deal_size: dealSize,
       industry,
@@ -1956,6 +1958,7 @@ async function buildDataset(
         intro_date: introDate ? introDate.toISOString().slice(0, 10) : null,
         created_month: month,
         start_date: startDateIso,
+        age_days: ageDays,
         duration_months: durationMonths,
         deal_size: dealSize,
         industry,

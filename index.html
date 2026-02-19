@@ -3738,8 +3738,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.5';
+    const APP_VERSION = 'v1.1.6';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.6', date: '2026-02-12', commit: '-', changes: 'Fixed Age (days) in popup tables via snapshot-aware fallback (as_of_date - intro_date) and backend age field propagation.' },
       { version: 'v1.1.5', date: '2026-02-12', commit: '-', changes: 'Counted moves into gone stages (latent/no-show/disqualified) as downward and surfaced them in scorecard popup tables.' },
       { version: 'v1.1.4', date: '2026-02-12', commit: '19da531', changes: 'Restored Intro Date cutoff slider on Call Trends and wired chart filtering by cutoff month.' },
       { version: 'v1.1.3', date: '2026-02-12', commit: '52df167', changes: 'Restyled Call Trends chart to match requested classic look (compact labels, muted bars, square geometry, tighter layout).' },
@@ -5181,7 +5182,8 @@
       // Scorecard KPI bucket integrity.
       const scopes = ['Overall', ...sellers];
       scopes.forEach((scope) => {
-        const details = buildScorecardKpiDetailsFromRows(rows, scope, cutoffMonth);
+        const asOf = (((data || {}).scorecard_summary || {}).as_of_date) || null;
+        const details = buildScorecardKpiDetailsFromRows(rows, scope, cutoffMonth, asOf);
         const wl = details.stage_7_8 || [];
         const latent = wl.filter((r) => String(r.stage || '').toLowerCase().includes('latent pool'));
         out.push(diagRow(`Scorecard Won/Lost excludes latent pool [${scope}]`, latent.length === 0, `latent_in_7_8=${latent.length}`));
@@ -6595,7 +6597,14 @@
 	      return owner.includes(String(sellerLabel || '').toLowerCase());
 	    }
 
-	    function buildScorecardKpiDetailsFromRows(rows, sellerLabel, cutoffMonth) {
+    function scorecardAgeDaysFromIntro(introDateRaw, asOfDateRaw) {
+      const intro = parseDate(introDateRaw);
+      if (!intro) return null;
+      const asOf = parseDate(asOfDateRaw) || todayDate();
+      return Math.floor((asOf.getTime() - intro.getTime()) / 86400000);
+    }
+
+	    function buildScorecardKpiDetailsFromRows(rows, sellerLabel, cutoffMonth, asOfDateRaw) {
 	      const out = {
 	        stage_1_2: [],
 	        stage_3_4: [],
@@ -6621,6 +6630,9 @@
 	        const n = stageNumber(stageNorm);
 	        if (n == null || n < 1 || n > 8) return;
 	        const rec = { ...r, stage: stageNorm };
+          if (rec.age_days == null || rec.age_days === '') {
+            rec.age_days = scorecardAgeDaysFromIntro(rec.intro_date, asOfDateRaw);
+          }
 	        if (n >= 1 && n <= 6) push('16', out.stage_1_6, rec);
 	        if (n === 1 || n === 2) push('12', out.stage_1_2, rec);
 	        if (n === 3 || n === 4) push('34', out.stage_3_4, rec);
@@ -6678,7 +6690,8 @@
 	      // and we want to pick the closest match to current stage.
 	      const lookup = new Map();
 	      if (!prevDataset || !Array.isArray(prevDataset.all_deals_rows)) return lookup;
-	      const details = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth);
+	      const prevAsOf = (((prevDataset || {}).scorecard_summary || {}).as_of_date) || null;
+	      const details = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth, prevAsOf);
 	      const rows = [...(details.stage_1_6 || []), ...(details.stage_7_8 || [])];
 	      rows.forEach((r) => {
 	        const stageNorm = normalizeStage(String(r.stage || '').trim() || String(r.deal_stage || '').trim());
@@ -6896,8 +6909,9 @@
 	        try {
 		          const cachedPrev = versionDatasetCache.get(String(prevId));
 		          const prevDataset = cachedPrev && cachedPrev.dataset ? cachedPrev.dataset : null;
+		          const prevAsOf = (((prevDataset || {}).scorecard_summary || {}).as_of_date) || null;
 		          const prevDetails = prevDataset && Array.isArray(prevDataset.all_deals_rows)
-		            ? buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth)
+		            ? buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth, prevAsOf)
 		            : {};
 		          // Extract the detailKey from the title suffix (we pass label text); safest is to infer by which records list was used.
 		          // We instead compute removed as: prev bucket (matching by canonical key) minus current bucket.
@@ -7044,7 +7058,7 @@
 	      }
 
 	      renderEntries.forEach(({ label: seller, metric: m }) => {
-	        const detailsRaw = buildScorecardKpiDetailsFromRows(baseRows, seller, cutoffMonth);
+	        const detailsRaw = buildScorecardKpiDetailsFromRows(baseRows, seller, cutoffMonth, score.as_of_date);
 	        const d12 = detailsRaw.stage_1_2 || [];
 	        const d34 = detailsRaw.stage_3_4 || [];
 	        const d16 = detailsRaw.stage_1_6 || [];
@@ -7058,7 +7072,8 @@
 	        let prevDetailsComputed = null;
 	        if (prevDataset && Array.isArray(prevDataset.all_deals_rows)) {
 	          hasPrev = true;
-	          prevDetailsComputed = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, seller, cutoffMonth);
+	          const prevAsOf = (((prevDataset || {}).scorecard_summary || {}).as_of_date) || null;
+	          prevDetailsComputed = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, seller, cutoffMonth, prevAsOf);
 	          const pd12 = prevDetailsComputed.stage_1_2 || [];
 	          const pd34 = prevDetailsComputed.stage_3_4 || [];
 	          const pd16 = prevDetailsComputed.stage_1_6 || [];
@@ -7454,7 +7469,8 @@
 
         // Optional: small change context if compare-to is loaded.
         if (prevDataset && Array.isArray(prevDataset.all_deals_rows)) {
-          const prevDetails = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth);
+          const prevAsOf = (((prevDataset || {}).scorecard_summary || {}).as_of_date) || null;
+          const prevDetails = buildScorecardKpiDetailsFromRows(prevDataset.all_deals_rows, sellerLabel, cutoffMonth, prevAsOf);
           const pd16 = prevDetails.stage_1_6 || [];
           const currSet = new Set(d16.map(scorecardCanonicalKey));
           const prevSet = new Set(pd16.map(scorecardCanonicalKey));
