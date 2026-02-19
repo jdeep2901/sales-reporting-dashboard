@@ -3738,8 +3738,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.7';
+    const APP_VERSION = 'v1.1.8';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.8', date: '2026-02-12', commit: '-', changes: 'Fixed Weekly Scorecard render crash by removing undefined todayDate() call in age fallback.' },
       { version: 'v1.1.7', date: '2026-02-12', commit: '-', changes: 'Fixed runtime error by using parseIsoLocalDate for popup age fallback parsing.' },
       { version: 'v1.1.6', date: '2026-02-12', commit: '-', changes: 'Fixed Age (days) in popup tables via snapshot-aware fallback (as_of_date - intro_date) and backend age field propagation.' },
       { version: 'v1.1.5', date: '2026-02-12', commit: '-', changes: 'Counted moves into gone stages (latent/no-show/disqualified) as downward and surfaced them in scorecard popup tables.' },
@@ -6601,7 +6602,9 @@
     function scorecardAgeDaysFromIntro(introDateRaw, asOfDateRaw) {
       const intro = parseIsoLocalDate(introDateRaw);
       if (!intro) return null;
-      const asOf = parseIsoLocalDate(asOfDateRaw) || todayDate();
+      const parsedAsOf = parseIsoLocalDate(asOfDateRaw);
+      const now = new Date();
+      const asOf = parsedAsOf || new Date(now.getFullYear(), now.getMonth(), now.getDate());
       return Math.floor((asOf.getTime() - intro.getTime()) / 86400000);
     }
 
