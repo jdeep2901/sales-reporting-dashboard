@@ -3738,9 +3738,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.4';
+    const APP_VERSION = 'v1.1.5';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.4', date: '2026-02-12', commit: '-', changes: 'Restored Intro Date cutoff slider on Call Trends and wired chart filtering by cutoff month.' },
+      { version: 'v1.1.5', date: '2026-02-12', commit: '-', changes: 'Counted moves into gone stages (latent/no-show/disqualified) as downward and surfaced them in scorecard popup tables.' },
+      { version: 'v1.1.4', date: '2026-02-12', commit: '19da531', changes: 'Restored Intro Date cutoff slider on Call Trends and wired chart filtering by cutoff month.' },
       { version: 'v1.1.3', date: '2026-02-12', commit: '52df167', changes: 'Restyled Call Trends chart to match requested classic look (compact labels, muted bars, square geometry, tighter layout).' },
       { version: 'v1.1.2', date: '2026-02-12', commit: '4872736', changes: 'Refined Call Trends chart spacing and typography for cleaner labels/legend proximity.' },
       { version: 'v1.1.1', date: '2026-02-12', commit: 'c3dbd79', changes: 'Fixed About context loading with GitHub raw fallback and expanded full version history coverage.' },
@@ -6629,10 +6630,10 @@
 	      return out;
 	    }
 
-	    function buildScorecardStageMapFromRows(rows, sellerLabel, cutoffMonth) {
-	      // canonicalKey -> stage label (best-effort, first occurrence wins)
-	      const map = new Map();
-	      (Array.isArray(rows) ? rows : []).forEach((r) => {
+    function buildScorecardStageMapFromRows(rows, sellerLabel, cutoffMonth) {
+      // canonicalKey -> stage label (best-effort, first occurrence wins)
+      const map = new Map();
+      (Array.isArray(rows) ? rows : []).forEach((r) => {
 	        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
 	        if (!scorecardInSellerScope(r, sellerLabel)) return;
 	        const stageNorm = normalizeStage(String(r.stage || '').trim() || String(r.deal_stage || '').trim());
@@ -6642,9 +6643,34 @@
 	        const rec = { ...r, stage: stageNorm };
 	        const k = scorecardCanonicalKey(rec);
 	        if (!map.has(k)) map.set(k, stageNorm || '-');
-	      });
-	      return map;
-	    }
+      });
+      return map;
+    }
+
+    function buildScorecardRawStageMapFromRows(rows, sellerLabel, cutoffMonth) {
+      // canonicalKey -> normalized current stage label, including non-core/gone stages
+      const map = new Map();
+      (Array.isArray(rows) ? rows : []).forEach((r) => {
+        if (!passIntroCutoffMonth(r.intro_date, cutoffMonth)) return;
+        if (!scorecardInSellerScope(r, sellerLabel)) return;
+        const stageNorm = normalizeStage(String(r.stage || '').trim() || String(r.deal_stage || '').trim());
+        if (!stageNorm) return;
+        const rec = { ...r, stage: stageNorm };
+        const k = scorecardCanonicalKey(rec);
+        if (!map.has(k)) map.set(k, stageNorm);
+      });
+      return map;
+    }
+
+    function isGoneStageLabel(stageLabel) {
+      const s = String(stageLabel || '').toLowerCase();
+      return (
+        s.includes('latent pool') ||
+        s.includes('disqualified') ||
+        s.includes('no show') ||
+        s.includes('reschedule')
+      );
+    }
 
 	    function buildPrevStageLookupForScorecard(prevDataset, sellerLabel, cutoffMonth) {
 	      // key -> Set(stageNumber). We keep all candidates because the same deal
@@ -6766,7 +6792,7 @@
 	      }
 
 		      const currentRows = (window.__salesData && Array.isArray(window.__salesData.all_deals_rows)) ? window.__salesData.all_deals_rows : [];
-		      const currentStageMap = buildScorecardStageMapFromRows(currentRows, sellerLabel, cutoffMonth);
+		      const currentStageMap = buildScorecardRawStageMapFromRows(currentRows, sellerLabel, cutoffMonth);
 
 	      if (!records.length) {
 	        const tr = document.createElement('tr');
@@ -6896,7 +6922,10 @@
 	            const nowStage = currentStageMap.get(scorecardCanonicalKey(r));
 	            const fromN = stageNumber(r.stage || '-');
 	            const toN = stageNumber(nowStage || '-');
-	            if (fromN != null && toN != null && toN < fromN) movedDownOnly.push(r);
+	            if (fromN == null) return;
+	            const movedDownNumeric = toN != null && toN < fromN;
+	            const movedToGone = !!nowStage && isGoneStageLabel(nowStage);
+	            if (movedDownNumeric || movedToGone) movedDownOnly.push(r);
 	          });
 
 	          if (movedDownOnly.length) {
@@ -7080,7 +7109,7 @@
 	        const kpis = document.createElement('div');
 	        kpis.className = 'score-kpis';
 	        const details = filteredMetric.kpi_details || {};
-	        const currentStageMapAll = buildScorecardStageMapFromRows(baseRows, seller, cutoffMonth);
+	        const currentStageMapAll = buildScorecardRawStageMapFromRows(baseRows, seller, cutoffMonth);
 	        const prevLookupAll = (prevDataset && Array.isArray(prevDataset.all_deals_rows))
 	          ? buildPrevStageLookupForScorecard(prevDataset, seller, cutoffMonth)
 	          : null;
@@ -7118,7 +7147,10 @@
 	            const toStage = currentStageMapAll.get(k);
 	            const fromN = stageNumber(r.stage || '-');
 	            const toN = stageNumber(toStage || '-');
-	            if (fromN != null && toN != null && toN < fromN) down += 1;
+	            if (fromN == null) return;
+	            const movedDownNumeric = toN != null && toN < fromN;
+	            const movedToGone = !!toStage && isGoneStageLabel(toStage);
+	            if (movedDownNumeric || movedToGone) down += 1;
 	          });
 	          return { up, down };
 	        };
