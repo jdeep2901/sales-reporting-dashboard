@@ -1513,7 +1513,7 @@
 
     .closure-review-grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, minmax(280px, 1fr));
       gap: 10px;
       align-items: start;
     }
@@ -1548,15 +1548,14 @@
     }
 
     .closure-review-table-wrap {
-      overflow: visible;
-      max-height: none;
+      overflow: auto;
+      max-height: 420px;
     }
 
     .closure-review-table {
       width: 100%;
-      min-width: 0;
+      min-width: 960px;
       border-collapse: collapse;
-      table-layout: fixed;
       font-size: 12px;
       color: #1e345a;
     }
@@ -1566,12 +1565,13 @@
       padding: 7px 8px;
       border-bottom: 1px solid #e8eef8;
       vertical-align: top;
-      white-space: normal;
-      word-break: break-word;
-      overflow-wrap: anywhere;
+      white-space: nowrap;
     }
 
     .closure-review-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       background: #f3f7ff;
       color: #274777;
       font-size: 10px;
@@ -1583,13 +1583,13 @@
     .closure-review-table th:nth-child(1) {
       white-space: normal;
       line-height: 1.35;
-      width: 22%;
+      min-width: 210px;
       font-weight: 700;
     }
 
     .closure-review-edit {
       width: 100%;
-      min-width: 0;
+      min-width: 104px;
       padding: 5px 6px;
       border: 1px solid #cfdbf4;
       border-radius: 7px;
@@ -1642,8 +1642,8 @@
     }
 
     @media (max-width: 1220px) {
-      .closure-review-summary-grid {
-        grid-template-columns: repeat(2, minmax(180px, 1fr));
+      .closure-review-grid {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -3914,9 +3914,8 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.10';
+    const APP_VERSION = 'v1.1.9';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v1.1.10', date: '2026-02-12', commit: '-', changes: 'Closure Review usability fix: stacked quarter tables (one below another) and removed inner table scroll behavior.' },
       { version: 'v1.1.9', date: '2026-02-12', commit: '-', changes: 'Added Closure Review tab with admin-curated quarter/amount/start-date/status overrides for Q0/Q1/Q2.' },
       { version: 'v1.1.8', date: '2026-02-12', commit: '-', changes: 'Fixed Weekly Scorecard render crash by removing undefined todayDate() call in age fallback.' },
       { version: 'v1.1.7', date: '2026-02-12', commit: '-', changes: 'Fixed runtime error by using parseIsoLocalDate for popup age fallback parsing.' },
