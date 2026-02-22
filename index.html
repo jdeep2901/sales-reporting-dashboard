@@ -1511,6 +1511,142 @@
       white-space: normal;
     }
 
+    .closure-review-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(280px, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+
+    .closure-review-card {
+      border: 1px solid #e2eaf9;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .closure-review-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e7edf7;
+      background: #f8fbff;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .closure-review-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #1f3f75;
+    }
+
+    .closure-review-meta {
+      font-size: 11px;
+      color: #34507d;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .closure-review-table-wrap {
+      overflow: auto;
+      max-height: 420px;
+    }
+
+    .closure-review-table {
+      width: 100%;
+      min-width: 960px;
+      border-collapse: collapse;
+      font-size: 12px;
+      color: #1e345a;
+    }
+
+    .closure-review-table th,
+    .closure-review-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #e8eef8;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+
+    .closure-review-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f3f7ff;
+      color: #274777;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+    }
+
+    .closure-review-table td:nth-child(1),
+    .closure-review-table th:nth-child(1) {
+      white-space: normal;
+      line-height: 1.35;
+      min-width: 210px;
+      font-weight: 700;
+    }
+
+    .closure-review-edit {
+      width: 100%;
+      min-width: 104px;
+      padding: 5px 6px;
+      border: 1px solid #cfdbf4;
+      border-radius: 7px;
+      color: #1f355b;
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .closure-review-edit[disabled] {
+      opacity: 0.7;
+      background: #f5f7fb;
+      cursor: not-allowed;
+    }
+
+    .closure-review-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 10px;
+      width: 100%;
+    }
+
+    .closure-review-summary-box {
+      border: 1px solid #e2eaf9;
+      background: #f8fbff;
+      border-radius: 9px;
+      padding: 10px 12px;
+    }
+
+    .closure-review-summary-box .k {
+      font-size: 11px;
+      color: #51698f;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      font-weight: 700;
+    }
+
+    .closure-review-summary-box .v {
+      margin-top: 4px;
+      font-size: 20px;
+      font-weight: 900;
+      color: #1f3f75;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .closure-review-summary-box .s {
+      margin-top: 3px;
+      font-size: 12px;
+      color: #334a71;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 1220px) {
+      .closure-review-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .alert-ico {
       display: inline-block;
       min-width: 18px;
@@ -2638,6 +2774,7 @@
       </div>
 	      <div class="tabs tabs-main">
 	        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly Scorecard</button>
+	        <button id="tab-closure-review" class="tab-btn" type="button">Closure Review</button>
 	        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
 	        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
 	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
@@ -2776,6 +2913,45 @@
           <ul id="insight-scorecard" class="insight-list"></ul>
         </div>
         <div id="score-wrap" class="score-wrap"></div>
+      </div>
+
+      <div id="view-closure-review" class="view">
+        <div class="head">
+          <div>
+            <h1>Closure Review</h1>
+            <div class="sub">Weekly close-call curation for current, +1, +2 fiscal quarters. Overrides are used only in this screen.</div>
+          </div>
+          <div class="controls">
+            <div>
+              <label for="closure-review-seller">Seller View</label>
+              <select id="closure-review-seller"></select>
+            </div>
+            <div class="funnel-time" style="min-width:260px;">
+              <div class="funnel-time-head">
+                <label for="closure-review-time-slider" style="margin:0;">Intro Cutoff</label>
+                <div id="closure-review-time-value" class="funnel-time-value">-</div>
+              </div>
+              <input id="closure-review-time-slider" type="range" min="0" max="0" value="0" />
+            </div>
+            <div class="stats" id="closure-review-mode" style="min-width:220px;"></div>
+          </div>
+        </div>
+        <div class="closure-filters" style="margin-top:10px;">
+          <div class="pill-picker">
+            <div class="label">Status</div>
+            <div id="closure-review-status-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+          <div class="pill-picker">
+            <div class="label">Quarter</div>
+            <div id="closure-review-quarter-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+          <div class="pill-picker">
+            <button id="closure-review-save-now" type="button" class="pill-btn">Save now</button>
+            <div id="closure-review-save-msg" class="detail-meta"></div>
+          </div>
+        </div>
+        <div id="closure-review-summary" class="insight" style="margin-top:10px;"></div>
+        <div id="closure-review-wrap" class="score-wrap" style="margin-top:10px;"></div>
       </div>
 
       <div id="view-industry" class="view">
@@ -3738,8 +3914,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.8';
+    const APP_VERSION = 'v1.1.9';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.9', date: '2026-02-12', commit: '-', changes: 'Added Closure Review tab with admin-curated quarter/amount/start-date/status overrides for Q0/Q1/Q2.' },
       { version: 'v1.1.8', date: '2026-02-12', commit: '-', changes: 'Fixed Weekly Scorecard render crash by removing undefined todayDate() call in age fallback.' },
       { version: 'v1.1.7', date: '2026-02-12', commit: '-', changes: 'Fixed runtime error by using parseIsoLocalDate for popup age fallback parsing.' },
       { version: 'v1.1.6', date: '2026-02-12', commit: '-', changes: 'Fixed Age (days) in popup tables via snapshot-aware fallback (as_of_date - intro_date) and backend age field propagation.' },
@@ -3787,6 +3964,14 @@
     const LIKELIHOOD_THIS_Q = 'this_q'; // legacy
     const LIKELIHOOD_NEXT_Q = 'next_q'; // legacy
     const LIKELIHOOD_HELP = 'help_needed'; // legacy
+    const CLOSURE_REVIEW_NAMESPACE = 'closure_review_v1';
+    const CLOSURE_REVIEW_STATUSES = ['likely', 'stretch', 'exclude', 'help_needed'];
+    const CLOSURE_REVIEW_STATUS_LABELS = {
+      likely: 'Likely',
+      stretch: 'Stretch',
+      exclude: 'Exclude',
+      help_needed: 'Help Needed',
+    };
     const MOMENTUM_CORE_STAGE_MAX = 6;
     const MOMENTUM_ALL_STAGE_MAX = 8;
     const FORECAST_QUARTERS = ['Q4 FY26', 'Q1 FY27', 'Q2 FY27', 'Q3 FY27', 'Q4 FY27'];
@@ -3848,13 +4033,18 @@
     let quarterTargetsState = {};
     let dashboardSettingsState = {};
     let sharedDatasetState = null;
-    let activeQuarterLabels = { current: 'Current Quarter', next: 'Next Quarter' };
+    let activeQuarterLabels = { current: 'Current Quarter', next: 'Next Quarter', next2: 'Next+2 Quarter' };
     let scorecardStateBySeller = {};
     let scorecardSummaryEls = {};
     let scorecardSellerLabels = [];
     let scorecardSelectedSeller = 'Overall';
 	    let scorecardIntroMonthsState = [];
 	    let scorecardIntroCutoffMonthState = null;
+    let closureReviewIntroMonthsState = [];
+    let closureReviewIntroCutoffMonthState = null;
+    let closureReviewSelectedSeller = 'Overall';
+    let closureReviewStatusFilter = 'all';
+    let closureReviewQuarterFilter = new Set(['q0', 'q1', 'q2']);
 	    let scorecardClosureStageFilter = null; // null = all; else Set of stage labels
 	    let scorecardClosureHelpFilter = 'all'; // all | yes | no
 	    let scorecardCompareCurrentIdState = null;
@@ -4479,9 +4669,11 @@
     function buildQuarterLabels(referenceDate) {
       const currentInfo = fiscalQuarterLabel(referenceDate);
       const nextInfo = nextFiscalQuarter(currentInfo);
+      const next2Info = nextFiscalQuarter(nextInfo);
       return {
         current: fiscalQuarterText(currentInfo),
         next: fiscalQuarterText(nextInfo),
+        next2: fiscalQuarterText(next2Info),
       };
     }
 
@@ -4609,6 +4801,91 @@
 	        if (oldKey) delete likelihoodState[oldKey];
 	      }
 	    }
+
+    function getClosureReviewStore(createIfMissing = true) {
+      if (!likelihoodState || typeof likelihoodState !== 'object') likelihoodState = {};
+      let store = likelihoodState[CLOSURE_REVIEW_NAMESPACE];
+      const ok = store && typeof store === 'object' && !Array.isArray(store);
+      if (!ok && createIfMissing) {
+        likelihoodState[CLOSURE_REVIEW_NAMESPACE] = {};
+        store = likelihoodState[CLOSURE_REVIEW_NAMESPACE];
+      }
+      return ok ? store : (createIfMissing ? likelihoodState[CLOSURE_REVIEW_NAMESPACE] : null);
+    }
+
+    function closureReviewDealKey(rec) {
+      const id = String(rec && (rec.item_id || rec.monday_item_id || rec.id || rec.deal_id) || '').trim();
+      if (id) return `id:${id}`;
+      const deal = String(rec && rec.deal || '').trim().toLowerCase();
+      const intro = String(rec && rec.intro_date || '').trim().slice(0, 10);
+      if (deal && intro) return `deal:${deal}||intro:${intro}`;
+      if (deal) return `deal:${deal}`;
+      return 'deal:(blank)';
+    }
+
+    function isValidIsoDateStrict(raw) {
+      const s = String(raw || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+      return !!parseIsoLocalDate(s);
+    }
+
+    function parseClosureReviewAmount(raw) {
+      const s = String(raw == null ? '' : raw).trim();
+      if (!s) return null;
+      const n = Number(s.replace(/[^0-9.-]/g, ''));
+      if (!Number.isFinite(n) || n < 0) return null;
+      return n;
+    }
+
+    function closureReviewQuarterChoices() {
+      return [
+        { key: 'q0', label: activeQuarterLabels.current },
+        { key: 'q1', label: activeQuarterLabels.next },
+        { key: 'q2', label: activeQuarterLabels.next2 },
+      ];
+    }
+
+    function closureReviewQuarterLabelToKey(label) {
+      const txt = String(label || '').trim();
+      const hit = closureReviewQuarterChoices().find((x) => x.label === txt);
+      return hit ? hit.key : null;
+    }
+
+    function closureReviewQuarterKeyToLabel(key) {
+      const hit = closureReviewQuarterChoices().find((x) => x.key === key);
+      return hit ? hit.label : null;
+    }
+
+    function getClosureReviewEntry(rec) {
+      const store = getClosureReviewStore(false);
+      if (!store) return null;
+      const k = closureReviewDealKey(rec);
+      const row = store[k];
+      return (row && typeof row === 'object' && !Array.isArray(row)) ? row : null;
+    }
+
+    function setClosureReviewEntry(rec, patch) {
+      const key = closureReviewDealKey(rec);
+      const store = getClosureReviewStore(true);
+      const prev = (store[key] && typeof store[key] === 'object' && !Array.isArray(store[key])) ? store[key] : {};
+      const next = { ...prev, ...(patch || {}) };
+      const status = String(next.status || '').trim();
+      if (!CLOSURE_REVIEW_STATUSES.includes(status)) delete next.status;
+      const q = String(next.target_quarter || '').trim();
+      if (!closureReviewQuarterLabelToKey(q)) delete next.target_quarter;
+      const d = String(next.start_date_override || '').trim();
+      if (d && !isValidIsoDateStrict(d)) delete next.start_date_override;
+      if (!d) delete next.start_date_override;
+      const amount = parseClosureReviewAmount(next.amount_override);
+      if (amount == null) delete next.amount_override;
+      else next.amount_override = amount;
+      next.updated_by = (currentUser && currentUser.username) ? currentUser.username : '(unknown)';
+      next.updated_at = new Date().toISOString();
+      next.version_hint = viewedVersionIdState || latestVersionIdState || null;
+      const hasUserFields = ['status', 'target_quarter', 'start_date_override', 'amount_override'].some((k2) => Object.prototype.hasOwnProperty.call(next, k2));
+      if (!hasUserFields) delete store[key];
+      else store[key] = next;
+    }
 
     function classifyLikelihoodForSeller(metric) {
       // Weekly Scorecard: closures are derived from Start Date quarter (not manual tagging).
@@ -6380,6 +6657,7 @@
 	      const tabCross = document.getElementById('tab-crosstab');
 	      const tabFunnel = document.getElementById('tab-funnel');
 	      const tabScore = document.getElementById('tab-scorecard');
+      const tabClosureReview = document.getElementById('tab-closure-review');
 	      const tabAbout = document.getElementById('tab-about');
 	      const tabIndustry = document.getElementById('tab-industry');
 	      const tabWinLoss = document.getElementById('tab-winloss');
@@ -6396,6 +6674,7 @@
 		      const viewCross = document.getElementById('view-crosstab');
 		      const viewFunnel = document.getElementById('view-funnel');
 		      const viewScore = document.getElementById('view-scorecard');
+      const viewClosureReview = document.getElementById('view-closure-review');
 		      const viewAbout = document.getElementById('view-about');
 		      const viewIndustry = document.getElementById('view-industry');
 		      const viewWinLoss = document.getElementById('view-winloss');
@@ -6423,6 +6702,7 @@
 		        tabCross.classList.toggle('active', name === 'crosstab');
 		        tabFunnel.classList.toggle('active', name === 'funnel');
 		        tabScore.classList.toggle('active', name === 'scorecard');
+        tabClosureReview.classList.toggle('active', name === 'closure-review');
 		        tabAbout.classList.toggle('active', name === 'about');
 		        tabIndustry.classList.toggle('active', name === 'industry');
 		        tabWinLoss.classList.toggle('active', name === 'winloss');
@@ -6438,6 +6718,7 @@
 		        viewCross.classList.toggle('active', name === 'crosstab');
 		        viewFunnel.classList.toggle('active', name === 'funnel');
 		        viewScore.classList.toggle('active', name === 'scorecard');
+        viewClosureReview.classList.toggle('active', name === 'closure-review');
 		        viewAbout.classList.toggle('active', name === 'about');
 		        viewIndustry.classList.toggle('active', name === 'industry');
 		        viewWinLoss.classList.toggle('active', name === 'winloss');
@@ -6452,7 +6733,7 @@
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'about') {
+	        if (name === 'admin' || name === 'scorecard' || name === 'closure-review' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'about') {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
@@ -6465,6 +6746,7 @@
 	      tabCross.addEventListener('click', () => activate('crosstab'));
 	      tabFunnel.addEventListener('click', () => activate('funnel'));
 	      tabScore.addEventListener('click', () => activate('scorecard'));
+      tabClosureReview.addEventListener('click', () => activate('closure-review'));
 	      tabAbout.addEventListener('click', () => activate('about'));
 	      tabIndustry.addEventListener('click', () => activate('industry'));
 		      tabWinLoss.addEventListener('click', () => activate('winloss'));
@@ -7521,9 +7803,335 @@
         lines.push(...sellerInsight(picked));
       }
 
-      if (scorecardIntroCutoffMonthState) lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
+	      if (scorecardIntroCutoffMonthState) lines.push(`Scorecard filter: Intro >= ${scorecardIntroCutoffMonthState}.`);
 	      setInsight('insight-scorecard', lines);
 	    }
+
+    function renderClosureReview(data) {
+      const root = document.getElementById('closure-review-wrap');
+      const summary = document.getElementById('closure-review-summary');
+      const sellerSel = document.getElementById('closure-review-seller');
+      const statusPillsEl = document.getElementById('closure-review-status-pills');
+      const quarterPillsEl = document.getElementById('closure-review-quarter-pills');
+      const modeEl = document.getElementById('closure-review-mode');
+      const saveBtn = document.getElementById('closure-review-save-now');
+      const saveMsg = document.getElementById('closure-review-save-msg');
+      if (!root || !summary || !sellerSel || !statusPillsEl || !quarterPillsEl || !modeEl) return;
+
+      const score = (data && data.scorecard) || {};
+      activeQuarterLabels = buildQuarterLabels(score.as_of_date);
+      const qChoices = closureReviewQuarterChoices();
+      const qLabelSet = new Set(qChoices.map((x) => x.label));
+      const editable = !!(currentUser && currentUser.role === 'admin' && !isHistoricalView);
+
+      if (!closureReviewQuarterFilter || !(closureReviewQuarterFilter instanceof Set) || !closureReviewQuarterFilter.size) {
+        closureReviewQuarterFilter = new Set(['q0', 'q1', 'q2']);
+      }
+
+      const sellers = ['Overall', ...(data.sellers || []).filter((s) => s !== 'All (unique deals)')];
+      const picked = sellers.includes(closureReviewSelectedSeller) ? closureReviewSelectedSeller : 'Overall';
+      closureReviewSelectedSeller = picked;
+      sellerSel.innerHTML = '';
+      sellers.forEach((s) => {
+        const o = document.createElement('option');
+        o.value = s;
+        o.textContent = s;
+        sellerSel.appendChild(o);
+      });
+      sellerSel.value = picked;
+
+      modeEl.innerHTML = '';
+      const modeChip = makeCell('div', editable ? 'Edit mode: Admin' : (isHistoricalView ? 'Read-only: Historical version' : 'Read-only: Viewer'), 'chip');
+      modeEl.appendChild(modeChip);
+
+      statusPillsEl.innerHTML = '';
+      const statusButtons = [
+        { key: 'all', label: 'All' },
+        ...CLOSURE_REVIEW_STATUSES.map((k) => ({ key: k, label: CLOSURE_REVIEW_STATUS_LABELS[k] || k })),
+      ];
+      statusButtons.forEach((btn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `pill-btn${closureReviewStatusFilter === btn.key ? ' active' : ''}`;
+        b.textContent = btn.label;
+        b.addEventListener('click', () => {
+          closureReviewStatusFilter = btn.key;
+          renderClosureReview(data);
+        });
+        statusPillsEl.appendChild(b);
+      });
+
+      quarterPillsEl.innerHTML = '';
+      qChoices.forEach((q) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `pill-btn${closureReviewQuarterFilter.has(q.key) ? ' active' : ' muted'}`;
+        b.textContent = q.label;
+        b.addEventListener('click', () => {
+          if (closureReviewQuarterFilter.has(q.key)) closureReviewQuarterFilter.delete(q.key);
+          else closureReviewQuarterFilter.add(q.key);
+          if (!closureReviewQuarterFilter.size) closureReviewQuarterFilter = new Set(['q0', 'q1', 'q2']);
+          renderClosureReview(data);
+        });
+        quarterPillsEl.appendChild(b);
+      });
+
+      if (saveBtn && !saveBtn.dataset.bound) {
+        saveBtn.dataset.bound = '1';
+        saveBtn.addEventListener('click', async () => {
+          if (!editable) {
+            if (saveMsg) saveMsg.textContent = 'Only admin users on latest version can save edits.';
+            return;
+          }
+          try {
+            if (saveMsg) saveMsg.textContent = 'Saving...';
+            await pushSharedStoreNow({ throwOnError: true });
+            if (saveMsg) saveMsg.textContent = 'Saved.';
+          } catch (e) {
+            if (saveMsg) saveMsg.textContent = e.message || 'Save failed.';
+          }
+        });
+      }
+
+      const rows = Array.isArray((data || {}).all_deals_rows) ? data.all_deals_rows : [];
+      const cutoffMonth = closureReviewIntroCutoffMonthState || null;
+      const scopeSeller = picked === 'Overall' ? null : picked;
+      const map = new Map();
+      rows.forEach((rec) => {
+        if (!passIntroCutoffMonth(rec.intro_date, cutoffMonth)) return;
+        if (!scorecardInSellerScope(rec, scopeSeller)) return;
+        const override = getClosureReviewEntry(rec);
+        const rawQuarter = scorecardQuarterLabelForDate(rec.start_date);
+        const overrideQuarter = override && override.target_quarter ? String(override.target_quarter) : '';
+        const include = (rawQuarter && qLabelSet.has(rawQuarter)) || (overrideQuarter && qLabelSet.has(overrideQuarter));
+        if (!include) return;
+        const key = closureReviewDealKey(rec);
+        const effectiveStart = (override && override.start_date_override) ? String(override.start_date_override) : (String(rec.start_date || '').trim() || '');
+        const effectiveQuarter = (overrideQuarter && qLabelSet.has(overrideQuarter))
+          ? overrideQuarter
+          : scorecardQuarterLabelForDate(effectiveStart);
+        const amt = (override && override.amount_override != null)
+          ? Number(override.amount_override)
+          : dealSizeValue(bestDealSize(rec));
+        const stageNorm = normalizeStage(String(rec.stage || rec.deal_stage || '').trim() || '-');
+        const viewRow = {
+          key,
+          rec,
+          override: override || null,
+          deal: String(rec.deal || '-'),
+          seller: String(rec.owner || rec.deal_owner || '-'),
+          stage: stageNorm,
+          rawStart: String(rec.start_date || '-'),
+          rawAmount: dealSizeValue(bestDealSize(rec)),
+          effectiveStart: effectiveStart || '-',
+          effectiveAmount: Number.isFinite(amt) ? Math.max(0, amt) : 0,
+          effectiveQuarter: effectiveQuarter || null,
+          status: (override && override.status) ? String(override.status) : '',
+          updatedBy: (override && override.updated_by) ? String(override.updated_by) : '-',
+          updatedAt: (override && override.updated_at) ? fmtTs(override.updated_at) : '-',
+        };
+        if (!map.has(key)) {
+          map.set(key, viewRow);
+        } else {
+          const prev = map.get(key);
+          if (!prev.override && viewRow.override) map.set(key, viewRow);
+        }
+      });
+
+      const allScoped = Array.from(map.values());
+      const filtered = allScoped.filter((r) => {
+        const qKey = closureReviewQuarterLabelToKey(r.effectiveQuarter);
+        if (!qKey || !closureReviewQuarterFilter.has(qKey)) return false;
+        if (closureReviewStatusFilter === 'all') return true;
+        return String(r.status || '') === closureReviewStatusFilter;
+      });
+
+      const byQuarter = { q0: [], q1: [], q2: [] };
+      filtered.forEach((r) => {
+        const qKey = closureReviewQuarterLabelToKey(r.effectiveQuarter);
+        if (qKey && byQuarter[qKey]) byQuarter[qKey].push(r);
+      });
+      Object.values(byQuarter).forEach((arr) => arr.sort((a, b) => a.deal.localeCompare(b.deal)));
+
+      const sumByQuarter = (arr) => arr.reduce((acc, r) => acc + Number(r.effectiveAmount || 0), 0);
+      const statusCounts = {};
+      CLOSURE_REVIEW_STATUSES.forEach((k) => { statusCounts[k] = 0; });
+      let notReviewed = 0;
+      allScoped.forEach((r) => {
+        if (r.status && statusCounts[r.status] != null) statusCounts[r.status] += 1;
+        else notReviewed += 1;
+      });
+
+      summary.innerHTML = '';
+      const summaryGrid = document.createElement('div');
+      summaryGrid.className = 'closure-review-summary-grid';
+      const mkBox = (k, v, s) => {
+        const b = document.createElement('div');
+        b.className = 'closure-review-summary-box';
+        b.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div>`;
+        return b;
+      };
+      summaryGrid.appendChild(mkBox(activeQuarterLabels.current, money.format(byQuarter.q0.length), fmtDealSize(sumByQuarter(byQuarter.q0))));
+      summaryGrid.appendChild(mkBox(activeQuarterLabels.next, money.format(byQuarter.q1.length), fmtDealSize(sumByQuarter(byQuarter.q1))));
+      summaryGrid.appendChild(mkBox(activeQuarterLabels.next2, money.format(byQuarter.q2.length), fmtDealSize(sumByQuarter(byQuarter.q2))));
+      const splitTxt = `Likely ${money.format(statusCounts.likely)} | Stretch ${money.format(statusCounts.stretch)} | Exclude ${money.format(statusCounts.exclude)} | Help ${money.format(statusCounts.help_needed)} | Not reviewed ${money.format(notReviewed)}`;
+      summaryGrid.appendChild(mkBox('Status Split', money.format(allScoped.length), splitTxt));
+      summary.appendChild(summaryGrid);
+
+      const renderQuarterCard = (qKey, qLabel, rowsInQuarter) => {
+        const shell = document.createElement('div');
+        shell.className = 'closure-review-card';
+        const head = document.createElement('div');
+        head.className = 'closure-review-head';
+        const t = document.createElement('div');
+        t.className = 'closure-review-title';
+        t.textContent = `Likely Closures in ${qLabel}`;
+        const m = document.createElement('div');
+        m.className = 'closure-review-meta';
+        m.textContent = `${money.format(rowsInQuarter.length)} deals | ${fmtDealSize(sumByQuarter(rowsInQuarter))}`;
+        head.appendChild(t);
+        head.appendChild(m);
+        shell.appendChild(head);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'closure-review-table-wrap';
+        const table = document.createElement('table');
+        table.className = 'closure-review-table';
+        const thead = document.createElement('thead');
+        const hr = document.createElement('tr');
+        ['Deal', 'Seller', 'Stage', 'Raw Start', 'Effective Start', 'Raw Size', 'Effective Amount', 'Status', 'Target Quarter', 'Last Updated'].forEach((h) => hr.appendChild(makeCell('th', h)));
+        thead.appendChild(hr);
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        if (!rowsInQuarter.length) {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', 'No deals in current filter'));
+          for (let i = 0; i < 9; i += 1) tr.appendChild(makeCell('td', '-'));
+          tbody.appendChild(tr);
+        } else {
+          rowsInQuarter.forEach((row) => {
+            const tr = document.createElement('tr');
+            tr.appendChild(makeCell('td', row.deal || '-'));
+            tr.appendChild(makeCell('td', row.seller || '-'));
+            tr.appendChild(makeCell('td', row.stage || '-'));
+            tr.appendChild(makeCell('td', row.rawStart || '-'));
+
+            const startTd = document.createElement('td');
+            const startInput = document.createElement('input');
+            startInput.type = 'date';
+            startInput.className = 'closure-review-edit';
+            const currentStart = row.override && row.override.start_date_override ? row.override.start_date_override : '';
+            startInput.value = currentStart;
+            startInput.disabled = !editable;
+            if (!editable) startInput.title = 'Admin only on latest version';
+            startInput.addEventListener('change', () => {
+              const val = String(startInput.value || '').trim();
+              if (val && !isValidIsoDateStrict(val)) {
+                if (saveMsg) saveMsg.textContent = 'Invalid date. Use YYYY-MM-DD.';
+                startInput.value = currentStart;
+                return;
+              }
+              setClosureReviewEntry(row.rec, { start_date_override: val || null });
+              persistLocalStateBundle();
+              queueSharedStorePush();
+              if (saveMsg) saveMsg.textContent = 'Saved locally. Syncing...';
+              renderClosureReview(data);
+            });
+            startTd.appendChild(startInput);
+            tr.appendChild(startTd);
+
+            tr.appendChild(makeCell('td', fmtDealSize(row.rawAmount)));
+
+            const amtTd = document.createElement('td');
+            const amtInput = document.createElement('input');
+            amtInput.type = 'number';
+            amtInput.min = '0';
+            amtInput.step = '1';
+            amtInput.className = 'closure-review-edit';
+            const currentAmount = row.override && row.override.amount_override != null ? String(row.override.amount_override) : '';
+            amtInput.value = currentAmount;
+            amtInput.disabled = !editable;
+            if (!editable) amtInput.title = 'Admin only on latest version';
+            amtInput.addEventListener('change', () => {
+              const val = String(amtInput.value || '').trim();
+              if (val && parseClosureReviewAmount(val) == null) {
+                if (saveMsg) saveMsg.textContent = 'Invalid amount. Enter a non-negative number.';
+                amtInput.value = currentAmount;
+                return;
+              }
+              setClosureReviewEntry(row.rec, { amount_override: val || null });
+              persistLocalStateBundle();
+              queueSharedStorePush();
+              if (saveMsg) saveMsg.textContent = 'Saved locally. Syncing...';
+              renderClosureReview(data);
+            });
+            amtTd.appendChild(amtInput);
+            tr.appendChild(amtTd);
+
+            const statusTd = document.createElement('td');
+            const statusSel = document.createElement('select');
+            statusSel.className = 'closure-review-edit';
+            statusSel.disabled = !editable;
+            const statusOpts = [{ key: '', label: 'Not reviewed' }, ...CLOSURE_REVIEW_STATUSES.map((k) => ({ key: k, label: CLOSURE_REVIEW_STATUS_LABELS[k] || k }))];
+            statusOpts.forEach((opt) => {
+              const o = document.createElement('option');
+              o.value = opt.key;
+              o.textContent = opt.label;
+              statusSel.appendChild(o);
+            });
+            statusSel.value = String(row.status || '');
+            if (!editable) statusSel.title = 'Admin only on latest version';
+            statusSel.addEventListener('change', () => {
+              setClosureReviewEntry(row.rec, { status: statusSel.value || null });
+              persistLocalStateBundle();
+              queueSharedStorePush();
+              if (saveMsg) saveMsg.textContent = 'Saved locally. Syncing...';
+              renderClosureReview(data);
+            });
+            statusTd.appendChild(statusSel);
+            tr.appendChild(statusTd);
+
+            const qTd = document.createElement('td');
+            const qSel = document.createElement('select');
+            qSel.className = 'closure-review-edit';
+            qSel.disabled = !editable;
+            const currentQuarter = row.override && row.override.target_quarter ? String(row.override.target_quarter) : '';
+            [{ key: '', label: 'Auto' }, ...qChoices].forEach((opt) => {
+              const o = document.createElement('option');
+              o.value = opt.label || '';
+              o.textContent = opt.label || 'Auto';
+              qSel.appendChild(o);
+            });
+            qSel.value = currentQuarter;
+            if (!editable) qSel.title = 'Admin only on latest version';
+            qSel.addEventListener('change', () => {
+              setClosureReviewEntry(row.rec, { target_quarter: qSel.value || null });
+              persistLocalStateBundle();
+              queueSharedStorePush();
+              if (saveMsg) saveMsg.textContent = 'Saved locally. Syncing...';
+              renderClosureReview(data);
+            });
+            qTd.appendChild(qSel);
+            tr.appendChild(qTd);
+
+            tr.appendChild(makeCell('td', `${row.updatedBy || '-'} | ${row.updatedAt || '-'}`));
+            tbody.appendChild(tr);
+          });
+        }
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        shell.appendChild(wrap);
+        return shell;
+      };
+
+      root.innerHTML = '';
+      const grid = document.createElement('div');
+      grid.className = 'closure-review-grid';
+      grid.appendChild(renderQuarterCard('q0', activeQuarterLabels.current, byQuarter.q0));
+      grid.appendChild(renderQuarterCard('q1', activeQuarterLabels.next, byQuarter.q1));
+      grid.appendChild(renderQuarterCard('q2', activeQuarterLabels.next2, byQuarter.q2));
+      root.appendChild(grid);
+    }
 
 		    function stageConvCoreStages() {
 		      // Canonical order (matches the app order): Intro -> Qualification -> Capability -> Scoping -> Proposal -> Contracting -> Win -> Loss
@@ -9508,6 +10116,7 @@
 	        const funnelTimeSlider = document.getElementById('funnel-time-slider');
 	        const funnelTimeValue = document.getElementById('funnel-time-value');
 	        const scorecardSellerSelect = document.getElementById('scorecard-seller');
+        const closureReviewSellerSelect = document.getElementById('closure-review-seller');
 	        const scorecardVersionCurrent = document.getElementById('scorecard-version-current');
 	        const scorecardVersionPrev = document.getElementById('scorecard-version-prev');
 	        const loginForm = document.getElementById('auth-login-form');
@@ -9587,6 +10196,7 @@
 	        industryIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        wlIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        scorecardIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
+	        closureReviewIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        stageConvIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        introTrendIntroMonthsState = computeIntroMonthsFromDeals(allDealsForSliders);
 	        initMonthSlider(
@@ -9613,6 +10223,14 @@
 	          (v) => { scorecardIntroCutoffMonthState = v; },
 	          () => renderScorecard(data),
 	        );
+        initMonthSlider(
+          document.getElementById('closure-review-time-slider'),
+          document.getElementById('closure-review-time-value'),
+          closureReviewIntroMonthsState,
+          () => closureReviewIntroCutoffMonthState,
+          (v) => { closureReviewIntroCutoffMonthState = v; },
+          () => renderClosureReview(data),
+        );
 	        initMonthSlider(
 	          document.getElementById('stageconv-time-slider'),
 	          document.getElementById('stageconv-time-value'),
@@ -9634,6 +10252,7 @@
 		          render(data, sellerSelect.value, selectedStages, orderedStages);
 		          renderFunnel(data, selectedFunnelStages, funnelMinMonth);
 		          renderScorecard(data);
+          renderClosureReview(data);
 		          renderStageConversion(data);
 		          renderAdminTargets();
 		          renderIndustryAction(data);
@@ -9803,6 +10422,12 @@
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
+          closureReviewSellerSelect.appendChild(o);
+        });
+        ['Overall', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+          const o = document.createElement('option');
+          o.value = s;
+          o.textContent = s;
           cycleSellerSelect.appendChild(o);
         });
 
@@ -9813,10 +10438,15 @@
         introSellerSelect.value = 'Overall (unique)';
         introGranularity.value = 'week';
         forecastSellerSelect.value = 'Overall';
+        closureReviewSellerSelect.value = 'Overall';
         cycleSellerSelect.value = 'Overall';
         introSellerSelect.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         introGranularity.addEventListener('change', () => renderIntroTrend(data, introSellerSelect.value, introGranularity.value));
         forecastSellerSelect.addEventListener('change', () => renderForecast(data, forecastSellerSelect.value || 'Overall'));
+        closureReviewSellerSelect.addEventListener('change', () => {
+          closureReviewSelectedSeller = closureReviewSellerSelect.value || 'Overall';
+          renderClosureReview(data);
+        });
         cycleSellerSelect.addEventListener('change', () => renderCycleTime(data, cycleSellerSelect.value || 'Overall'));
 	        scorecardSellerSelect.addEventListener('change', () => {
 	          scorecardSelectedSeller = scorecardSellerSelect.value || 'Overall';
