@@ -3738,8 +3738,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.11';
+    const APP_VERSION = 'v1.1.12';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.12', date: '2026-02-12', commit: '-', changes: 'Admin users table: added Delete User action with backend credential removal and safety guards.' },
       { version: 'v1.1.11', date: '2026-02-12', commit: '-', changes: 'Login diagnostics: trim username and surface backend/network auth error instead of generic invalid-credentials message.' },
       { version: 'v1.1.8', date: '2026-02-12', commit: '-', changes: 'Fixed Weekly Scorecard render crash by removing undefined todayDate() call in age fallback.' },
       { version: 'v1.1.7', date: '2026-02-12', commit: '-', changes: 'Fixed runtime error by using parseIsoLocalDate for popup age fallback parsing.' },
@@ -5319,6 +5320,9 @@
         tr.appendChild(makeCell('td', fmtTs(user.created_at), ''));
         tr.appendChild(makeCell('td', fmtTs(user.last_login_at), ''));
         const action = document.createElement('td');
+        action.style.display = 'flex';
+        action.style.gap = '6px';
+        action.style.flexWrap = 'wrap';
         const resetBtn = document.createElement('button');
         resetBtn.type = 'button';
         resetBtn.textContent = 'Reset Password';
@@ -5332,6 +5336,49 @@
           showAdminMessage(`Ready to reset password for "${user.username}".`);
         });
         action.appendChild(resetBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.textContent = 'Delete User';
+        const username = normalizeUsername(user.username);
+        const admins = Object.values(currentAuthStore.users || {}).filter((u) => u && u.role === 'admin');
+        const isSelf = currentUser && normalizeUsername(currentUser.username) === username;
+        const isLastAdmin = user.role === 'admin' && admins.length <= 1;
+        if (isSelf || isLastAdmin) {
+          deleteBtn.disabled = true;
+          deleteBtn.title = isSelf ? 'You cannot delete your active account.' : 'Cannot delete the last admin user.';
+        }
+        deleteBtn.addEventListener('click', async () => {
+          if (!currentUser || currentUser.role !== 'admin') {
+            showAdminMessage('Only admin users can delete users.');
+            return;
+          }
+          if (isSelf) {
+            showAdminMessage('You cannot delete your active account.');
+            return;
+          }
+          if (isLastAdmin) {
+            showAdminMessage('Cannot delete the last admin user.');
+            return;
+          }
+          const ok = window.confirm(`Delete user "${username}" permanently? This removes credentials from shared backend state.`);
+          if (!ok) return;
+          const prevUsers = JSON.parse(JSON.stringify(currentAuthStore.users || {}));
+          delete currentAuthStore.users[username];
+          renderAdminUsers();
+          persistLocalStateBundle();
+          showAdminMessage(`Deleting "${username}"...`);
+          try {
+            await pushSharedStoreNow({ throwOnError: true });
+            showAdminMessage(`Deleted "${username}".`);
+            renderAdminUsers();
+          } catch (e) {
+            currentAuthStore.users = prevUsers;
+            persistLocalStateBundle();
+            renderAdminUsers();
+            showAdminMessage(e.message || 'Failed to delete user.');
+          }
+        });
+        action.appendChild(deleteBtn);
         tr.appendChild(action);
         body.appendChild(tr);
       });
