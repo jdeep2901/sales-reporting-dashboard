@@ -3738,8 +3738,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.12';
+    const APP_VERSION = 'v1.1.13';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.13', date: '2026-04-21', commit: '-', changes: 'Security hardening: stopped returning password-hash material to the browser and moved admin user create/delete/reset to dedicated backend RPCs.' },
       { version: 'v1.1.12', date: '2026-02-12', commit: '-', changes: 'Admin users table: added Delete User action with backend credential removal and safety guards.' },
       { version: 'v1.1.11', date: '2026-02-12', commit: '-', changes: 'Login diagnostics: trim username and surface backend/network auth error instead of generic invalid-credentials message.' },
       { version: 'v1.1.8', date: '2026-02-12', commit: '-', changes: 'Fixed Weekly Scorecard render crash by removing undefined todayDate() call in age fallback.' },
@@ -4222,7 +4223,9 @@
 	          // Viewers should not be mutating targets; sending targets here can cause the backend
 	          // to reject the whole request, which would prevent Help Needed updates from persisting.
 	          p_quarter_targets: (currentUser.role === 'admin') ? quarterTargetsState : null,
-	          p_users: (currentUser.role === 'admin') ? (currentAuthStore.users || {}) : null,
+	          // User credentials are managed through dedicated admin RPCs so they never round-trip
+	          // through the browser as part of the shared dashboard state payload.
+	          p_users: null,
 	          p_settings: (currentUser.role === 'admin') ? (dashboardSettingsState || {}) : null,
 	        });
 	        if (out) applySharedStorePayload(out);
@@ -4889,42 +4892,33 @@
       sessionStorage.removeItem(AUTH_SESSION_KEY);
     }
 
-    function randomSalt() {
-      const buf = new Uint8Array(16);
-      crypto.getRandomValues(buf);
-      return Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    async function sha256(value) {
-      const bytes = new TextEncoder().encode(value);
-      const hash = await crypto.subtle.digest('SHA-256', bytes);
-      return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    async function hashPassword(password, salt) {
-      return sha256(`${salt}:${password}`);
-    }
-
     async function upsertUser(usernameInput, password, role = 'viewer', createdBy = 'system') {
       const username = normalizeUsername(usernameInput);
       if (!username) throw new Error('Username is required.');
       if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
-      const now = new Date().toISOString();
-      const existing = currentAuthStore.users[username] || {};
-      const salt = randomSalt();
-      const passwordHash = await hashPassword(password, salt);
-      currentAuthStore.users[username] = {
-        username,
-        role: role === 'admin' ? 'admin' : 'viewer',
-        salt,
-        password_hash: passwordHash,
-        created_at: existing.created_at || now,
-        created_by: existing.created_by || createdBy,
-        updated_at: now,
-        last_login_at: existing.last_login_at || null,
-      };
-      persistLocalStateBundle();
-      await pushSharedStoreNow({ throwOnError: true });
+      const out = await supabaseRpc('upsert_dashboard_user', {
+        p_username: currentUser.username,
+        p_password: sessionPassword,
+        p_target_username: username,
+        p_target_password: password,
+        p_target_role: role === 'admin' ? 'admin' : 'viewer',
+      });
+      if (!out) throw new Error('No user state returned from backend.');
+      applySharedStorePayload(out);
+      return out;
+    }
+
+    async function deleteDashboardUser(usernameInput) {
+      const username = normalizeUsername(usernameInput);
+      if (!username) throw new Error('Username is required.');
+      const out = await supabaseRpc('delete_dashboard_user', {
+        p_username: currentUser.username,
+        p_password: sessionPassword,
+        p_target_username: username,
+      });
+      if (!out) throw new Error('No user state returned from backend.');
+      applySharedStorePayload(out);
+      return out;
     }
 
     async function verifyLogin(usernameInput, password) {
@@ -5362,19 +5356,12 @@
           }
           const ok = window.confirm(`Delete user "${username}" permanently? This removes credentials from shared backend state.`);
           if (!ok) return;
-          const prevUsers = JSON.parse(JSON.stringify(currentAuthStore.users || {}));
-          delete currentAuthStore.users[username];
-          renderAdminUsers();
-          persistLocalStateBundle();
           showAdminMessage(`Deleting "${username}"...`);
           try {
-            await pushSharedStoreNow({ throwOnError: true });
+            await deleteDashboardUser(username);
             showAdminMessage(`Deleted "${username}".`);
             renderAdminUsers();
           } catch (e) {
-            currentAuthStore.users = prevUsers;
-            persistLocalStateBundle();
-            renderAdminUsers();
             showAdminMessage(e.message || 'Failed to delete user.');
           }
         });
