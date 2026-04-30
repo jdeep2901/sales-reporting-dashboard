@@ -2754,7 +2754,7 @@
 	        <div class="head">
 	          <div>
 	            <h1>Weekly Operating Metrics</h1>
-	            <div class="sub">Metrics 1-7 from the operating scorecard, weekly from Jan 1, 2026. Green/red status follows the target thresholds shown in the source framework.</div>
+	            <div class="sub">Metrics 1-7 from the operating scorecard, shown as fixed weekly columns from Jan 1, 2026. Each cell uses the closest saved refresh snapshot for that week.</div>
 	          </div>
 	          <div class="controls">
 	            <div>
@@ -2773,6 +2773,28 @@
 	            </table>
 	          </div>
 	          <div id="operating-footnote" class="operating-footnote"></div>
+	          <div class="forecast-detail">
+	            <div class="forecast-detail-head">
+	              <div id="operating-detail-title" class="forecast-detail-title">Operating Metric Detail</div>
+	              <div id="operating-detail-meta" class="detail-meta">Click any metric cell to see the underlying rows.</div>
+	            </div>
+	            <div class="forecast-detail-wrap">
+	              <table class="forecast-detail-table">
+	                <thead>
+	                  <tr>
+	                    <th>Deal</th>
+	                    <th>Stage</th>
+	                    <th>Intro Date</th>
+	                    <th>Start Date</th>
+	                    <th>Logo</th>
+	                    <th>Deal Size</th>
+	                    <th>Notes</th>
+	                  </tr>
+	                </thead>
+	                <tbody id="operating-detail-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
 	        </div>
 	      </div>
 
@@ -3857,8 +3879,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.15';
+    const APP_VERSION = 'v1.1.16';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.16', date: '2026-04-30', commit: '-', changes: 'Tightened Weekly Operating Metrics: fixed seller target lookup, excluded no-show/reschedule from intro metrics, clarified week labels, counted late-stage snapshot state, and added click-through detail rows.' },
       { version: 'v1.1.15', date: '2026-04-30', commit: '-', changes: 'Changed Weekly Operating Metrics to use the closest saved refresh snapshot per week, with latest same-day refresh tie-breaks and logo details for weekly won-logo counts.' },
       { version: 'v1.1.14', date: '2026-04-30', commit: '-', changes: 'Added Weekly Operating Metrics tab for metrics 1-7 with seller filter, weekly columns from Jan 1 2026, and red/green target status.' },
       { version: 'v1.1.13', date: '2026-04-21', commit: '-', changes: 'Security hardening: stopped returning password-hash material to the browser and moved admin user create/delete/reset to dedicated backend RPCs.' },
@@ -8777,11 +8800,12 @@
     }
 
     function operatingQuarterTarget(scope, qKey) {
-      const target = getQuarterTarget(scope || 'Overall', qKey);
+      const storedQuarterLabel = Object.entries(FORECAST_QUARTER_KEY_MAP).find(([label]) => label === qKey || FORECAST_QUARTER_KEY_MAP[label] === qKey);
+      const targetQuarter = storedQuarterLabel ? storedQuarterLabel[1] : qKey;
+      const target = getQuarterTarget(scope || 'Overall', targetQuarter);
       if (Number(target.revenue || 0) > 0) return Number(target.revenue || 0);
-      const fyLabel = Object.entries(FORECAST_QUARTER_KEY_MAP).find(([, key]) => key === qKey);
-      if ((scope || 'Overall') === 'Overall' && fyLabel) {
-        return Number(FORECAST_DEFAULT_OVERALL_TARGETS[fyLabel[0]] || 0);
+      if ((scope || 'Overall') === 'Overall' && storedQuarterLabel) {
+        return Number(FORECAST_DEFAULT_OVERALL_TARGETS[storedQuarterLabel[0]] || 0);
       }
       return 0;
     }
@@ -8801,6 +8825,80 @@
       const status = cell && cell.status ? cell.status : 'neutral';
       const text = cell && cell.text ? cell.text : '-';
       return `<span class="operating-cell ${status}">${text}</span>`;
+    }
+
+    function operatingIsNoShowOrReschedule(rec) {
+      const stage = String((rec && (rec.stage || rec.deal_stage || rec.dealStage)) || '').trim().toLowerCase();
+      return stage.includes('no show') || stage.includes('reschedule');
+    }
+
+    function operatingDetailRow(rec, note) {
+      return {
+        deal: (rec && (rec.deal || rec.name)) || '-',
+        stage: (rec && (rec.stage || rec.deal_stage || rec.dealStage)) || '-',
+        intro_date: (rec && rec.intro_date) || '-',
+        start_date: (rec && (rec.start_date || rec.startDate || rec.start)) || '-',
+        logo: (rec && (rec.logo || rec.account)) || '-',
+        deal_size: operatingDealSize(rec || {}),
+        note: note || '',
+      };
+    }
+
+    function operatingCanonicalKey(rec) {
+      const itemId = String((rec && rec.item_id) || '').trim();
+      if (itemId) return `id:${itemId}`;
+      return [
+        String((rec && (rec.deal || rec.name)) || '').trim().toLowerCase().replace(/\s+/g, ' '),
+        String((rec && rec.intro_date) || '').slice(0, 10),
+        String((rec && (rec.start_date || rec.startDate || rec.start)) || '').slice(0, 10),
+      ].join('||');
+    }
+
+    function operatingUniqueRows(rows) {
+      const seen = new Set();
+      return (Array.isArray(rows) ? rows : []).filter((r) => {
+        const key = operatingCanonicalKey(r);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function renderOperatingDetailTable(title, rows, meta) {
+      const titleEl = document.getElementById('operating-detail-title');
+      const metaEl = document.getElementById('operating-detail-meta');
+      const body = document.getElementById('operating-detail-body');
+      if (!titleEl || !metaEl || !body) return;
+      const records = Array.isArray(rows) ? rows : [];
+      titleEl.textContent = title || 'Operating Metric Detail';
+      metaEl.textContent = meta || `${money.format(records.length)} row(s)`;
+      body.innerHTML = '';
+      if (!records.length) {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', 'No rows'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        tr.appendChild(makeCell('td', '-'));
+        body.appendChild(tr);
+        return;
+      }
+      records
+        .slice()
+        .sort((a, b) => String(a.deal || '').localeCompare(String(b.deal || '')))
+        .forEach((r) => {
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', r.deal || '-'));
+          tr.appendChild(makeCell('td', r.stage || '-'));
+          tr.appendChild(makeCell('td', r.intro_date || '-'));
+          tr.appendChild(makeCell('td', r.start_date || '-'));
+          tr.appendChild(makeCell('td', r.logo || '-'));
+          tr.appendChild(makeCell('td', r.deal_size ? fmtDealSize(r.deal_size) : '-'));
+          tr.appendChild(makeCell('td', r.note || '-'));
+          body.appendChild(tr);
+        });
     }
 
     function operatingDateOnly(dateLike) {
@@ -8904,7 +9002,7 @@
       head.innerHTML = '';
       body.innerHTML = '';
       head.appendChild(makeCell('th', 'Metric'));
-      weeks.forEach((w) => head.appendChild(makeCell('th', operatingWeekLabel(w))));
+      weeks.forEach((w) => head.appendChild(makeCell('th', `Wk of ${operatingWeekLabel(w)}`)));
       const loading = document.createElement('tr');
       const loadingCell = makeCell('td', 'Loading weekly snapshots...');
       loadingCell.colSpan = Math.max(1, weeks.length + 1);
@@ -8931,6 +9029,7 @@
         const rows = Array.isArray(snapshotData && snapshotData.all_deals_rows) ? snapshotData.all_deals_rows : [];
         const scopedRows = rows.filter((r) => operatingSellerInScope(r, seller));
         const wonRows = scopedRows.filter((r) => isWonStage(r.stage || r.deal_stage || r.dealStage));
+        const introRows = scopedRows.filter((r) => !operatingIsNoShowOrReschedule(r));
         const openRows = scopedRows.filter((r) => {
           const stageValue = r.stage || r.deal_stage || r.dealStage;
           const n = stageNumber(stageValue);
@@ -8940,66 +9039,107 @@
         const qTarget = operatingQuarterTarget(seller, qKey);
         const targetToDate = qTarget * operatingQuarterProgress(weekEnd);
         if (metricId === 1) {
-          const rev = wonRows.reduce((acc, r) => {
-            if (operatingQuarterKeyFromDate(parseIsoLocalDate(r.start_date || r.startDate || r.start)) !== qKey) return acc;
-            if (!operatingDateOnOrBefore(r.start_date || r.startDate || r.start, weekEnd)) return acc;
-            return acc + operatingDealSize(r);
-          }, 0);
+          const contributors = operatingUniqueRows(wonRows.filter((r) => (
+            operatingQuarterKeyFromDate(parseIsoLocalDate(r.start_date || r.startDate || r.start)) === qKey
+            && operatingDateOnOrBefore(r.start_date || r.startDate || r.start, weekEnd)
+          )));
+          const rev = contributors.reduce((acc, r) => acc + operatingDealSize(r), 0);
           const status = !qTarget ? 'neutral' : (rev >= targetToDate ? 'good' : 'bad');
-          return { text: forecastNumberText(rev, true), status, details: [`${operatingSnapshotLabel(snapshot)}`, `Target to date: ${forecastNumberText(targetToDate, true)}`] };
+          return {
+            text: forecastNumberText(rev, true),
+            status,
+            details: [`${operatingSnapshotLabel(snapshot)}`, `Target to date: ${forecastNumberText(targetToDate, true)}`],
+            rows: contributors.map((r) => operatingDetailRow(r, 'Won revenue counted quarter-to-date')),
+          };
         }
         if (metricId === 2) {
           const logos = new Map();
+          const contributors = [];
           wonRows.forEach((r) => {
             if (!operatingDateInWeek(r.start_date || r.startDate || r.start, weekStart)) return;
             const logo = String(r.logo || r.account || r.deal || '').trim();
             if (logo) logos.set(logo.toLowerCase(), logo);
+            contributors.push(r);
           });
           const names = Array.from(logos.values()).sort((a, b) => a.localeCompare(b));
           return {
             text: money.format(logos.size),
             status: logos.size > 0 ? 'good' : 'bad',
             details: [`${operatingSnapshotLabel(snapshot)}`, names.length ? `Won logo(s): ${names.join(', ')}` : 'No won logos in this week'],
+            rows: operatingUniqueRows(contributors).map((r) => operatingDetailRow(r, 'Stage = Won and Start Date is in this week')),
           };
         }
         if (metricId === 3) {
-          const ev = openRows.reduce((acc, r) => {
+          const contributors = operatingUniqueRows(openRows.filter((r) => {
             const sd = r.start_date || r.startDate || r.start;
-            if (sd && operatingQuarterKeyFromDate(parseIsoLocalDate(sd)) !== qKey) return acc;
-            if (r.intro_date && !operatingDateOnOrBefore(r.intro_date, weekEnd)) return acc;
-            return acc + operatingStageEv(r);
-          }, 0);
+            if (sd && operatingQuarterKeyFromDate(parseIsoLocalDate(sd)) !== qKey) return false;
+            if (r.intro_date && !operatingDateOnOrBefore(r.intro_date, weekEnd)) return false;
+            return true;
+          }));
+          const ev = contributors.reduce((acc, r) => acc + operatingStageEv(r), 0);
           const coverage = qTarget > 0 ? ev / qTarget : 0;
-          return { text: qTarget ? `${coverage.toFixed(1)}x` : '-', status: qTarget ? (coverage >= 2.5 ? 'good' : 'bad') : 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`, `Weighted EV: ${forecastNumberText(ev, true)}`] };
+          return {
+            text: qTarget ? `${coverage.toFixed(1)}x` : '-',
+            status: qTarget ? (coverage >= 2.5 ? 'good' : 'bad') : 'neutral',
+            details: [`${operatingSnapshotLabel(snapshot)}`, `Weighted EV: ${forecastNumberText(ev, true)}`],
+            rows: contributors.map((r) => operatingDetailRow(r, `EV contribution: ${forecastNumberText(operatingStageEv(r), true)}`)),
+          };
         }
         if (metricId === 4) {
-          const intros = scopedRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart)).length;
+          const contributors = operatingUniqueRows(introRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart)));
+          const intros = contributors.length;
           const target = 3 * sellerCount;
-          return { text: money.format(intros), status: intros >= target ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Target: ${money.format(target)}`] };
+          return {
+            text: money.format(intros),
+            status: intros >= target ? 'good' : 'bad',
+            details: [`${operatingSnapshotLabel(snapshot)}`, `Target: ${money.format(target)}`, 'Excludes No Show / Reschedule'],
+            rows: contributors.map((r) => operatingDetailRow(r, 'Intro Meeting Date is in this week')),
+          };
         }
         if (metricId === 5) {
-          const introCohort = scopedRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart));
+          const introCohort = operatingUniqueRows(introRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart)));
           const reached = introCohort.filter((r) => {
             const n = stageNumber(r.stage || r.deal_stage || r.dealStage);
             return n != null && n >= 2 && n <= 8;
           }).length;
           const pct = introCohort.length ? (reached / introCohort.length) : null;
           const status = pct == null ? 'neutral' : (pct >= 0.50 ? 'good' : (pct < 0.40 ? 'bad' : 'neutral'));
-          return { text: pct == null ? '-' : `${(pct * 100).toFixed(0)}%`, status, details: [`${operatingSnapshotLabel(snapshot)}`, `${money.format(reached)} of ${money.format(introCohort.length)} intros reached qualification+`] };
+          return {
+            text: pct == null ? '-' : `${(pct * 100).toFixed(0)}%`,
+            status,
+            details: [`${operatingSnapshotLabel(snapshot)}`, `${money.format(reached)} of ${money.format(introCohort.length)} intros reached qualification+`, 'Excludes No Show / Reschedule'],
+            rows: introCohort.map((r) => {
+              const n = stageNumber(r.stage || r.deal_stage || r.dealStage);
+              return operatingDetailRow(r, n != null && n >= 2 && n <= 8 ? 'Reached qualification+' : 'Not yet qualification+');
+            }),
+          };
         }
         if (metricId === 6) {
-          const lateStageCount = (endDate, datasetForCount) => {
+          const lateStageRows = (datasetForCount) => {
             const rowsForCount = Array.isArray(datasetForCount && datasetForCount.all_deals_rows) ? datasetForCount.all_deals_rows : [];
-            return rowsForCount.filter((r) => operatingSellerInScope(r, seller)).filter((r) => {
-            const n = stageNumber(r.stage || r.deal_stage || r.dealStage);
-            return n != null && n >= 5 && n <= 6 && operatingDateOnOrBefore(r.intro_date || r.start_date, endDate);
-            }).length;
+            return operatingUniqueRows(rowsForCount.filter((r) => operatingSellerInScope(r, seller)).filter((r) => {
+              const n = stageNumber(r.stage || r.deal_stage || r.dealStage);
+              return n != null && n >= 5 && n <= 6;
+            }));
           };
-          const late = lateStageCount(weekEnd, snapshotData);
-          if (idx === 0) return { text: money.format(late), status: 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`] };
+          const contributors = lateStageRows(snapshotData);
+          const late = contributors.length;
+          if (idx === 0) {
+            return {
+              text: money.format(late),
+              status: 'neutral',
+              details: [`${operatingSnapshotLabel(snapshot)}`],
+              rows: contributors.map((r) => operatingDetailRow(r, 'Stage 5-6 in selected snapshot')),
+            };
+          }
           const prevSnapshot = snapshots[idx - 1] || {};
-          const prevN = lateStageCount(prevSnapshot.weekEnd || operatingWeekEnd(weeks[idx - 1]), prevSnapshot.dataset || data);
-          return { text: money.format(late), status: late >= prevN ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Prior week: ${money.format(prevN)}`] };
+          const prevN = lateStageRows(prevSnapshot.dataset || data).length;
+          return {
+            text: money.format(late),
+            status: late >= prevN ? 'good' : 'bad',
+            details: [`${operatingSnapshotLabel(snapshot)}`, `Prior week: ${money.format(prevN)}`],
+            rows: contributors.map((r) => operatingDetailRow(r, 'Stage 5-6 in selected snapshot')),
+          };
         }
         if (metricId === 7) {
           let lastWin = null;
@@ -9008,9 +9148,18 @@
             if (!d || d.getTime() > weekEnd.getTime()) return;
             if (!lastWin || d.getTime() > lastWin.getTime()) lastWin = d;
           });
-          if (!lastWin) return { text: '-', status: 'bad' };
+          if (!lastWin) return { text: '-', status: 'bad', rows: [] };
           const days = Math.floor((weekEnd.getTime() - lastWin.getTime()) / 86400000);
-          return { text: money.format(days), status: days <= 30 ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Last won start date: ${lastWin.toISOString().slice(0, 10)}`] };
+          const contributors = operatingUniqueRows(wonRows.filter((r) => {
+            const d = parseIsoLocalDate(r.start_date || r.startDate || r.start);
+            return d && d.getTime() === lastWin.getTime();
+          }));
+          return {
+            text: money.format(days),
+            status: days <= 30 ? 'good' : 'bad',
+            details: [`${operatingSnapshotLabel(snapshot)}`, `Last won start date: ${lastWin.toISOString().slice(0, 10)}`],
+            rows: contributors.map((r) => operatingDetailRow(r, 'Most recent won Start Date on or before week end')),
+          };
         }
         return { text: '-', status: 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`] };
       };
@@ -9027,14 +9176,25 @@
           const cell = valueFor(metric.id, snapshot, idx);
           td.innerHTML = operatingCellHtml(cell);
           td.title = Array.isArray(cell.details) ? cell.details.filter(Boolean).join('\n') : operatingSnapshotLabel(snapshot);
+          td.classList.add('forecast-clickable');
+          td.addEventListener('click', () => {
+            const title = `${metric.id}. ${metric.label} | Wk of ${operatingWeekLabel(snapshot.weekStart)} | ${seller}`;
+            const meta = [
+              `${money.format((cell.rows || []).length)} row(s)`,
+              operatingSnapshotLabel(snapshot),
+              ...(Array.isArray(cell.details) ? cell.details.slice(1) : []),
+            ].filter(Boolean).join(' | ');
+            renderOperatingDetailTable(title, cell.rows || [], meta);
+          });
           tr.appendChild(td);
         });
         body.appendChild(tr);
       });
 
       if (foot) {
-        foot.textContent = 'Assumptions: each weekly column uses the saved refresh snapshot closest to that week ending date; if multiple refreshes exist on that date, the latest refresh is used. Revenue/new logos/wins use Start Date and require stage = Won; intros and intro-to-qualification conversion use Intro Meeting Date.';
+        foot.textContent = 'Assumptions: weekly columns are fixed 7-day windows anchored on Jan 1, 2026. Each column uses the saved refresh snapshot closest to that week ending date; if multiple refreshes exist on that date, the latest refresh is used. Revenue/new logos/wins use Start Date and require stage = Won. Intro metrics use Intro Meeting Date and exclude No Show / Reschedule. Late-stage deals are stage 5-6 rows in the selected snapshot.';
       }
+      renderOperatingDetailTable('Operating Metric Detail', [], 'Click any metric cell to see the underlying rows.');
     }
 
     function forecastTargetForScope(scope, quarterLabel) {
