@@ -3879,8 +3879,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.16';
+    const APP_VERSION = 'v1.1.17';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.17', date: '2026-04-30', commit: '-', changes: 'Fixed won/loss stage detection so Latent Pool - Monthly is not misclassified as Won because of its numeric 7 prefix.' },
       { version: 'v1.1.16', date: '2026-04-30', commit: '-', changes: 'Tightened Weekly Operating Metrics: fixed seller target lookup, excluded no-show/reschedule from intro metrics, clarified week labels, counted late-stage snapshot state, and added click-through detail rows.' },
       { version: 'v1.1.15', date: '2026-04-30', commit: '-', changes: 'Changed Weekly Operating Metrics to use the closest saved refresh snapshot per week, with latest same-day refresh tie-breaks and logo details for weekly won-logo counts.' },
       { version: 'v1.1.14', date: '2026-04-30', commit: '-', changes: 'Added Weekly Operating Metrics tab for metrics 1-7 with seller filter, weekly columns from Jan 1 2026, and red/green target status.' },
@@ -9266,14 +9267,16 @@
 
     function isWonStage(stageRaw) {
       const s = String(stageRaw || '').trim().toLowerCase();
-      const n = stageNumber(stageRaw);
-      return n === 7 || s === 'won' || s.includes('win');
+      const normalized = normalizeStage(String(stageRaw || '').trim());
+      const ns = String(normalized || '').trim().toLowerCase();
+      return ns === '7. win' || ns === 'won' || s === 'won' || s === 'win';
     }
 
     function isLostStage(stageRaw) {
       const s = String(stageRaw || '').trim().toLowerCase();
-      const n = stageNumber(stageRaw);
-      return n === 8 || s === 'lost' || s.includes('loss');
+      const normalized = normalizeStage(String(stageRaw || '').trim());
+      const ns = String(normalized || '').trim().toLowerCase();
+      return ns === '8. loss' || ns === 'lost' || s === 'lost' || s === 'loss';
     }
 
     function computeActualPhasingByIndustry(allDealsRows, sellerScope, introCutoffIso) {
