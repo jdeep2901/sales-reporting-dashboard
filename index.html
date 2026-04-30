@@ -3857,8 +3857,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.14';
+    const APP_VERSION = 'v1.1.15';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.15', date: '2026-04-30', commit: '-', changes: 'Changed Weekly Operating Metrics to use the closest saved refresh snapshot per week, with latest same-day refresh tie-breaks and logo details for weekly won-logo counts.' },
       { version: 'v1.1.14', date: '2026-04-30', commit: '-', changes: 'Added Weekly Operating Metrics tab for metrics 1-7 with seller filter, weekly columns from Jan 1 2026, and red/green target status.' },
       { version: 'v1.1.13', date: '2026-04-21', commit: '-', changes: 'Security hardening: stopped returning password-hash material to the browser and moved admin user create/delete/reset to dedicated backend RPCs.' },
       { version: 'v1.1.12', date: '2026-02-12', commit: '-', changes: 'Admin users table: added Delete User action with backend credential removal and safety guards.' },
@@ -3983,6 +3984,7 @@
     let scorecardCompareCurrentIdState = null;
     let scorecardComparePrevIdState = null;
     let operatingSelectedSeller = 'Overall';
+    let operatingRenderSeq = 0;
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
 	    let stageConvSelectedSeller = 'Overall';
@@ -8801,12 +8803,82 @@
       return `<span class="operating-cell ${status}">${text}</span>`;
     }
 
-    function renderOperatingMetrics(data) {
+    function operatingDateOnly(dateLike) {
+      if (!dateLike) return null;
+      const d = parseDateOrNow(dateLike);
+      if (!d) return null;
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+    }
+
+    function operatingVersionCreatedAt(versionMeta) {
+      if (!versionMeta || !versionMeta.created_at) return null;
+      const d = parseDateOrNow(versionMeta && versionMeta.created_at);
+      return d && !Number.isNaN(d.getTime()) ? d : null;
+    }
+
+    function operatingClosestVersionMeta(weekEnd) {
+      const versions = Array.isArray(versionsMetaState) ? versionsMetaState : [];
+      const weekDay = operatingDateOnly(weekEnd);
+      if (!weekDay || !versions.length) return null;
+      let best = null;
+      versions.forEach((v) => {
+        const createdAt = operatingVersionCreatedAt(v);
+        const createdDay = operatingDateOnly(v && v.created_at);
+        if (!createdAt || !createdDay) return;
+        const distance = Math.abs(createdDay.getTime() - weekDay.getTime());
+        const score = {
+          meta: v,
+          distance,
+          createdAtMs: createdAt.getTime(),
+        };
+        if (!best || score.distance < best.distance || (score.distance === best.distance && score.createdAtMs > best.createdAtMs)) {
+          best = score;
+        }
+      });
+      return best ? best.meta : null;
+    }
+
+    async function operatingSnapshotsForWeeks(data, weeks) {
+      const out = [];
+      const byId = new Map();
+      weeks.forEach((weekStart) => {
+        const weekEnd = operatingWeekEnd(weekStart);
+        const meta = operatingClosestVersionMeta(weekEnd);
+        const id = meta && meta.id ? String(meta.id) : null;
+        out.push({ weekStart, weekEnd, meta, id, dataset: id ? null : data });
+        if (id && !byId.has(id)) byId.set(id, meta);
+      });
+      await Promise.all(Array.from(byId.keys()).map(async (id) => {
+        try {
+          const payload = await fetchVersionDataCached(id);
+          const ds = payload && payload.dataset ? payload.dataset : null;
+          out.forEach((entry) => {
+            if (entry.id === id) entry.dataset = ds || data;
+          });
+        } catch (_) {
+          out.forEach((entry) => {
+            if (entry.id === id) entry.dataset = data;
+          });
+        }
+      }));
+      out.forEach((entry) => {
+        if (!entry.dataset) entry.dataset = data;
+      });
+      return out;
+    }
+
+    function operatingSnapshotLabel(entry) {
+      if (!entry || !entry.meta) return 'current in-memory dataset';
+      return `snapshot ${fmtTs(entry.meta.created_at)}`;
+    }
+
+    async function renderOperatingMetrics(data) {
       const sellerEl = document.getElementById('operating-seller');
       const head = document.getElementById('operating-head-row');
       const body = document.getElementById('operating-body');
       const foot = document.getElementById('operating-footnote');
       if (!sellerEl || !head || !body) return;
+      const renderSeq = ++operatingRenderSeq;
 
       const sellers = ['Overall', ...((Array.isArray(data && data.sellers) ? data.sellers : [])
         .filter((s) => s && s !== 'All (unique deals)'))];
@@ -8821,20 +8893,23 @@
       operatingSelectedSeller = sellers.includes(current) ? current : 'Overall';
       sellerEl.value = operatingSelectedSeller;
 
-      const rows = Array.isArray(data && data.all_deals_rows) ? data.all_deals_rows : [];
       const scoreAsOf = (((data || {}).scorecard_summary || {}).as_of_date)
         || (((data || {}).scorecard || {}).as_of_date)
+        || (((versionsMetaState || [])[0] || {}).created_at)
         || new Date().toISOString().slice(0, 10);
       const weeks = operatingWeekStarts('2026-01-01', scoreAsOf);
       const seller = operatingSelectedSeller;
       const sellerCount = seller === 'Overall' ? operatingSellerCount(data) : 1;
-      const scopedRows = rows.filter((r) => operatingSellerInScope(r, seller));
-      const wonRows = scopedRows.filter((r) => isWonStage(r.stage || r.deal_stage || r.dealStage));
-      const openRows = scopedRows.filter((r) => {
-        const stageValue = r.stage || r.deal_stage || r.dealStage;
-        const n = stageNumber(stageValue);
-        return n != null && n >= 1 && n <= 6 && !isWonStage(stageValue) && !isLostStage(stageValue);
-      });
+
+      head.innerHTML = '';
+      body.innerHTML = '';
+      head.appendChild(makeCell('th', 'Metric'));
+      weeks.forEach((w) => head.appendChild(makeCell('th', operatingWeekLabel(w))));
+      const loading = document.createElement('tr');
+      const loadingCell = makeCell('td', 'Loading weekly snapshots...');
+      loadingCell.colSpan = Math.max(1, weeks.length + 1);
+      loading.appendChild(loadingCell);
+      body.appendChild(loading);
 
       const metrics = [
         { id: 1, label: 'Revenue vs target (Q1 / Q2)', meta: 'Actual won $ vs prorated committed $', category: 'Revenue' },
@@ -8846,8 +8921,21 @@
         { id: 7, label: 'Days since last win per portfolio', meta: 'Green <= 30 days', category: 'Pipeline' },
       ];
 
-      const valueFor = (metricId, weekStart, idx) => {
-        const weekEnd = operatingWeekEnd(weekStart);
+      const snapshots = await operatingSnapshotsForWeeks(data, weeks);
+      if (renderSeq !== operatingRenderSeq) return;
+
+      const valueFor = (metricId, snapshot, idx) => {
+        const weekStart = snapshot.weekStart;
+        const weekEnd = snapshot.weekEnd;
+        const snapshotData = snapshot.dataset || data;
+        const rows = Array.isArray(snapshotData && snapshotData.all_deals_rows) ? snapshotData.all_deals_rows : [];
+        const scopedRows = rows.filter((r) => operatingSellerInScope(r, seller));
+        const wonRows = scopedRows.filter((r) => isWonStage(r.stage || r.deal_stage || r.dealStage));
+        const openRows = scopedRows.filter((r) => {
+          const stageValue = r.stage || r.deal_stage || r.dealStage;
+          const n = stageNumber(stageValue);
+          return n != null && n >= 1 && n <= 6 && !isWonStage(stageValue) && !isLostStage(stageValue);
+        });
         const qKey = operatingQuarterKeyFromDate(weekEnd);
         const qTarget = operatingQuarterTarget(seller, qKey);
         const targetToDate = qTarget * operatingQuarterProgress(weekEnd);
@@ -8858,16 +8946,21 @@
             return acc + operatingDealSize(r);
           }, 0);
           const status = !qTarget ? 'neutral' : (rev >= targetToDate ? 'good' : 'bad');
-          return { text: forecastNumberText(rev, true), status };
+          return { text: forecastNumberText(rev, true), status, details: [`${operatingSnapshotLabel(snapshot)}`, `Target to date: ${forecastNumberText(targetToDate, true)}`] };
         }
         if (metricId === 2) {
-          const logos = new Set();
+          const logos = new Map();
           wonRows.forEach((r) => {
             if (!operatingDateInWeek(r.start_date || r.startDate || r.start, weekStart)) return;
-            const logo = String(r.logo || r.account || r.deal || '').trim().toLowerCase();
-            if (logo) logos.add(logo);
+            const logo = String(r.logo || r.account || r.deal || '').trim();
+            if (logo) logos.set(logo.toLowerCase(), logo);
           });
-          return { text: money.format(logos.size), status: logos.size > 0 ? 'good' : 'bad' };
+          const names = Array.from(logos.values()).sort((a, b) => a.localeCompare(b));
+          return {
+            text: money.format(logos.size),
+            status: logos.size > 0 ? 'good' : 'bad',
+            details: [`${operatingSnapshotLabel(snapshot)}`, names.length ? `Won logo(s): ${names.join(', ')}` : 'No won logos in this week'],
+          };
         }
         if (metricId === 3) {
           const ev = openRows.reduce((acc, r) => {
@@ -8877,12 +8970,12 @@
             return acc + operatingStageEv(r);
           }, 0);
           const coverage = qTarget > 0 ? ev / qTarget : 0;
-          return { text: qTarget ? `${coverage.toFixed(1)}x` : '-', status: qTarget ? (coverage >= 2.5 ? 'good' : 'bad') : 'neutral' };
+          return { text: qTarget ? `${coverage.toFixed(1)}x` : '-', status: qTarget ? (coverage >= 2.5 ? 'good' : 'bad') : 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`, `Weighted EV: ${forecastNumberText(ev, true)}`] };
         }
         if (metricId === 4) {
           const intros = scopedRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart)).length;
           const target = 3 * sellerCount;
-          return { text: money.format(intros), status: intros >= target ? 'good' : 'bad' };
+          return { text: money.format(intros), status: intros >= target ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Target: ${money.format(target)}`] };
         }
         if (metricId === 5) {
           const introCohort = scopedRows.filter((r) => operatingDateInWeek(r.intro_date, weekStart));
@@ -8892,17 +8985,21 @@
           }).length;
           const pct = introCohort.length ? (reached / introCohort.length) : null;
           const status = pct == null ? 'neutral' : (pct >= 0.50 ? 'good' : (pct < 0.40 ? 'bad' : 'neutral'));
-          return { text: pct == null ? '-' : `${(pct * 100).toFixed(0)}%`, status };
+          return { text: pct == null ? '-' : `${(pct * 100).toFixed(0)}%`, status, details: [`${operatingSnapshotLabel(snapshot)}`, `${money.format(reached)} of ${money.format(introCohort.length)} intros reached qualification+`] };
         }
         if (metricId === 6) {
-          const lateStageCount = (endDate) => openRows.filter((r) => {
+          const lateStageCount = (endDate, datasetForCount) => {
+            const rowsForCount = Array.isArray(datasetForCount && datasetForCount.all_deals_rows) ? datasetForCount.all_deals_rows : [];
+            return rowsForCount.filter((r) => operatingSellerInScope(r, seller)).filter((r) => {
             const n = stageNumber(r.stage || r.deal_stage || r.dealStage);
             return n != null && n >= 5 && n <= 6 && operatingDateOnOrBefore(r.intro_date || r.start_date, endDate);
-          }).length;
-          const late = lateStageCount(weekEnd);
-          if (idx === 0) return { text: money.format(late), status: 'neutral' };
-          const prevN = lateStageCount(operatingWeekEnd(weeks[idx - 1]));
-          return { text: money.format(late), status: late >= prevN ? 'good' : 'bad' };
+            }).length;
+          };
+          const late = lateStageCount(weekEnd, snapshotData);
+          if (idx === 0) return { text: money.format(late), status: 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`] };
+          const prevSnapshot = snapshots[idx - 1] || {};
+          const prevN = lateStageCount(prevSnapshot.weekEnd || operatingWeekEnd(weeks[idx - 1]), prevSnapshot.dataset || data);
+          return { text: money.format(late), status: late >= prevN ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Prior week: ${money.format(prevN)}`] };
         }
         if (metricId === 7) {
           let lastWin = null;
@@ -8913,31 +9010,30 @@
           });
           if (!lastWin) return { text: '-', status: 'bad' };
           const days = Math.floor((weekEnd.getTime() - lastWin.getTime()) / 86400000);
-          return { text: money.format(days), status: days <= 30 ? 'good' : 'bad' };
+          return { text: money.format(days), status: days <= 30 ? 'good' : 'bad', details: [`${operatingSnapshotLabel(snapshot)}`, `Last won start date: ${lastWin.toISOString().slice(0, 10)}`] };
         }
-        return { text: '-', status: 'neutral' };
+        return { text: '-', status: 'neutral', details: [`${operatingSnapshotLabel(snapshot)}`] };
       };
 
-      head.innerHTML = '';
       body.innerHTML = '';
-      head.appendChild(makeCell('th', 'Metric'));
-      weeks.forEach((w) => head.appendChild(makeCell('th', operatingWeekLabel(w))));
 
       metrics.forEach((metric) => {
         const tr = document.createElement('tr');
         const name = makeCell('td', '');
         name.innerHTML = `${metric.id}. ${metric.label}<span class="metric-meta">${metric.category} | ${metric.meta}</span>`;
         tr.appendChild(name);
-        weeks.forEach((w, idx) => {
+        snapshots.forEach((snapshot, idx) => {
           const td = makeCell('td', '');
-          td.innerHTML = operatingCellHtml(valueFor(metric.id, w, idx));
+          const cell = valueFor(metric.id, snapshot, idx);
+          td.innerHTML = operatingCellHtml(cell);
+          td.title = Array.isArray(cell.details) ? cell.details.filter(Boolean).join('\n') : operatingSnapshotLabel(snapshot);
           tr.appendChild(td);
         });
         body.appendChild(tr);
       });
 
       if (foot) {
-        foot.textContent = 'Assumptions: revenue/new logos/wins use Start Date; intros and intro-to-qualification conversion use Intro Meeting Date; weighted EV uses existing app stage probabilities; stage 5-6 means Proposal/Contracting in the current snapshot.';
+        foot.textContent = 'Assumptions: each weekly column uses the saved refresh snapshot closest to that week ending date; if multiple refreshes exist on that date, the latest refresh is used. Revenue/new logos/wins use Start Date and require stage = Won; intros and intro-to-qualification conversion use Intro Meeting Date.';
       }
     }
 
