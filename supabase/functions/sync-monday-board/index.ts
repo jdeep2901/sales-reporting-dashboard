@@ -2332,7 +2332,9 @@ Deno.serve(async (req) => {
       p_password: password,
       p_likelihood: st.likelihood || {},
       p_quarter_targets: st.quarter_targets || {},
-      p_users: st.users || {},
+      // User credentials now flow through dedicated admin RPCs and should not be
+      // included in shared dashboard state writes.
+      p_users: null,
       p_settings: settings,
       p_dataset: dataset,
       p_active_version_id: versionId,
