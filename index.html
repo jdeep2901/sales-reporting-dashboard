@@ -3879,8 +3879,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.18';
+    const APP_VERSION = 'v1.1.19';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.19', date: '2026-05-01', commit: '-', changes: 'Clarified Monday refresh status messaging so Data QA failure is shown as a post-refresh quality warning, not a failed pull.' },
       { version: 'v1.1.18', date: '2026-04-30', commit: '-', changes: 'Replaced weekly revenue metric with actuals-phased pipeline EV using Akshay Pharma conversion phasing, and surfaced the conversion curve in Operating Metrics footnotes.' },
       { version: 'v1.1.17', date: '2026-04-30', commit: '-', changes: 'Fixed won/loss stage detection so Latent Pool - Monthly is not misclassified as Won because of its numeric 7 prefix.' },
       { version: 'v1.1.16', date: '2026-04-30', commit: '-', changes: 'Tightened Weekly Operating Metrics: fixed seller target lookup, excluded no-show/reschedule from intro metrics, clarified week labels, counted late-stage snapshot state, and added click-through detail rows.' },
@@ -10905,8 +10906,11 @@
             if (btn) btn.disabled = true;
             showAdminSyncMessage('Refreshing from Monday.com...');
             const out = await refreshFromMonday(boardRaw, versionName);
-            const qaTxt = out && out.qa_status ? ` QA: ${String(out.qa_status).toUpperCase()}${Number.isFinite(Number(out.qa_score)) ? ` (${Number(out.qa_score).toFixed(0)})` : ''}.` : '';
-            showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}.${qaTxt} Reloading...`);
+            const qaStatus = out && out.qa_status ? String(out.qa_status).toUpperCase() : '';
+            const qaScore = Number.isFinite(Number(out && out.qa_score)) ? ` (${Number(out.qa_score).toFixed(0)})` : '';
+            const qaTxt = qaStatus ? ` Data QA: ${qaStatus}${qaScore}; refresh still completed.` : '';
+            const warnTxt = out && Array.isArray(out.warnings) && out.warnings.length ? ` Warning: ${out.warnings.join(' ')}` : '';
+            showAdminSyncMessage(`Sync complete. Pulled ${money.format(Number(out.item_count || 0))} items from board ${out.board_name || boardId}.${qaTxt}${warnTxt} Reloading...`);
             setTimeout(() => window.location.reload(), 600);
           } catch (e) {
             showAdminSyncMessage(e.message || 'Sync failed.');

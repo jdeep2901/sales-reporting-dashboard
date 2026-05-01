@@ -2327,42 +2327,39 @@ Deno.serve(async (req) => {
     if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
     const versionId = inserted.data.id;
 
-    const prune = await supabase.rpc("save_dashboard_state", {
-      p_username: username,
-      p_password: password,
-      p_likelihood: st.likelihood || {},
-      p_quarter_targets: st.quarter_targets || {},
-      // User credentials now flow through dedicated admin RPCs and should not be
-      // included in shared dashboard state writes.
-      p_users: null,
-      p_settings: settings,
-      p_dataset: dataset,
-      p_active_version_id: versionId,
-    });
-    if (prune.error) return j({ error: prune.error.message }, 500);
-
-    const upd = await supabase.from("dashboard_state")
-      .update({ latest_version_id: versionId, active_version_id: versionId })
+    const stateUpdatedAt = new Date().toISOString();
+    const stateUpdate = await supabase.from("dashboard_state")
+      .update({
+        likelihood: st.likelihood || {},
+        quarter_targets: st.quarter_targets || {},
+        settings,
+        dataset,
+        active_version_id: versionId,
+        latest_version_id: versionId,
+        dataset_refreshed_at: stateUpdatedAt,
+        updated_at: stateUpdatedAt,
+      })
       .eq("id", "main");
-    if (upd.error) return j({ error: upd.error.message }, 500);
+    if (stateUpdate.error) return j({ error: stateUpdate.error.message }, 500);
 
+    const warnings: string[] = [];
     const old = await supabase
       .from("dashboard_versions")
       .select("id")
       .order("created_at", { ascending: false })
       .range(52, 10000);
-    if (old.error) return j({ error: old.error.message }, 500);
+    if (old.error) warnings.push(`Snapshot cleanup skipped: ${old.error.message}`);
     const oldIds = (old.data || []).map((x: any) => x.id).filter(Boolean);
     if (oldIds.length) {
       const del = await supabase.from("dashboard_versions").delete().in("id", oldIds);
-      if (del.error) return j({ error: del.error.message }, 500);
+      if (del.error) warnings.push(`Snapshot cleanup skipped: ${del.error.message}`);
     }
 
     const latestState = await supabase.rpc("get_dashboard_state", {
       p_username: username,
       p_password: password,
     });
-    if (latestState.error) return j({ error: latestState.error.message }, 500);
+    if (latestState.error) warnings.push(`Post-sync reload skipped: ${latestState.error.message}`);
     const out = Array.isArray(latestState.data) ? latestState.data[0] : latestState.data;
     return j({
       ok: true,
@@ -2373,7 +2370,8 @@ Deno.serve(async (req) => {
       qa_score: qa.score,
       qa_summary: qa.summary,
       version_id: versionId,
-      state: out,
+      warnings,
+      state: latestState.error ? null : out,
     });
   } catch (e) {
     return j({ error: (e as Error).message || "Unexpected error" }, 500);
