@@ -1332,6 +1332,13 @@ async function buildDataset(
   const functionCol = functionPick.best || pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function", (t) => t.includes("function")]);
   const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
   const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
+  const techStackCol = pickColumnId(columns, [(t) => t.includes("tech stack"), (t) => t.includes("technology stack")]);
+  const partnerSourceTypeCol = pickColumnId(columns, [(t) => t.includes("partner source type"), (t) => t.includes("partner") && t.includes("source")]);
+  const alliancesIntroCol = pickColumnId(columns, [(t) => t.includes("alliance") && (t.includes("team") || t.includes("intro")), (t) => t.includes("alliances team")]);
+  const partnerRegisteredCol = pickColumnId(columns, [(t) => t.includes("deal registered") && t.includes("portal"), (t) => t.includes("registered") && t.includes("partner")]);
+  const partnerApprovedCol = pickColumnId(columns, [(t) => t.includes("deal approved") && t.includes("partner"), (t) => t.includes("approved") && t.includes("portal")]);
+  const partnerFundedCol = pickColumnId(columns, [(t) => t.includes("partner funded"), (t) => t.includes("funded") && t.includes("partner")]);
+  const partnerAeCol = pickColumnId(columns, [(t) => t === "partner ae", (t) => t.includes("partner ae"), (t) => t.includes("partner account executive")]);
   const adjContractNumCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
   const adjContractCol = pickColumnId(columns, [(t) => t.includes("adjusted") && t.includes("contract")]);
   const tcvCol = pickColumnId(columns, [(t) => t.includes("tcv"), (t) => t.includes("contract value")]);
@@ -1927,6 +1934,13 @@ async function buildDataset(
     const bizFn = primaryToken(bizFnRaw);
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
     const revenueSource = byIdSmartText(item, revenueSourceCol);
+    const techStack = byIdSmartText(item, techStackCol);
+    const partnerSourceType = byIdSmartText(item, partnerSourceTypeCol);
+    const alliancesTeamIntro = byIdSmartText(item, alliancesIntroCol);
+    const partnerRegistered = byIdSmartText(item, partnerRegisteredCol);
+    const partnerApproved = byIdSmartText(item, partnerApprovedCol);
+    const partnerFunded = byIdSmartText(item, partnerFundedCol);
+    const partnerAe = byIdSmartText(item, partnerAeCol);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -1947,6 +1961,13 @@ async function buildDataset(
       function: bizFn,
       source_of_lead: sourceOfLead,
       revenue_source_mapping: revenueSource,
+      tech_stack: techStack,
+      partner_source_type: partnerSourceType,
+      alliances_team_intro: alliancesTeamIntro,
+      partner_registered_on_portal: partnerRegistered,
+      partner_approved_on_portal: partnerApproved,
+      partner_funded: partnerFunded,
+      partner_ae: partnerAe,
       channel,
     });
     if (stageNorm === "won" || stageNorm === "lost") {
@@ -2049,6 +2070,13 @@ async function buildDataset(
         function: functionCol,
         source_of_lead: sourceLeadCol,
         revenue_source_mapping: revenueSourceCol,
+        tech_stack: techStackCol,
+        partner_source_type: partnerSourceTypeCol,
+        alliances_team_intro: alliancesIntroCol,
+        partner_registered_on_portal: partnerRegisteredCol,
+        partner_approved_on_portal: partnerApprovedCol,
+        partner_funded: partnerFundedCol,
+        partner_ae: partnerAeCol,
       },
       column_pick_debug: {
         industry_candidates: industryCandidates,
@@ -2252,6 +2280,13 @@ Deno.serve(async (req) => {
     const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function", (t: string) => t.includes("function")]);
     const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
     const revenueSourceCol = pick([(t: string) => t.includes("revenue source mapping"), (t: string) => t.includes("revenue source")]);
+    const techStackCol = pick([(t: string) => t.includes("tech stack"), (t: string) => t.includes("technology stack")]);
+    const partnerSourceTypeCol = pick([(t: string) => t.includes("partner source type"), (t: string) => t.includes("partner") && t.includes("source")]);
+    const alliancesIntroCol = pick([(t: string) => t.includes("alliance") && (t.includes("team") || t.includes("intro")), (t: string) => t.includes("alliances team")]);
+    const partnerRegisteredCol = pick([(t: string) => t.includes("deal registered") && t.includes("portal"), (t: string) => t.includes("registered") && t.includes("partner")]);
+    const partnerApprovedCol = pick([(t: string) => t.includes("deal approved") && t.includes("partner"), (t: string) => t.includes("approved") && t.includes("portal")]);
+    const partnerFundedCol = pick([(t: string) => t.includes("partner funded"), (t: string) => t.includes("funded") && t.includes("partner")]);
+    const partnerAeCol = pick([(t: string) => t === "partner ae", (t: string) => t.includes("partner ae"), (t: string) => t.includes("partner account executive")]);
     const adjContractNumCol = pick([(t: string) => t.includes("adjusted") && t.includes("contract") && (t.includes("num") || t.includes("number"))]);
     const adjContractCol = pick([(t: string) => t.includes("adjusted") && t.includes("contract")]);
     const tcvCol = pick([(t: string) => t.includes("tcv"), (t: string) => t.includes("contract value")]);
@@ -2261,6 +2296,8 @@ Deno.serve(async (req) => {
     ]);
     addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
     addIf(industryCol); addIf(businessGroupCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
+    addIf(techStackCol); addIf(partnerSourceTypeCol); addIf(alliancesIntroCol); addIf(partnerRegisteredCol);
+    addIf(partnerApprovedCol); addIf(partnerFundedCol); addIf(partnerAeCol);
     addIf(adjContractNumCol); addIf(adjContractCol); addIf(tcvCol);
     for (const id of durationCandidateCols) addIf(id);
     if (accountsRelationColId) addIf(accountsRelationColId);
