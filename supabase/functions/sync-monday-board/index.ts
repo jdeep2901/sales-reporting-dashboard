@@ -139,30 +139,6 @@ function smartTextFromMondayColumnValue(
   }
 }
 
-function mondayColumnSnapshot(item: MondayItem, columns: MondayColumn[]) {
-  const valuesById: Record<string, { text: string; display_value: string; value: string | null }> = {};
-  for (const cv of item.column_values || []) {
-    valuesById[cv.id] = {
-      text: String(cv.text || ""),
-      display_value: String(cv.display_value || ""),
-      value: cv.value ?? null,
-    };
-  }
-  const out: Record<string, unknown> = {};
-  for (const col of columns || []) {
-    const cv = valuesById[col.id] || { text: "", display_value: "", value: null };
-    const smart = smartTextFromMondayColumnValue(cv.text, cv.display_value, cv.value);
-    if (!cv.text && !cv.display_value && !smart && !cv.value) continue;
-    out[col.id] = {
-      text: cv.text,
-      display_value: cv.display_value,
-      smart_text: smart,
-      value: cv.value,
-    };
-  }
-  return out;
-}
-
 async function sha256Hex(text: string): Promise<string> {
   const enc = new TextEncoder();
   const bytes = enc.encode(text);
@@ -1232,142 +1208,6 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
   return items;
 }
 
-async function fetchBoardItemsBasic(token: string, boardId: number, colIds: string[]) {
-  const firstQuery = `
-    query ($boardId: [ID!], $colIds: [String!]) {
-      boards(ids: $boardId) {
-        items_page(limit: 500) {
-          cursor
-          items {
-            id
-            name
-            column_values(ids: $colIds) {
-              id
-              text
-              value
-            }
-          }
-        }
-      }
-    }
-  `;
-  const first = await mondayGraphql(token, firstQuery, { boardId: [boardId], colIds });
-  const board = first?.boards?.[0];
-  if (!board) throw new Error(`Board ${boardId} not found (items).`);
-
-  const items: MondayItem[] = [...(board.items_page?.items || [])];
-  let cursor: string | null = board.items_page?.cursor || null;
-
-  const nextQuery = `
-    query ($cursor: String!, $colIds: [String!]) {
-      next_items_page(limit: 500, cursor: $cursor) {
-        cursor
-        items {
-          id
-          name
-          column_values(ids: $colIds) {
-            id
-            text
-            value
-          }
-        }
-      }
-    }
-  `;
-
-  while (cursor) {
-    const next = await mondayGraphql(token, nextQuery, { cursor, colIds });
-    const page = next?.next_items_page;
-    if (!page) break;
-    items.push(...(page.items || []));
-    cursor = page.cursor || null;
-  }
-  return items;
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  const n = Math.max(1, Number(size || 1));
-  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
-  return out;
-}
-
-async function fetchBoardItemsMerged(token: string, boardId: number, colIds: string[], chunkSize = 20) {
-  const ids = Array.from(new Set((colIds || []).filter(Boolean)));
-  if (!ids.length) return fetchBoardItems(token, boardId, ids);
-  const chunks = chunkArray(ids, chunkSize);
-  const byItemId = new Map<string, MondayItem>();
-  for (const chunk of chunks) {
-    const pageItems = await fetchBoardItems(token, boardId, chunk);
-    for (const item of pageItems) {
-      const existing = byItemId.get(String(item.id));
-      if (!existing) {
-        byItemId.set(String(item.id), {
-          id: item.id,
-          name: item.name,
-          column_values: [...(item.column_values || [])],
-        });
-      } else {
-        const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
-        for (const cv of item.column_values || []) cvById.set(cv.id, cv);
-        existing.column_values = Array.from(cvById.values());
-      }
-    }
-  }
-  return Array.from(byItemId.values());
-}
-
-async function fetchBoardItemsMergedBasic(token: string, boardId: number, colIds: string[], chunkSize = 25) {
-  const ids = Array.from(new Set((colIds || []).filter(Boolean)));
-  if (!ids.length) return fetchBoardItemsBasic(token, boardId, ids);
-  const chunks = chunkArray(ids, chunkSize);
-  const byItemId = new Map<string, MondayItem>();
-  for (const chunk of chunks) {
-    const pageItems = await fetchBoardItemsBasic(token, boardId, chunk);
-    for (const item of pageItems) {
-      const existing = byItemId.get(String(item.id));
-      if (!existing) {
-        byItemId.set(String(item.id), {
-          id: item.id,
-          name: item.name,
-          column_values: [...(item.column_values || [])],
-        });
-      } else {
-        const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
-        for (const cv of item.column_values || []) cvById.set(cv.id, cv);
-        existing.column_values = Array.from(cvById.values());
-      }
-    }
-  }
-  return Array.from(byItemId.values());
-}
-
-function mergeMondayItemSets(baseItems: MondayItem[], overlayItems: MondayItem[]) {
-  const byItemId = new Map<string, MondayItem>();
-  for (const item of baseItems || []) {
-    byItemId.set(String(item.id), {
-      id: item.id,
-      name: item.name,
-      column_values: [...(item.column_values || [])],
-    });
-  }
-  for (const item of overlayItems || []) {
-    const existing = byItemId.get(String(item.id));
-    if (!existing) {
-      byItemId.set(String(item.id), {
-        id: item.id,
-        name: item.name,
-        column_values: [...(item.column_values || [])],
-      });
-      continue;
-    }
-    const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
-    for (const cv of item.column_values || []) cvById.set(cv.id, cv);
-    existing.column_values = Array.from(cvById.values());
-  }
-  return Array.from(byItemId.values());
-}
-
 function initScorecard() {
   return {
     stage_counts: {} as Record<string, number>,
@@ -1490,6 +1330,14 @@ async function buildDataset(
   ]);
   const functionPick = pickBestColumnIdByFillRate(items, functionCandidates, (it, id) => byIdSmartText(it, id));
   const functionCol = functionPick.best || pickColumnId(columns, [(t) => t.includes("business function"), (t) => t === "function", (t) => t.includes("function")]);
+  const problemSpaceCol = pickColumnId(columns, [(t) => t.includes("problem space"), (t) => t.includes("problem") && t.includes("space")]);
+  const useCaseCol = pickColumnId(columns, [(t) => t.includes("use case"), (t) => t.includes("use-case"), (t) => t.includes("use") && t.includes("case")]);
+  const nextMeetingDateCol = pickColumnId(columns, [
+    (t) => t.includes("next meeting") && t.includes("date"),
+    (t) => t === "next meeting",
+    (t) => t.includes("next meeting"),
+  ]);
+  const designationCol = pickColumnId(columns, [(t) => t.includes("designation"), (t) => t.includes("job title"), (t) => t === "title"]);
   const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
   const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
   const techStackCol = pickColumnId(columns, [(t) => t.includes("tech stack"), (t) => t.includes("technology stack")]);
@@ -1535,7 +1383,10 @@ async function buildDataset(
   const accountsRelationColFromSettings = (accountsBoardId ? findConnectColumnToBoard(columns, accountsBoardId) : null);
   const relFillPick = pickBestRelationColumnByFill(items, columns, relPredicate, 200);
   const accountsRelationColAuto = relFillPick.best || accountsRelationColFromSettings;
-  const accountsRelationColId = accountsRelationColPinned || relationColFromMirror || accountsRelationColAuto;
+  // Cross-board account joins are useful as a fallback, but they are expensive on the full Deals board.
+  // Keep normal refreshes inside Supabase worker limits by relying on Deals-board mirror values unless
+  // an admin explicitly pins the relation column in settings.
+  const accountsRelationColId = accountsRelationColPinned;
   const accountsRelationColMeta = accountsRelationColId ? {
     id: accountsRelationColId,
     title: colById[accountsRelationColId]?.title || null,
@@ -1622,7 +1473,8 @@ async function buildDataset(
   const contactsRelationColFromSettings = (contactsBoardId ? findConnectColumnToBoard(columns, contactsBoardId) : null);
   const contactsRelFillPick = pickBestRelationColumnByFill(items, columns, contactsRelPredicate, 200);
   const contactsRelationColAuto = contactsRelFillPick.best || contactsRelationColFromSettings;
-  const contactsRelationColId = contactsRelationColPinned || contactsRelationColFromMirror || contactsRelationColAuto;
+  // Same performance guard as Accounts: use the Business Group mirror on Deals by default.
+  const contactsRelationColId = contactsRelationColPinned;
 
   let contactsBusinessGroupColId: string | null = contactsBusinessGroupColPinned;
   const contactBizGroupById: Record<string, string> = {};
@@ -2073,6 +1925,7 @@ async function buildDataset(
     }
     const logo = primaryToken(logoRawText);
     // Prefer Contacts join-derived Business Group when available.
+    let businessGroupRaw = "";
     let bizFnRaw = "";
     if (contactsJoinEnabled && contactsRelationColId) {
       const fallback = contactsRelationValueByDealId ? contactsRelationValueByDealId[String(item.id)] : null;
@@ -2082,16 +1935,24 @@ async function buildDataset(
       const linked = extractLinkedItemIdsFromConnectValue(cv?.value || null);
       for (const cid of linked) {
         const v = contactBizGroupById[String(cid)] || "";
-        if (v && v.trim()) { bizFnRaw = v; break; }
+        if (v && v.trim()) { businessGroupRaw = v; bizFnRaw = v; break; }
       }
     }
-    if (!bizFnRaw || !String(bizFnRaw).trim()) bizFnRaw = byIdSmartText(item, bizGroupCol) || "";
+    if (!businessGroupRaw || !String(businessGroupRaw).trim()) businessGroupRaw = byIdSmartText(item, bizGroupCol) || "";
+    if (!bizFnRaw || !String(bizFnRaw).trim()) bizFnRaw = businessGroupRaw || "";
     if (!bizFnRaw || !String(bizFnRaw).trim()) bizFnRaw = byIdSmartText(item, functionCol) || "";
     if ((!bizFnRaw || !String(bizFnRaw).trim()) && functionValueByDealId && functionCol) {
       const fallback = functionValueByDealId[String(item.id)];
       if (fallback) bizFnRaw = smartTextFromMondayColumnValue(fallback.text, fallback.display_value, fallback.value);
     }
+    const businessGroup = primaryToken(businessGroupRaw);
     const bizFn = primaryToken(bizFnRaw);
+    const problemSpace = byIdSmartText(item, problemSpaceCol);
+    const useCase = byIdSmartText(item, useCaseCol);
+    const nextMeetingDateRaw = byIdDate(item, nextMeetingDateCol) || byIdSmartText(item, nextMeetingDateCol);
+    const nextMeetingDate = parseDate(nextMeetingDateRaw);
+    const nextMeetingDateIso = nextMeetingDate ? nextMeetingDate.toISOString().slice(0, 10) : null;
+    const designation = byIdSmartText(item, designationCol);
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
     const revenueSource = byIdSmartText(item, revenueSourceCol);
     const techStack = byIdSmartText(item, techStackCol);
@@ -2101,7 +1962,6 @@ async function buildDataset(
     const partnerApproved = byIdSmartText(item, partnerApprovedCol);
     const partnerFunded = byIdSmartText(item, partnerFundedCol);
     const partnerAe = byIdSmartText(item, partnerAeCol);
-    const mondayColumns = mondayColumnSnapshot(item, columns);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -2120,6 +1980,11 @@ async function buildDataset(
       industry,
       logo,
       function: bizFn,
+      business_group: businessGroup,
+      problem_space: problemSpace,
+      use_case: useCase,
+      next_meeting_date: nextMeetingDateIso,
+      designation,
       source_of_lead: sourceOfLead,
       revenue_source_mapping: revenueSource,
       tech_stack: techStack,
@@ -2129,7 +1994,6 @@ async function buildDataset(
       partner_approved_on_portal: partnerApproved,
       partner_funded: partnerFunded,
       partner_ae: partnerAe,
-      monday_columns: mondayColumns,
       channel,
     });
     if (stageNorm === "won" || stageNorm === "lost") {
@@ -2236,6 +2100,11 @@ async function buildDataset(
         industry: industryCol,
         logo: logoCol,
         function: functionCol,
+        business_group: bizGroupCol,
+        problem_space: problemSpaceCol,
+        use_case: useCaseCol,
+        next_meeting_date: nextMeetingDateCol,
+        designation: designationCol,
         source_of_lead: sourceLeadCol,
         revenue_source_mapping: revenueSourceCol,
         tech_stack: techStackCol,
@@ -2411,7 +2280,6 @@ Deno.serve(async (req) => {
     const password = String(body?.password || "");
     const boardId = boardIdFromInput(body?.board_id || body?.board_url);
     const versionName = String(body?.version_name || "").trim() || null;
-    const rawColumnsRequested = body?.raw_columns === true;
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!boardId) return j({ error: "board_id (or board URL) is required." }, 400);
 
@@ -2447,6 +2315,14 @@ Deno.serve(async (req) => {
     const businessGroupCol = pinnedBusinessGroupCol || pick([(t: string) => t.includes("business group")]);
     const logoCol = pick([(t: string) => t.includes("logo"), (t: string) => t.includes("account") || t.includes("company")]);
     const functionCol = pick([(t: string) => t.includes("business function"), (t: string) => t === "function", (t: string) => t.includes("function")]);
+    const problemSpaceCol = pick([(t: string) => t.includes("problem space"), (t: string) => t.includes("problem") && t.includes("space")]);
+    const useCaseCol = pick([(t: string) => t.includes("use case"), (t: string) => t.includes("use-case"), (t: string) => t.includes("use") && t.includes("case")]);
+    const nextMeetingDateCol = pick([
+      (t: string) => t.includes("next meeting") && t.includes("date"),
+      (t: string) => t === "next meeting",
+      (t: string) => t.includes("next meeting"),
+    ]);
+    const designationCol = pick([(t: string) => t.includes("designation"), (t: string) => t.includes("job title"), (t: string) => t === "title"]);
     const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
     const revenueSourceCol = pick([(t: string) => t.includes("revenue source mapping"), (t: string) => t.includes("revenue source")]);
     const techStackCol = pick([(t: string) => t.includes("tech stack"), (t: string) => t.includes("technology stack")]);
@@ -2464,31 +2340,19 @@ Deno.serve(async (req) => {
       ...pickMany([(t: string) => t.includes("duration"), (t: string) => t.includes("engagement") && t.includes("month"), (t: string) => t.includes("term") && t.includes("month"), (t: string) => t === "months"]),
     ]);
     addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
-    addIf(industryCol); addIf(businessGroupCol); addIf(logoCol); addIf(functionCol); addIf(sourceLeadCol); addIf(revenueSourceCol);
+    addIf(industryCol); addIf(businessGroupCol); addIf(logoCol); addIf(functionCol);
+    addIf(problemSpaceCol); addIf(useCaseCol); addIf(nextMeetingDateCol); addIf(designationCol);
+    addIf(sourceLeadCol); addIf(revenueSourceCol);
     addIf(techStackCol); addIf(partnerSourceTypeCol); addIf(alliancesIntroCol); addIf(partnerRegisteredCol);
     addIf(partnerApprovedCol); addIf(partnerFundedCol); addIf(partnerAeCol);
     addIf(adjContractNumCol); addIf(adjContractCol); addIf(tcvCol);
     for (const id of durationCandidateCols) addIf(id);
     if (accountsRelationColId) addIf(accountsRelationColId);
     if (contactsRelationColId) addIf(contactsRelationColId);
-    // Also include all relation/connect columns so we can auto-pick the right one by fill-rate.
-    for (const c of columns) {
-      const t = norm(c.type || '');
-      if (t.includes('relation') || t.includes('connect')) neededCandidates.add(c.id);
-    }
+    // Keep the primary board pull narrow. Relation columns are resolved from metadata/settings and
+    // refetched one-at-a-time only when needed; asking Monday for every connect column can time out.
 
-    const allColumnIds = columns.map((c: MondayColumn) => c.id).filter(Boolean);
-    let rawItems: MondayItem[] = [];
-    let rawMondayColumnsError: string | null = null;
-    if (rawColumnsRequested) {
-      try {
-        rawItems = await fetchBoardItemsBasic(mondayToken, boardId, allColumnIds.length ? allColumnIds : Array.from(neededCandidates));
-      } catch (e) {
-        rawMondayColumnsError = (e as Error).message || "Raw all-column fetch failed.";
-      }
-    }
-    const enrichedItems = await fetchBoardItems(mondayToken, boardId, Array.from(neededCandidates));
-    const items = rawItems.length ? mergeMondayItemSets(rawItems, enrichedItems) : enrichedItems;
+    const items = await fetchBoardItems(mondayToken, boardId, Array.from(neededCandidates));
 
     const dataset = await buildDataset(items, columns, boardId, meta.boardName, {
       industry_col_id: pinnedIndustryCol,
@@ -2501,15 +2365,6 @@ Deno.serve(async (req) => {
       contacts_relation_col_id: contactsRelationColId,
       monday_token: mondayToken,
     });
-    (dataset as Record<string, any>).meta ||= {};
-    (dataset as Record<string, any>).meta.raw_monday_columns = {
-      requested: rawColumnsRequested,
-      captured: rawItems.length > 0,
-      item_count: rawItems.length,
-      column_count: allColumnIds.length,
-      error: rawMondayColumnsError,
-      storage: rawItems.length ? "sparse per-row monday_columns keyed by column id; column metadata in meta.monday_columns_snapshot" : null,
-    };
     const datasetHash = await sha256Hex(JSON.stringify(dataset));
     const settings = {
       ...(st.settings || {}),
