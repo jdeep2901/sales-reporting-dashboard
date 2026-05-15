@@ -2379,25 +2379,9 @@ Deno.serve(async (req) => {
       .eq("id", "main");
     if (stateUpdate.error) return j({ error: stateUpdate.error.message }, 500);
 
-    const warnings: string[] = [];
-    const old = await supabase
-      .from("dashboard_versions")
-      .select("id")
-      .order("created_at", { ascending: false })
-      .range(52, 10000);
-    if (old.error) warnings.push(`Snapshot cleanup skipped: ${old.error.message}`);
-    const oldIds = (old.data || []).map((x: any) => x.id).filter(Boolean);
-    if (oldIds.length) {
-      const del = await supabase.from("dashboard_versions").delete().in("id", oldIds);
-      if (del.error) warnings.push(`Snapshot cleanup skipped: ${del.error.message}`);
-    }
-
-    const latestState = await supabase.rpc("get_dashboard_state", {
-      p_username: username,
-      p_password: password,
-    });
-    if (latestState.error) warnings.push(`Post-sync reload skipped: ${latestState.error.message}`);
-    const out = Array.isArray(latestState.data) ? latestState.data[0] : latestState.data;
+    // Keep the response intentionally small. Returning the full dashboard state
+    // after a Monday pull can push the Edge Function over gateway limits even
+    // after the snapshot is already saved and activated.
     return j({
       ok: true,
       board_id: String(boardId),
@@ -2407,8 +2391,7 @@ Deno.serve(async (req) => {
       qa_score: qa.score,
       qa_summary: qa.summary,
       version_id: versionId,
-      warnings,
-      state: latestState.error ? null : out,
+      state: null,
     });
   } catch (e) {
     return j({ error: (e as Error).message || "Unexpected error" }, 500);
