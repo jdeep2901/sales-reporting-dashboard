@@ -139,6 +139,31 @@ function smartTextFromMondayColumnValue(
   }
 }
 
+function mondayColumnSnapshot(item: MondayItem, columns: MondayColumn[]) {
+  const valuesById: Record<string, { text: string; display_value: string; value: string | null }> = {};
+  for (const cv of item.column_values || []) {
+    valuesById[cv.id] = {
+      text: String(cv.text || ""),
+      display_value: String(cv.display_value || ""),
+      value: cv.value ?? null,
+    };
+  }
+  const out: Record<string, unknown> = {};
+  for (const col of columns || []) {
+    const cv = valuesById[col.id] || { text: "", display_value: "", value: null };
+    out[col.id] = {
+      id: col.id,
+      title: col.title,
+      type: col.type,
+      text: cv.text,
+      display_value: cv.display_value,
+      smart_text: smartTextFromMondayColumnValue(cv.text, cv.display_value, cv.value),
+      value: cv.value,
+    };
+  }
+  return out;
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const enc = new TextEncoder();
   const bytes = enc.encode(text);
@@ -1941,6 +1966,7 @@ async function buildDataset(
     const partnerApproved = byIdSmartText(item, partnerApprovedCol);
     const partnerFunded = byIdSmartText(item, partnerFundedCol);
     const partnerAe = byIdSmartText(item, partnerAeCol);
+    const mondayColumns = mondayColumnSnapshot(item, columns);
     const channel = normalizeChannel(sourceOfLead, revenueSource);
     const ownerNorm = norm(owner);
     const matchedSellers = SELLERS.filter(([k]) => ownerNorm.includes(k)).map(([, l]) => l);
@@ -1968,6 +1994,7 @@ async function buildDataset(
       partner_approved_on_portal: partnerApproved,
       partner_funded: partnerFunded,
       partner_ae: partnerAe,
+      monday_columns: mondayColumns,
       channel,
     });
     if (stageNorm === "won" || stageNorm === "lost") {
@@ -2059,6 +2086,12 @@ async function buildDataset(
       source: "monday.com",
       monday_board_id: String(boardId),
       monday_board_name: boardName,
+      monday_columns_snapshot: columns.map((c) => ({
+        id: c.id,
+        title: c.title,
+        type: c.type,
+        settings_str: c.settings_str || null,
+      })),
       column_ids: {
         intro_date: introDateCol,
         start_date: startDateCol,
@@ -2308,7 +2341,10 @@ Deno.serve(async (req) => {
       if (t.includes('relation') || t.includes('connect')) neededCandidates.add(c.id);
     }
 
-    const items = await fetchBoardItems(mondayToken, boardId, Array.from(neededCandidates));
+    const allColumnIds = columns.map((c: MondayColumn) => c.id).filter(Boolean);
+    for (const id of allColumnIds) neededCandidates.add(id);
+
+    const items = await fetchBoardItems(mondayToken, boardId, allColumnIds.length ? allColumnIds : Array.from(neededCandidates));
 
     const dataset = await buildDataset(items, columns, boardId, meta.boardName, {
       industry_col_id: pinnedIndustryCol,
