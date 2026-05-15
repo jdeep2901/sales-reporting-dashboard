@@ -662,6 +662,10 @@
       overflow: auto;
     }
 
+    .partner-stage-filter {
+      padding: 0 16px 12px;
+    }
+
     .partner-table {
       width: 100%;
       min-width: 1240px;
@@ -2842,6 +2846,12 @@
 	        </div>
 	        <ul id="insight-partnerships" class="insight-list"></ul>
 	        <div id="partnership-kpis" class="partner-kpi-grid"></div>
+	        <div class="partner-stage-filter">
+	          <div class="pill-picker">
+	            <span class="label">Deal Stage</span>
+	            <div id="partnership-stage-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+	          </div>
+	        </div>
 	        <div class="partner-table-wrap">
 	          <table class="partner-table">
 	            <thead>
@@ -3994,8 +4004,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.21';
+    const APP_VERSION = 'v1.1.22';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.22', date: '2026-05-14', commit: '-', changes: 'Added pill-style multi-select deal stage filters to the Partnerships review tab.' },
       { version: 'v1.1.21', date: '2026-05-14', commit: '-', changes: 'Reduced Monday sync timeout risk by returning a compact post-sync response and improving 504 messaging.' },
       { version: 'v1.1.20', date: '2026-05-14', commit: '-', changes: 'Added Partnerships weekly review tab and wired existing Monday partnership columns into synced deal rows.' },
       { version: 'v1.1.19', date: '2026-05-01', commit: '-', changes: 'Clarified Monday refresh status messaging so Data QA failure is shown as a post-refresh quality warning, not a failed pull.' },
@@ -4130,6 +4141,7 @@
     let operatingRenderSeq = 0;
     let partnershipSelectedSeller = 'Overall';
     let partnershipSelectedPartner = 'All';
+    let partnershipStageFilter = null; // null = all; else Set(stage labels)
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
 	    let stageConvSelectedSeller = 'Overall';
@@ -6745,7 +6757,62 @@
           if (!partnershipSelectedPartner || partnershipSelectedPartner === 'All') return true;
           const tokens = partnerTokens(r.tech_stack).map((x) => x.toLowerCase());
           return tokens.includes(String(partnershipSelectedPartner).toLowerCase());
+        })
+        .filter((r) => {
+          if (!partnershipStageFilter || partnershipStageFilter.size === 0) return true;
+          const st = partnerDisplay(r.stage || r.deal_stage || r.dealStage);
+          return partnershipStageFilter.has(st);
         });
+    }
+
+    function partnershipStageUniverse(data) {
+      const rows = Array.isArray(data && data.all_deals_rows) ? data.all_deals_rows : [];
+      const stages = new Set();
+      rows
+        .filter(rowHasPartnerMotion)
+        .filter((r) => rowMatchesPartnershipSeller(r, partnershipSelectedSeller))
+        .filter((r) => {
+          if (!partnershipSelectedPartner || partnershipSelectedPartner === 'All') return true;
+          const tokens = partnerTokens(r.tech_stack).map((x) => x.toLowerCase());
+          return tokens.includes(String(partnershipSelectedPartner).toLowerCase());
+        })
+        .forEach((r) => stages.add(partnerDisplay(r.stage || r.deal_stage || r.dealStage)));
+      return Array.from(stages).sort((a, b) => (stageSortKey(a) - stageSortKey(b)) || a.localeCompare(b));
+    }
+
+    function renderPartnershipStagePills(data) {
+      const el = document.getElementById('partnership-stage-pills');
+      if (!el) return;
+      const stages = partnershipStageUniverse(data);
+      if (partnershipStageFilter) {
+        const valid = new Set(stages);
+        partnershipStageFilter = new Set([...partnershipStageFilter].filter((s) => valid.has(s)));
+        if (!partnershipStageFilter.size || partnershipStageFilter.size === stages.length) partnershipStageFilter = null;
+      }
+      el.innerHTML = '';
+      if (!stages.length) {
+        const empty = document.createElement('span');
+        empty.className = 'detail-meta';
+        empty.textContent = 'No partner stages in current filter';
+        el.appendChild(empty);
+        return;
+      }
+      stages.forEach((st) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pill-btn';
+        btn.textContent = st;
+        const active = (!partnershipStageFilter || partnershipStageFilter.size === 0) ? true : partnershipStageFilter.has(st);
+        btn.classList.toggle('active', active);
+        btn.addEventListener('click', () => {
+          const next = new Set(partnershipStageFilter || stages);
+          if (next.has(st)) next.delete(st);
+          else next.add(st);
+          partnershipStageFilter = (next.size === stages.length || next.size === 0) ? null : next;
+          renderPartnerships(data);
+        });
+        el.appendChild(btn);
+      });
     }
 
     function uniquePartnerLogos(rows, predicate) {
@@ -6806,6 +6873,7 @@
 
     function renderPartnerships(data) {
       setPartnershipSelectOptions(data);
+      renderPartnershipStagePills(data);
       const body = document.getElementById('partnership-body');
       const kpis = document.getElementById('partnership-kpis');
       if (!body || !kpis) return;
@@ -10925,12 +10993,14 @@
         if (partnershipSellerSelect) {
           partnershipSellerSelect.addEventListener('change', () => {
             partnershipSelectedSeller = partnershipSellerSelect.value || 'Overall';
+            partnershipStageFilter = null;
             renderPartnerships(data);
           });
         }
         if (partnershipPartnerSelect) {
           partnershipPartnerSelect.addEventListener('change', () => {
             partnershipSelectedPartner = partnershipPartnerSelect.value || 'All';
+            partnershipStageFilter = null;
             renderPartnerships(data);
           });
         }
