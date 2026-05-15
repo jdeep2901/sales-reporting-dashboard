@@ -1338,6 +1338,16 @@ async function buildDataset(
     (t) => t.includes("next meeting"),
   ]);
   const designationCol = pickColumnId(columns, [(t) => t.includes("designation"), (t) => t.includes("job title"), (t) => t === "title"]);
+  const preCallRatingCol = pickColumnId(columns, [
+    (t) => t.includes("pre call") && t.includes("rating"),
+    (t) => t.includes("pre-call") && t.includes("rating"),
+    (t) => t.includes("pre") && t.includes("call") && t.includes("rating"),
+  ]);
+  const postCallRatingCol = pickColumnId(columns, [
+    (t) => t.includes("post call") && t.includes("rating"),
+    (t) => t.includes("post-call") && t.includes("rating"),
+    (t) => t.includes("post") && t.includes("call") && t.includes("rating"),
+  ]);
   const sourceLeadCol = pickColumnId(columns, [(t) => t.includes("source of lead"), (t) => t === "source", (t) => t.includes("lead source")]);
   const revenueSourceCol = pickColumnId(columns, [(t) => t.includes("revenue source mapping"), (t) => t.includes("revenue source")]);
   const techStackCol = pickColumnId(columns, [(t) => t.includes("tech stack"), (t) => t.includes("technology stack")]);
@@ -1953,6 +1963,8 @@ async function buildDataset(
     const nextMeetingDate = parseDate(nextMeetingDateRaw);
     const nextMeetingDateIso = nextMeetingDate ? nextMeetingDate.toISOString().slice(0, 10) : null;
     const designation = byIdSmartText(item, designationCol);
+    const preCallRating = byIdSmartText(item, preCallRatingCol);
+    const postCallRating = byIdSmartText(item, postCallRatingCol);
     const sourceOfLead = byIdSmartText(item, sourceLeadCol);
     const revenueSource = byIdSmartText(item, revenueSourceCol);
     const techStack = byIdSmartText(item, techStackCol);
@@ -1985,6 +1997,8 @@ async function buildDataset(
       use_case: useCase,
       next_meeting_date: nextMeetingDateIso,
       designation,
+      pre_call_rating: preCallRating,
+      post_call_rating: postCallRating,
       source_of_lead: sourceOfLead,
       revenue_source_mapping: revenueSource,
       tech_stack: techStack,
@@ -2105,6 +2119,8 @@ async function buildDataset(
         use_case: useCaseCol,
         next_meeting_date: nextMeetingDateCol,
         designation: designationCol,
+        pre_call_rating: preCallRatingCol,
+        post_call_rating: postCallRatingCol,
         source_of_lead: sourceLeadCol,
         revenue_source_mapping: revenueSourceCol,
         tech_stack: techStackCol,
@@ -2323,6 +2339,16 @@ Deno.serve(async (req) => {
       (t: string) => t.includes("next meeting"),
     ]);
     const designationCol = pick([(t: string) => t.includes("designation"), (t: string) => t.includes("job title"), (t: string) => t === "title"]);
+    const preCallRatingCol = pick([
+      (t: string) => t.includes("pre call") && t.includes("rating"),
+      (t: string) => t.includes("pre-call") && t.includes("rating"),
+      (t: string) => t.includes("pre") && t.includes("call") && t.includes("rating"),
+    ]);
+    const postCallRatingCol = pick([
+      (t: string) => t.includes("post call") && t.includes("rating"),
+      (t: string) => t.includes("post-call") && t.includes("rating"),
+      (t: string) => t.includes("post") && t.includes("call") && t.includes("rating"),
+    ]);
     const sourceLeadCol = pick([(t: string) => t.includes("source of lead"), (t: string) => t === "source", (t: string) => t.includes("lead source")]);
     const revenueSourceCol = pick([(t: string) => t.includes("revenue source mapping"), (t: string) => t.includes("revenue source")]);
     const techStackCol = pick([(t: string) => t.includes("tech stack"), (t: string) => t.includes("technology stack")]);
@@ -2342,6 +2368,7 @@ Deno.serve(async (req) => {
     addIf(introDateCol); addIf(startDateCol); addIf(stageCol); addIf(ownerCol); addIf(nextStepCol);
     addIf(industryCol); addIf(businessGroupCol); addIf(logoCol); addIf(functionCol);
     addIf(problemSpaceCol); addIf(useCaseCol); addIf(nextMeetingDateCol); addIf(designationCol);
+    addIf(preCallRatingCol); addIf(postCallRatingCol);
     addIf(sourceLeadCol); addIf(revenueSourceCol);
     addIf(techStackCol); addIf(partnerSourceTypeCol); addIf(alliancesIntroCol); addIf(partnerRegisteredCol);
     addIf(partnerApprovedCol); addIf(partnerFundedCol); addIf(partnerAeCol);
@@ -2376,18 +2403,9 @@ Deno.serve(async (req) => {
       monday_board_name: meta.boardName,
     };
 
-    const prevVersion = await supabase
-      .from("dashboard_versions")
-      .select("id, dataset")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (prevVersion.error) return j({ error: prevVersion.error.message }, 500);
-    const prevDataset = prevVersion.data && typeof prevVersion.data.dataset === "object" ? (prevVersion.data.dataset as Record<string, any>) : null;
-    const qa = runDataQualityChecks(dataset as Record<string, any>, prevDataset);
-    settings.monday_last_qa_status = qa.status;
-    settings.monday_last_qa_score = qa.score;
-    settings.monday_last_qa_run_at = new Date().toISOString();
+    delete (settings as Record<string, unknown>).monday_last_qa_status;
+    delete (settings as Record<string, unknown>).monday_last_qa_score;
+    delete (settings as Record<string, unknown>).monday_last_qa_run_at;
 
     const inserted = await supabase.from("dashboard_versions").insert({
       created_by: username,
@@ -2399,11 +2417,6 @@ Deno.serve(async (req) => {
       dataset_hash: datasetHash,
       item_count: Number(items.length || 0),
       notes: versionName,
-      qa_status: qa.status,
-      qa_score: qa.score,
-      qa_summary: qa.summary,
-      qa_report: qa.report,
-      qa_run_at: new Date().toISOString(),
     }).select("id").single();
     if (inserted.error || !inserted.data?.id) return j({ error: inserted.error?.message || "Failed to create version snapshot." }, 500);
     const versionId = inserted.data.id;
@@ -2431,9 +2444,6 @@ Deno.serve(async (req) => {
       board_id: String(boardId),
       board_name: meta.boardName,
       item_count: items.length,
-      qa_status: qa.status,
-      qa_score: qa.score,
-      qa_summary: qa.summary,
       version_id: versionId,
       state: null,
     });
