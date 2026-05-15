@@ -4004,8 +4004,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.22';
+    const APP_VERSION = 'v1.1.23';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v1.1.23', date: '2026-05-14', commit: '-', changes: 'Preserved Partnerships stage pill selections across seller/partner changes and default-deselected terminal/latent stages.' },
       { version: 'v1.1.22', date: '2026-05-14', commit: '-', changes: 'Added pill-style multi-select deal stage filters to the Partnerships review tab.' },
       { version: 'v1.1.21', date: '2026-05-14', commit: '-', changes: 'Reduced Monday sync timeout risk by returning a compact post-sync response and improving 504 messaging.' },
       { version: 'v1.1.20', date: '2026-05-14', commit: '-', changes: 'Added Partnerships weekly review tab and wired existing Monday partnership columns into synced deal rows.' },
@@ -4142,6 +4143,7 @@
     let partnershipSelectedSeller = 'Overall';
     let partnershipSelectedPartner = 'All';
     let partnershipStageFilter = null; // null = all; else Set(stage labels)
+    let partnershipStageFilterTouched = false;
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
 	    let stageConvSelectedSeller = 'Overall';
@@ -6780,14 +6782,32 @@
       return Array.from(stages).sort((a, b) => (stageSortKey(a) - stageSortKey(b)) || a.localeCompare(b));
     }
 
+    function isDefaultExcludedPartnershipStage(stage) {
+      const s = String(stage || '').toLowerCase();
+      return s.includes('loss')
+        || s.includes('lost')
+        || s.includes('disqualified')
+        || s.includes('no show')
+        || s.includes('reschedule')
+        || s.includes('latent pool')
+        || s.includes('latent');
+    }
+
+    function defaultPartnershipStageSet(stages) {
+      const active = (stages || []).filter((st) => !isDefaultExcludedPartnershipStage(st));
+      return new Set(active.length ? active : (stages || []));
+    }
+
     function renderPartnershipStagePills(data) {
       const el = document.getElementById('partnership-stage-pills');
       if (!el) return;
       const stages = partnershipStageUniverse(data);
-      if (partnershipStageFilter) {
-        const valid = new Set(stages);
+      const valid = new Set(stages);
+      if (!partnershipStageFilterTouched) {
+        partnershipStageFilter = defaultPartnershipStageSet(stages);
+      } else if (partnershipStageFilter) {
         partnershipStageFilter = new Set([...partnershipStageFilter].filter((s) => valid.has(s)));
-        if (!partnershipStageFilter.size || partnershipStageFilter.size === stages.length) partnershipStageFilter = null;
+        if (!partnershipStageFilter.size) partnershipStageFilter = defaultPartnershipStageSet(stages);
       }
       el.innerHTML = '';
       if (!stages.length) {
@@ -6802,13 +6822,14 @@
         btn.type = 'button';
         btn.className = 'pill-btn';
         btn.textContent = st;
-        const active = (!partnershipStageFilter || partnershipStageFilter.size === 0) ? true : partnershipStageFilter.has(st);
+        const active = partnershipStageFilter ? partnershipStageFilter.has(st) : true;
         btn.classList.toggle('active', active);
         btn.addEventListener('click', () => {
+          partnershipStageFilterTouched = true;
           const next = new Set(partnershipStageFilter || stages);
           if (next.has(st)) next.delete(st);
           else next.add(st);
-          partnershipStageFilter = (next.size === stages.length || next.size === 0) ? null : next;
+          partnershipStageFilter = next.size === 0 ? defaultPartnershipStageSet(stages) : next;
           renderPartnerships(data);
         });
         el.appendChild(btn);
@@ -10993,14 +11014,12 @@
         if (partnershipSellerSelect) {
           partnershipSellerSelect.addEventListener('change', () => {
             partnershipSelectedSeller = partnershipSellerSelect.value || 'Overall';
-            partnershipStageFilter = null;
             renderPartnerships(data);
           });
         }
         if (partnershipPartnerSelect) {
           partnershipPartnerSelect.addEventListener('change', () => {
             partnershipSelectedPartner = partnershipPartnerSelect.value || 'All';
-            partnershipStageFilter = null;
             renderPartnerships(data);
           });
         }
