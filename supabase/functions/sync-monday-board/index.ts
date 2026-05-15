@@ -151,13 +151,12 @@ function mondayColumnSnapshot(item: MondayItem, columns: MondayColumn[]) {
   const out: Record<string, unknown> = {};
   for (const col of columns || []) {
     const cv = valuesById[col.id] || { text: "", display_value: "", value: null };
+    const smart = smartTextFromMondayColumnValue(cv.text, cv.display_value, cv.value);
+    if (!cv.text && !cv.display_value && !smart && !cv.value) continue;
     out[col.id] = {
-      id: col.id,
-      title: col.title,
-      type: col.type,
       text: cv.text,
       display_value: cv.display_value,
-      smart_text: smartTextFromMondayColumnValue(cv.text, cv.display_value, cv.value),
+      smart_text: smart,
       value: cv.value,
     };
   }
@@ -1233,6 +1232,142 @@ async function fetchBoardItems(token: string, boardId: number, colIds: string[])
   return items;
 }
 
+async function fetchBoardItemsBasic(token: string, boardId: number, colIds: string[]) {
+  const firstQuery = `
+    query ($boardId: [ID!], $colIds: [String!]) {
+      boards(ids: $boardId) {
+        items_page(limit: 500) {
+          cursor
+          items {
+            id
+            name
+            column_values(ids: $colIds) {
+              id
+              text
+              value
+            }
+          }
+        }
+      }
+    }
+  `;
+  const first = await mondayGraphql(token, firstQuery, { boardId: [boardId], colIds });
+  const board = first?.boards?.[0];
+  if (!board) throw new Error(`Board ${boardId} not found (items).`);
+
+  const items: MondayItem[] = [...(board.items_page?.items || [])];
+  let cursor: string | null = board.items_page?.cursor || null;
+
+  const nextQuery = `
+    query ($cursor: String!, $colIds: [String!]) {
+      next_items_page(limit: 500, cursor: $cursor) {
+        cursor
+        items {
+          id
+          name
+          column_values(ids: $colIds) {
+            id
+            text
+            value
+          }
+        }
+      }
+    }
+  `;
+
+  while (cursor) {
+    const next = await mondayGraphql(token, nextQuery, { cursor, colIds });
+    const page = next?.next_items_page;
+    if (!page) break;
+    items.push(...(page.items || []));
+    cursor = page.cursor || null;
+  }
+  return items;
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  const n = Math.max(1, Number(size || 1));
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
+async function fetchBoardItemsMerged(token: string, boardId: number, colIds: string[], chunkSize = 20) {
+  const ids = Array.from(new Set((colIds || []).filter(Boolean)));
+  if (!ids.length) return fetchBoardItems(token, boardId, ids);
+  const chunks = chunkArray(ids, chunkSize);
+  const byItemId = new Map<string, MondayItem>();
+  for (const chunk of chunks) {
+    const pageItems = await fetchBoardItems(token, boardId, chunk);
+    for (const item of pageItems) {
+      const existing = byItemId.get(String(item.id));
+      if (!existing) {
+        byItemId.set(String(item.id), {
+          id: item.id,
+          name: item.name,
+          column_values: [...(item.column_values || [])],
+        });
+      } else {
+        const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
+        for (const cv of item.column_values || []) cvById.set(cv.id, cv);
+        existing.column_values = Array.from(cvById.values());
+      }
+    }
+  }
+  return Array.from(byItemId.values());
+}
+
+async function fetchBoardItemsMergedBasic(token: string, boardId: number, colIds: string[], chunkSize = 25) {
+  const ids = Array.from(new Set((colIds || []).filter(Boolean)));
+  if (!ids.length) return fetchBoardItemsBasic(token, boardId, ids);
+  const chunks = chunkArray(ids, chunkSize);
+  const byItemId = new Map<string, MondayItem>();
+  for (const chunk of chunks) {
+    const pageItems = await fetchBoardItemsBasic(token, boardId, chunk);
+    for (const item of pageItems) {
+      const existing = byItemId.get(String(item.id));
+      if (!existing) {
+        byItemId.set(String(item.id), {
+          id: item.id,
+          name: item.name,
+          column_values: [...(item.column_values || [])],
+        });
+      } else {
+        const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
+        for (const cv of item.column_values || []) cvById.set(cv.id, cv);
+        existing.column_values = Array.from(cvById.values());
+      }
+    }
+  }
+  return Array.from(byItemId.values());
+}
+
+function mergeMondayItemSets(baseItems: MondayItem[], overlayItems: MondayItem[]) {
+  const byItemId = new Map<string, MondayItem>();
+  for (const item of baseItems || []) {
+    byItemId.set(String(item.id), {
+      id: item.id,
+      name: item.name,
+      column_values: [...(item.column_values || [])],
+    });
+  }
+  for (const item of overlayItems || []) {
+    const existing = byItemId.get(String(item.id));
+    if (!existing) {
+      byItemId.set(String(item.id), {
+        id: item.id,
+        name: item.name,
+        column_values: [...(item.column_values || [])],
+      });
+      continue;
+    }
+    const cvById = new Map(existing.column_values.map((cv) => [cv.id, cv]));
+    for (const cv of item.column_values || []) cvById.set(cv.id, cv);
+    existing.column_values = Array.from(cvById.values());
+  }
+  return Array.from(byItemId.values());
+}
+
 function initScorecard() {
   return {
     stage_counts: {} as Record<string, number>,
@@ -2276,6 +2411,7 @@ Deno.serve(async (req) => {
     const password = String(body?.password || "");
     const boardId = boardIdFromInput(body?.board_id || body?.board_url);
     const versionName = String(body?.version_name || "").trim() || null;
+    const rawColumnsRequested = body?.raw_columns === true;
     if (!username || !password) return j({ error: "username and password are required." }, 400);
     if (!boardId) return j({ error: "board_id (or board URL) is required." }, 400);
 
@@ -2342,9 +2478,17 @@ Deno.serve(async (req) => {
     }
 
     const allColumnIds = columns.map((c: MondayColumn) => c.id).filter(Boolean);
-    for (const id of allColumnIds) neededCandidates.add(id);
-
-    const items = await fetchBoardItems(mondayToken, boardId, allColumnIds.length ? allColumnIds : Array.from(neededCandidates));
+    let rawItems: MondayItem[] = [];
+    let rawMondayColumnsError: string | null = null;
+    if (rawColumnsRequested) {
+      try {
+        rawItems = await fetchBoardItemsBasic(mondayToken, boardId, allColumnIds.length ? allColumnIds : Array.from(neededCandidates));
+      } catch (e) {
+        rawMondayColumnsError = (e as Error).message || "Raw all-column fetch failed.";
+      }
+    }
+    const enrichedItems = await fetchBoardItems(mondayToken, boardId, Array.from(neededCandidates));
+    const items = rawItems.length ? mergeMondayItemSets(rawItems, enrichedItems) : enrichedItems;
 
     const dataset = await buildDataset(items, columns, boardId, meta.boardName, {
       industry_col_id: pinnedIndustryCol,
@@ -2357,6 +2501,15 @@ Deno.serve(async (req) => {
       contacts_relation_col_id: contactsRelationColId,
       monday_token: mondayToken,
     });
+    (dataset as Record<string, any>).meta ||= {};
+    (dataset as Record<string, any>).meta.raw_monday_columns = {
+      requested: rawColumnsRequested,
+      captured: rawItems.length > 0,
+      item_count: rawItems.length,
+      column_count: allColumnIds.length,
+      error: rawMondayColumnsError,
+      storage: rawItems.length ? "sparse per-row monday_columns keyed by column id; column metadata in meta.monday_columns_snapshot" : null,
+    };
     const datasetHash = await sha256Hex(JSON.stringify(dataset));
     const settings = {
       ...(st.settings || {}),
