@@ -2261,6 +2261,35 @@
       color: #3d4f70;
     }
 
+    .connect-flag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.15px;
+      white-space: nowrap;
+    }
+
+    .connect-flag.stale {
+      background: #fff1f0;
+      border: 1px solid #f3c0bd;
+      color: #a61b1b;
+    }
+
+    .connect-flag.soon {
+      background: #eaf8f0;
+      border: 1px solid #bfe8d0;
+      color: #0b6b3a;
+    }
+
+    .connect-flag.later {
+      background: #eef3ff;
+      border: 1px solid #c8d6f3;
+      color: #1f3f75;
+    }
+
     .momentum-kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(90px, 1fr));
@@ -2811,6 +2840,7 @@
 	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
 	        <button id="tab-operating" class="tab-btn" type="button">Operating Metrics</button>
 	        <button id="tab-partnerships" class="tab-btn" type="button">Partnerships</button>
+	        <button id="tab-connecthealth" class="tab-btn" type="button">Connect Health</button>
 	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
@@ -2873,6 +2903,38 @@
 	            <tbody id="partnership-body"></tbody>
 	          </table>
 	        </div>
+	      </div>
+
+	      <div id="view-connecthealth" class="view">
+	        <div class="head">
+	          <div>
+	            <h1>Seller Connect Health</h1>
+	            <div class="sub">Active-pipeline follow-up hygiene for Somya, Akshay, and Peri using the latest pulled Next Meeting Date.</div>
+	          </div>
+	        </div>
+	        <ul id="insight-connecthealth" class="insight-list"></ul>
+	        <div id="connecthealth-kpis" class="partner-kpi-grid"></div>
+	        <div class="partner-table-wrap">
+	          <table class="partner-table">
+	            <thead>
+	              <tr>
+	                <th>Seller</th>
+	                <th>Flag</th>
+	                <th>Logo</th>
+	                <th>Deal Name</th>
+	                <th>Stage</th>
+	                <th>Deal Size</th>
+	                <th>Intro Date</th>
+	                <th>Next Meeting Date</th>
+	                <th>Timing</th>
+	                <th>Problem Space</th>
+	                <th>Use Case</th>
+	              </tr>
+	            </thead>
+	            <tbody id="connecthealth-body"></tbody>
+	          </table>
+	        </div>
+	        <div class="operating-footnote">Assumption: this view shows active stages 1-6 only and excludes Won/Loss/Disqualified/No Show/Latent Pool. "Needs reconnect" means no next meeting date or a next meeting date before today. "Within 2 weeks" means today through 14 days out; "More than 2 weeks out" means 15+ days out.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4004,8 +4066,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v1.1.23';
+    const APP_VERSION = 'v2.0';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0', date: '2026-05-15', commit: '-', changes: 'Added Seller Connect Health with Next Meeting Date follow-up flags for Somya, Akshay, and Peri; promoted app to v2.0.' },
       { version: 'v1.1.23', date: '2026-05-14', commit: '-', changes: 'Preserved Partnerships stage pill selections across seller/partner changes and default-deselected terminal/latent stages.' },
       { version: 'v1.1.22', date: '2026-05-14', commit: '-', changes: 'Added pill-style multi-select deal stage filters to the Partnerships review tab.' },
       { version: 'v1.1.21', date: '2026-05-14', commit: '-', changes: 'Reduced Monday sync timeout risk by returning a compact post-sync response and improving 504 messaging.' },
@@ -6973,6 +7036,156 @@
       setInsight('insight-partnerships', lines);
     }
 
+    const CONNECT_HEALTH_SELLERS = ['Somya', 'Akshay Iyer', 'Peri'];
+
+    function connectSellerMatches(row, seller) {
+      const target = String(seller || '').trim().toLowerCase();
+      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
+      if (matched.some((s) => String(s || '').trim().toLowerCase() === target)) return true;
+      const raw = partnerText(row && (row.owner || row.seller || row.deal_owner)).toLowerCase();
+      if (target === 'somya') return raw.includes('somya');
+      if (target.includes('akshay')) return raw.includes('akshay');
+      if (target === 'peri') return raw.includes('peri');
+      return raw.includes(target);
+    }
+
+    function connectIsActiveStage(row) {
+      const st = String(row && (row.stage || row.deal_stage || row.dealStage) || '').toLowerCase();
+      if (!st) return false;
+      if (st.includes('won') || st.includes('win')) return false;
+      if (st.includes('loss') || st.includes('lost')) return false;
+      if (st.includes('disqualified')) return false;
+      if (st.includes('no show') || st.includes('reschedule')) return false;
+      if (st.includes('latent')) return false;
+      const n = stageNumber(row.stage || row.deal_stage || row.dealStage);
+      return n != null && n >= 1 && n <= 6;
+    }
+
+    function connectDaysBetween(a, b) {
+      const ms = 86400000;
+      return Math.round((b.getTime() - a.getTime()) / ms);
+    }
+
+    function connectBucketForRow(row, today) {
+      const next = parseIsoLocalDate(row && row.next_meeting_date);
+      if (!next) return { key: 'stale', label: 'Needs reconnect', timing: 'No next meeting date', days: null };
+      const days = connectDaysBetween(today, next);
+      if (days < 0) return { key: 'stale', label: 'Needs reconnect', timing: `${money.format(Math.abs(days))} day(s) overdue`, days };
+      if (days <= 14) return { key: 'soon', label: 'Within 2 weeks', timing: days === 0 ? 'Today' : `${money.format(days)} day(s) out`, days };
+      return { key: 'later', label: 'More than 2 weeks out', timing: `${money.format(days)} day(s) out`, days };
+    }
+
+    function connectHealthRows(data) {
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      const rows = Array.isArray(data && data.all_deals_rows) ? data.all_deals_rows : [];
+      const out = [];
+      rows.forEach((r) => {
+        if (!connectIsActiveStage(r)) return;
+        CONNECT_HEALTH_SELLERS.forEach((seller) => {
+          if (!connectSellerMatches(r, seller)) return;
+          const bucket = connectBucketForRow(r, today);
+          out.push({ ...r, connect_seller: seller, connect_bucket: bucket });
+        });
+      });
+      return out.sort((a, b) => {
+        const bucketRank = { stale: 0, soon: 1, later: 2 };
+        const br = (bucketRank[a.connect_bucket.key] ?? 9) - (bucketRank[b.connect_bucket.key] ?? 9);
+        if (br) return br;
+        const sr = a.connect_seller.localeCompare(b.connect_seller);
+        if (sr) return sr;
+        const ad = parseIsoLocalDate(a.next_meeting_date);
+        const bd = parseIsoLocalDate(b.next_meeting_date);
+        if (ad && bd && ad.getTime() !== bd.getTime()) return ad - bd;
+        if (ad && !bd) return 1;
+        if (!ad && bd) return -1;
+        return partnerText(a.logo).localeCompare(partnerText(b.logo)) || partnerText(a.deal).localeCompare(partnerText(b.deal));
+      });
+    }
+
+    function appendConnectFlagCell(tr, bucket) {
+      const td = document.createElement('td');
+      const span = document.createElement('span');
+      span.className = `connect-flag ${bucket.key}`;
+      span.textContent = bucket.label;
+      td.appendChild(span);
+      tr.appendChild(td);
+    }
+
+    function renderConnectHealth(data) {
+      const kpis = document.getElementById('connecthealth-kpis');
+      const body = document.getElementById('connecthealth-body');
+      if (!kpis || !body) return;
+      const rows = connectHealthRows(data);
+      const bySeller = Object.fromEntries(CONNECT_HEALTH_SELLERS.map((seller) => [seller, { stale: 0, soon: 0, later: 0, total: 0 }]));
+      rows.forEach((r) => {
+        const bucket = r.connect_bucket.key;
+        const seller = r.connect_seller;
+        bySeller[seller] ||= { stale: 0, soon: 0, later: 0, total: 0 };
+        bySeller[seller][bucket] += 1;
+        bySeller[seller].total += 1;
+      });
+
+      kpis.innerHTML = '';
+      CONNECT_HEALTH_SELLERS.forEach((seller) => {
+        const stats = bySeller[seller] || { stale: 0, soon: 0, later: 0, total: 0 };
+        const card = document.createElement('div');
+        card.className = 'partner-kpi';
+        const lab = document.createElement('div');
+        lab.className = 'partner-kpi-label';
+        lab.textContent = seller;
+        const val = document.createElement('div');
+        val.className = 'partner-kpi-value';
+        val.textContent = `${money.format(stats.stale)} needs reconnect`;
+        const sub = document.createElement('div');
+        sub.className = 'detail-meta';
+        sub.textContent = `Within 2w: ${money.format(stats.soon)} | >2w: ${money.format(stats.later)} | Active: ${money.format(stats.total)}`;
+        card.appendChild(lab);
+        card.appendChild(val);
+        card.appendChild(sub);
+        kpis.appendChild(card);
+      });
+
+      body.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        const td = makeCell('td', 'No active pipeline rows found for Somya, Akshay, or Peri in the current snapshot.', 'partner-muted');
+        td.colSpan = 11;
+        tr.appendChild(td);
+        body.appendChild(tr);
+      } else {
+        rows.forEach((r) => {
+          const bucket = r.connect_bucket;
+          const tr = document.createElement('tr');
+          tr.appendChild(makeCell('td', r.connect_seller));
+          appendConnectFlagCell(tr, bucket);
+          tr.appendChild(makeCell('td', partnerDisplay(r.logo || r.account)));
+          tr.appendChild(makeCell('td', partnerDisplay(r.deal)));
+          tr.appendChild(makeCell('td', partnerDisplay(r.stage || r.deal_stage || r.dealStage)));
+          tr.appendChild(makeCell('td', Number.isFinite(Number(r.deal_size)) ? `$ ${money.format(Number(r.deal_size))}` : '-'));
+          tr.appendChild(makeCell('td', partnerDisplay(r.intro_date)));
+          tr.appendChild(makeCell('td', partnerDisplay(r.next_meeting_date)));
+          tr.appendChild(makeCell('td', bucket.timing));
+          tr.appendChild(makeCell('td', partnerDisplay(r.problem_space)));
+          tr.appendChild(makeCell('td', partnerDisplay(r.use_case)));
+          body.appendChild(tr);
+        });
+      }
+
+      const totalStale = rows.filter((r) => r.connect_bucket.key === 'stale').length;
+      const totalSoon = rows.filter((r) => r.connect_bucket.key === 'soon').length;
+      const totalLater = rows.filter((r) => r.connect_bucket.key === 'later').length;
+      const worst = CONNECT_HEALTH_SELLERS
+        .map((seller) => ({ seller, stale: (bySeller[seller] || {}).stale || 0 }))
+        .sort((a, b) => b.stale - a.stale || a.seller.localeCompare(b.seller))[0];
+      const lines = [
+        `Active connect health: ${money.format(totalStale)} need reconnect, ${money.format(totalSoon)} have a connect within 2 weeks, ${money.format(totalLater)} are scheduled more than 2 weeks out.`,
+      ];
+      if (worst && worst.stale) lines.push(`Highest reconnect load: ${worst.seller} with ${money.format(worst.stale)} active deal(s) missing or past next meeting date.`);
+      lines.push('Use this as the weekly operating list: stale first, then near-term connects, then future-dated follow-ups.');
+      setInsight('insight-connecthealth', lines);
+    }
+
 	    function setupTabs() {
 	      const appendixRow = document.getElementById('tabs-appendix');
 	      const tabCross = document.getElementById('tab-crosstab');
@@ -6989,6 +7202,7 @@
 	      const tabForecastActuals = document.getElementById('tab-forecast-actuals');
 	      const tabOperating = document.getElementById('tab-operating');
 	      const tabPartnerships = document.getElementById('tab-partnerships');
+	      const tabConnectHealth = document.getElementById('tab-connecthealth');
 	      const tabCycleTime = document.getElementById('tab-cycletime');
 	      const tabAssumptions = document.getElementById('tab-assumptions');
 	      const tabAppendix = document.getElementById('tab-appendix');
@@ -7007,6 +7221,7 @@
 		      const viewForecastActuals = document.getElementById('view-forecast-actuals');
 		      const viewOperating = document.getElementById('view-operating');
 		      const viewPartnerships = document.getElementById('view-partnerships');
+		      const viewConnectHealth = document.getElementById('view-connecthealth');
 		      const viewCycleTime = document.getElementById('view-cycletime');
 		      const viewAssumptions = document.getElementById('view-assumptions');
 		      const viewAdmin = document.getElementById('view-admin');
@@ -7036,6 +7251,7 @@
 		        tabForecastActuals.classList.toggle('active', name === 'forecast-actuals');
 		        tabOperating.classList.toggle('active', name === 'operating');
 		        tabPartnerships.classList.toggle('active', name === 'partnerships');
+		        tabConnectHealth.classList.toggle('active', name === 'connecthealth');
 		        tabCycleTime.classList.toggle('active', name === 'cycletime');
 		        tabAssumptions.classList.toggle('active', name === 'assumptions');
 		        tabAdmin.classList.toggle('active', name === 'admin');
@@ -7053,12 +7269,13 @@
 		        viewForecastActuals.classList.toggle('active', name === 'forecast-actuals');
 		        viewOperating.classList.toggle('active', name === 'operating');
 		        viewPartnerships.classList.toggle('active', name === 'partnerships');
+		        viewConnectHealth.classList.toggle('active', name === 'connecthealth');
 		        viewCycleTime.classList.toggle('active', name === 'cycletime');
 		        viewAssumptions.classList.toggle('active', name === 'assumptions');
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'about') {
+	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'about') {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
@@ -7082,6 +7299,7 @@
 		      tabForecastActuals.addEventListener('click', () => activate('forecast-actuals'));
 		      tabOperating.addEventListener('click', () => activate('operating'));
 		      tabPartnerships.addEventListener('click', () => activate('partnerships'));
+		      tabConnectHealth.addEventListener('click', () => activate('connecthealth'));
 		      tabCycleTime.addEventListener('click', () => activate('cycletime'));
 		      tabAssumptions.addEventListener('click', () => activate('assumptions'));
 		      tabAdmin.addEventListener('click', () => activate('admin'));
@@ -10831,6 +11049,7 @@
 	          renderForecastActuals(data);
 	          renderOperatingMetrics(data);
 	          renderPartnerships(data);
+	          renderConnectHealth(data);
 	          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
 	        }
 
