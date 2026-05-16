@@ -2290,6 +2290,46 @@
       color: #1f3f75;
     }
 
+    .closure-tier {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+      border: 1px solid #d7dfeb;
+      background: #f7faff;
+      color: #243b63;
+    }
+
+    .closure-tier.must { background: #fff1f0; border-color: #f3c0bd; color: #a61b1b; }
+    .closure-tier.move { background: #fff7e6; border-color: #f0d39a; color: #8a5a00; }
+    .closure-tier.watch { background: #eef3ff; border-color: #c8d6f3; color: #1f3f75; }
+    .closure-tier.clean { background: #f4f6fb; border-color: #dce3f0; color: #3d4f70; }
+
+    .closure-table select,
+    .closure-table input {
+      width: 100%;
+      min-width: 112px;
+      border: 1px solid #d7dfeb;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .closure-table input {
+      min-width: 180px;
+    }
+
+    .closure-lever-stack {
+      display: grid;
+      gap: 6px;
+      min-width: 160px;
+    }
+
     .momentum-kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(90px, 1fr));
@@ -2841,6 +2881,7 @@
 	        <button id="tab-operating" class="tab-btn" type="button">Operating Metrics</button>
 	        <button id="tab-partnerships" class="tab-btn" type="button">Partnerships</button>
 	        <button id="tab-connecthealth" class="tab-btn" type="button">Connect Health</button>
+	        <button id="tab-closurepriority" class="tab-btn" type="button">Closure Priorities</button>
 	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
@@ -2947,6 +2988,81 @@
 	          </table>
 	        </div>
 	        <div class="operating-footnote">Assumption: this view shows active stages 1-6 only and excludes Won/Loss/Disqualified/No Show/Latent Pool. "Needs reconnect" means no next meeting date or a next meeting date before today. "Within 2 weeks" means today through 14 days out; "More than 2 weeks out" means 15+ days out.</div>
+	      </div>
+
+	      <div id="view-closurepriority" class="view">
+	        <div class="head">
+	          <div>
+	            <h1>Closure Priorities</h1>
+	            <div class="sub">A weekly chase list for current-quarter and next-quarter closure threads, combining urgency, EV, need strength, buyer power, and leverage gaps.</div>
+	          </div>
+	          <div class="controls">
+	            <div>
+	              <label for="closure-seller">Seller</label>
+	              <select id="closure-seller"></select>
+	            </div>
+	            <div>
+	              <label for="closure-quarter">Quarter Focus</label>
+	              <select id="closure-quarter">
+	                <option value="both">Current + Next</option>
+	                <option value="current">Current Quarter</option>
+	                <option value="next">Next Quarter</option>
+	                <option value="unscheduled">Unscheduled Late Stage</option>
+	              </select>
+	            </div>
+	            <div>
+	              <label for="closure-tier">Priority Tier</label>
+	              <select id="closure-tier">
+	                <option value="all">All tiers</option>
+	                <option value="Must Chase This Week">Must Chase This Week</option>
+	                <option value="Create Movement">Create Movement</option>
+	                <option value="Watch / Nurture">Watch / Nurture</option>
+	                <option value="Clean Up / Deprioritize">Clean Up / Deprioritize</option>
+	              </select>
+	            </div>
+	            <div>
+	              <label for="closure-lever">Lever Gap</label>
+	              <select id="closure-lever">
+	                <option value="all">All</option>
+	                <option value="exec">Exec / Cofounder gap</option>
+	                <option value="partner">Partner gap</option>
+	                <option value="inperson">In-person gap</option>
+	              </select>
+	            </div>
+	          </div>
+	        </div>
+	        <ul id="insight-closurepriority" class="insight-list"></ul>
+	        <div id="closure-kpis" class="partner-kpi-grid"></div>
+	        <div class="partner-stage-filter">
+	          <div class="pill-picker">
+	            <span class="label">Deal Stage</span>
+	            <div id="closure-stage-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+	          </div>
+	        </div>
+	        <div class="partner-table-wrap">
+	          <table class="partner-table closure-table">
+	            <thead>
+	              <tr>
+	                <th>Priority</th>
+	                <th>Score</th>
+	                <th>Seller</th>
+	                <th>Logo / Deal</th>
+	                <th>Stage</th>
+	                <th>Quarter</th>
+	                <th>EV</th>
+	                <th>Next Meeting</th>
+	                <th>Need</th>
+	                <th>Why Now</th>
+	                <th>Buyer / Champion</th>
+	                <th>Levers</th>
+	                <th>Main Blocker</th>
+	                <th>Recommended Action</th>
+	              </tr>
+	            </thead>
+	            <tbody id="closure-body"></tbody>
+	          </table>
+	        </div>
+	        <div class="operating-footnote">Inputs are saved locally in this browser for this first workflow version. Scoring prioritizes current/next-quarter relevance, late-stage status, EV, next-meeting risk, need strength, buyer power, and missing exec/partner/in-person leverage.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4073,13 +4189,15 @@
     const QUARTER_TARGETS_KEY = 'sales_dashboard_quarter_targets_v1';
     const SHARED_SETTINGS_KEY = 'sales_dashboard_settings_v1';
     const SHARED_DATASET_CACHE_KEY = 'sales_dashboard_dataset_cache_v1';
+    const CLOSURE_INPUTS_KEY = 'sales_dashboard_closure_inputs_v1';
     const SUPABASE_URL = 'https://vqksytduqxpfcovijhko.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxa3N5dGR1cXhwZmNvdmlqaGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDI0MjIsImV4cCI6MjA4NTk3ODQyMn0.wvUsJcFpCgXB10vuDcXqU_shO5sin-zI96sBIrZH3OY';
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0';
+    const APP_VERSION = 'v2.0.1';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.1', date: '2026-05-16', commit: '-', changes: 'Added Closure Priorities screen with scoring, filters, lever gaps, and seller-input fields.' },
       { version: 'v2.0', date: '2026-05-15', commit: '-', changes: 'Added Seller Connect Health with seller/stage filters and Next Meeting Date follow-up flags for Somya, Akshay, and Peri; promoted app to v2.0.' },
       { version: 'v1.1.23', date: '2026-05-14', commit: '-', changes: 'Preserved Partnerships stage pill selections across seller/partner changes and default-deselected terminal/latent stages.' },
       { version: 'v1.1.22', date: '2026-05-14', commit: '-', changes: 'Added pill-style multi-select deal stage filters to the Partnerships review tab.' },
@@ -4222,6 +4340,13 @@
     let connectHealthSelectedSeller = 'Overall';
     let connectHealthStageFilter = null; // null = all; else Set(stage labels)
     let connectHealthStageFilterTouched = false;
+    let closurePrioritySelectedSeller = 'Overall';
+    let closurePriorityQuarterFocus = 'both';
+    let closurePriorityTierFilter = 'all';
+    let closurePriorityLeverFilter = 'all';
+    let closurePriorityStageFilter = null; // null = all; else Set(stage labels)
+    let closurePriorityStageTouched = false;
+    let closureInputsState = {};
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
 	    let stageConvSelectedSeller = 'Overall';
@@ -7277,6 +7402,363 @@
       setInsight('insight-connecthealth', lines);
     }
 
+    function loadClosureInputs() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(CLOSURE_INPUTS_KEY) || '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveClosureInputs() {
+      localStorage.setItem(CLOSURE_INPUTS_KEY, JSON.stringify(closureInputsState || {}));
+    }
+
+    function closureDealKey(row) {
+      return String((row && (row.item_id || row.deal)) || '').trim();
+    }
+
+    function closureInputFor(row) {
+      const key = closureDealKey(row);
+      closureInputsState[key] ||= {};
+      return closureInputsState[key];
+    }
+
+    function closureSellerMatches(row, seller) {
+      if (!seller || seller === 'Overall') return true;
+      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
+      if (matched.includes(seller)) return true;
+      const raw = String(row && (row.owner || row.seller || row.deal_owner) || '').toLowerCase();
+      return raw.includes(String(seller || '').toLowerCase());
+    }
+
+    function closureSellerLabel(row) {
+      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
+      return matched.length ? matched.join(', ') : partnerSellerLabel(row);
+    }
+
+    function closureActiveStage(row) {
+      const st = String(row && (row.stage || row.deal_stage || row.dealStage) || '').toLowerCase();
+      if (!st) return false;
+      if (st.includes('won') || st.includes('win') || st.includes('loss') || st.includes('lost')) return false;
+      if (st.includes('disqualified') || st.includes('no show') || st.includes('reschedule') || st.includes('latent')) return false;
+      const n = stageNumber(row.stage || row.deal_stage || row.dealStage);
+      return n != null && n >= 1 && n <= 6;
+    }
+
+    function closureQuarterInfo(row) {
+      const q = scorecardQuarterLabelForDate(row && row.start_date);
+      const current = activeQuarterLabels.current;
+      const next = activeQuarterLabels.next;
+      if (q === current) return { key: 'current', label: current };
+      if (q === next) return { key: 'next', label: next };
+      const n = stageNumber(row && row.stage);
+      if (!q && n != null && n >= 5 && n <= 6) return { key: 'unscheduled', label: 'Unscheduled' };
+      return { key: 'other', label: q || '-' };
+    }
+
+    function closureNextMeetingRisk(row) {
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      const next = parseIsoLocalDate(row && row.next_meeting_date);
+      if (!next) return { score: 22, label: 'No next meeting' };
+      const days = Math.round((next.getTime() - today.getTime()) / 86400000);
+      if (days < 0) return { score: 24, label: `${money.format(Math.abs(days))}d overdue` };
+      if (days <= 14) return { score: 6, label: `${money.format(days)}d out` };
+      return { score: 12, label: `${money.format(days)}d out` };
+    }
+
+    function closureEv(row) {
+      const n = stageNumber(row && row.stage);
+      if (n == null || n < 1 || n > 6) return 0;
+      const size = n <= 4 ? 100000 : Number(row && row.deal_size || 0);
+      return Math.max(0, Number(size || 0)) * stageWinProbability(n);
+    }
+
+    function closureLeverGap(input, kind) {
+      const v = String((input || {})[kind] || '').toLowerCase();
+      return !v || v === 'needed' || v === 'requested' || v === 'mapped';
+    }
+
+    function closureScore(row) {
+      const input = closureInputFor(row);
+      const n = stageNumber(row && row.stage) || 0;
+      const q = closureQuarterInfo(row);
+      let score = 0;
+      score += Math.min(30, Math.max(0, n) * 5);
+      score += q.key === 'current' ? 25 : q.key === 'next' ? 15 : q.key === 'unscheduled' ? 10 : 0;
+      score += Math.min(15, closureEv(row) / 20000);
+      score += closureNextMeetingRisk(row).score;
+      const need = String(input.need || 'Unknown');
+      score += need === 'Critical' ? 18 : need === 'High' ? 14 : need === 'Medium' ? 8 : need === 'Low' ? -4 : 0;
+      const buyer = String(input.economic_buyer || '');
+      score += buyer === 'Yes' ? 5 : buyer === 'No' ? 8 : 0;
+      const champion = String(input.champion || '');
+      score += champion === 'Strong' ? 0 : champion === 'Medium' ? 4 : champion === 'Weak' ? 8 : 6;
+      if (closureLeverGap(input, 'exec_lever')) score += 5;
+      if (closureLeverGap(input, 'partner_lever')) score += 4;
+      if (closureLeverGap(input, 'inperson_lever')) score += 4;
+      return Math.max(0, Math.round(score));
+    }
+
+    function closureTier(score) {
+      if (score >= 80) return 'Must Chase This Week';
+      if (score >= 60) return 'Create Movement';
+      if (score >= 40) return 'Watch / Nurture';
+      return 'Clean Up / Deprioritize';
+    }
+
+    function closureTierClass(tier) {
+      if (tier === 'Must Chase This Week') return 'must';
+      if (tier === 'Create Movement') return 'move';
+      if (tier === 'Watch / Nurture') return 'watch';
+      return 'clean';
+    }
+
+    function closureRecommendedAction(row) {
+      const input = closureInputFor(row);
+      const risk = closureNextMeetingRisk(row);
+      const gaps = [];
+      if (closureLeverGap(input, 'exec_lever')) gaps.push('exec/LT');
+      if (closureLeverGap(input, 'partner_lever')) gaps.push('partner');
+      if (closureLeverGap(input, 'inperson_lever')) gaps.push('in-person');
+      if (risk.score >= 20) return `Book next connect; use ${gaps[0] || 'manager'} leverage.`;
+      if (gaps.length) return `Add ${gaps.slice(0, 2).join(' + ')} lever before next meeting.`;
+      if (!String(input.why_now || '').trim()) return 'Clarify why-now / compelling event.';
+      return 'Drive mutual next step and close path.';
+    }
+
+    function closureRows(data) {
+      const rows = Array.isArray(data && data.all_deals_rows) ? data.all_deals_rows : [];
+      return rows
+        .filter(closureActiveStage)
+        .map((r) => {
+          const score = closureScore(r);
+          return {
+            ...r,
+            closure_seller: closureSellerLabel(r),
+            closure_quarter: closureQuarterInfo(r),
+            closure_score: score,
+            closure_tier: closureTier(score),
+            closure_ev: closureEv(r),
+            closure_risk: closureNextMeetingRisk(r),
+          };
+        })
+        .filter((r) => r.closure_quarter.key === 'current' || r.closure_quarter.key === 'next' || r.closure_quarter.key === 'unscheduled')
+        .sort((a, b) => b.closure_score - a.closure_score || String(a.deal || '').localeCompare(String(b.deal || '')));
+    }
+
+    function closureFilteredRows(rows) {
+      return (rows || [])
+        .filter((r) => closureSellerMatches(r, closurePrioritySelectedSeller))
+        .filter((r) => {
+          if (closurePriorityQuarterFocus === 'both') return r.closure_quarter.key === 'current' || r.closure_quarter.key === 'next' || r.closure_quarter.key === 'unscheduled';
+          return r.closure_quarter.key === closurePriorityQuarterFocus;
+        })
+        .filter((r) => closurePriorityTierFilter === 'all' || r.closure_tier === closurePriorityTierFilter)
+        .filter((r) => {
+          if (!closurePriorityStageFilter || closurePriorityStageFilter.size === 0) return true;
+          return closurePriorityStageFilter.has(connectDisplayStage(r));
+        })
+        .filter((r) => {
+          if (closurePriorityLeverFilter === 'all') return true;
+          const input = closureInputFor(r);
+          if (closurePriorityLeverFilter === 'exec') return closureLeverGap(input, 'exec_lever');
+          if (closurePriorityLeverFilter === 'partner') return closureLeverGap(input, 'partner_lever');
+          if (closurePriorityLeverFilter === 'inperson') return closureLeverGap(input, 'inperson_lever');
+          return true;
+        });
+    }
+
+    function closureStageUniverse(rows) {
+      const stages = new Set();
+      (rows || [])
+        .filter((r) => closureSellerMatches(r, closurePrioritySelectedSeller))
+        .forEach((r) => stages.add(connectDisplayStage(r)));
+      return Array.from(stages).sort((a, b) => (stageSortKey(a) - stageSortKey(b)) || a.localeCompare(b));
+    }
+
+    function syncClosureControls(data, rows) {
+      const sellerSel = document.getElementById('closure-seller');
+      const qSel = document.getElementById('closure-quarter');
+      const tierSel = document.getElementById('closure-tier');
+      const leverSel = document.getElementById('closure-lever');
+      if (sellerSel) {
+        const sellers = ['Overall', ...((data && data.sellers) || []).filter((s) => s && s !== 'All (unique deals)')];
+        sellerSel.innerHTML = '';
+        sellers.forEach((seller) => {
+          const opt = document.createElement('option');
+          opt.value = seller;
+          opt.textContent = seller;
+          sellerSel.appendChild(opt);
+        });
+        if (!sellers.includes(closurePrioritySelectedSeller)) closurePrioritySelectedSeller = 'Overall';
+        sellerSel.value = closurePrioritySelectedSeller;
+      }
+      if (qSel) qSel.value = closurePriorityQuarterFocus;
+      if (tierSel) tierSel.value = closurePriorityTierFilter;
+      if (leverSel) leverSel.value = closurePriorityLeverFilter;
+
+      const pills = document.getElementById('closure-stage-pills');
+      if (!pills) return;
+      const stages = closureStageUniverse(rows);
+      const valid = new Set(stages);
+      if (!closurePriorityStageTouched) {
+        closurePriorityStageFilter = new Set(stages);
+      } else if (closurePriorityStageFilter) {
+        closurePriorityStageFilter = new Set([...closurePriorityStageFilter].filter((s) => valid.has(s)));
+        if (!closurePriorityStageFilter.size) closurePriorityStageFilter = new Set(stages);
+      }
+      pills.innerHTML = '';
+      stages.forEach((stage) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pill-btn';
+        btn.textContent = stage;
+        btn.classList.toggle('active', closurePriorityStageFilter ? closurePriorityStageFilter.has(stage) : true);
+        btn.addEventListener('click', () => {
+          closurePriorityStageTouched = true;
+          const next = new Set(closurePriorityStageFilter || stages);
+          if (next.has(stage)) next.delete(stage);
+          else next.add(stage);
+          closurePriorityStageFilter = next.size ? next : new Set(stages);
+          renderClosurePriorities(data);
+        });
+        pills.appendChild(btn);
+      });
+    }
+
+    function makeClosureSelect(row, field, options) {
+      const input = closureInputFor(row);
+      const sel = document.createElement('select');
+      options.forEach((opt) => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt || '-';
+        sel.appendChild(o);
+      });
+      sel.value = input[field] || '';
+      sel.addEventListener('change', () => {
+        closureInputFor(row)[field] = sel.value;
+        saveClosureInputs();
+        renderClosurePriorities(window.__salesData || {});
+      });
+      return sel;
+    }
+
+    function makeClosureInput(row, field, placeholder) {
+      const input = closureInputFor(row);
+      const el = document.createElement('input');
+      el.value = input[field] || '';
+      el.placeholder = placeholder || '';
+      el.addEventListener('change', () => {
+        closureInputFor(row)[field] = el.value.trim();
+        saveClosureInputs();
+        renderClosurePriorities(window.__salesData || {});
+      });
+      return el;
+    }
+
+    function appendClosureTierCell(tr, tier) {
+      const td = document.createElement('td');
+      const span = document.createElement('span');
+      span.className = `closure-tier ${closureTierClass(tier)}`;
+      span.textContent = tier;
+      td.appendChild(span);
+      tr.appendChild(td);
+    }
+
+    function renderClosurePriorities(data) {
+      closureInputsState = closureInputsState || loadClosureInputs();
+      const allRows = closureRows(data);
+      syncClosureControls(data, allRows);
+      const rows = closureFilteredRows(allRows);
+      const kpis = document.getElementById('closure-kpis');
+      const body = document.getElementById('closure-body');
+      if (!kpis || !body) return;
+
+      const tiers = ['Must Chase This Week', 'Create Movement', 'Watch / Nurture', 'Clean Up / Deprioritize'];
+      kpis.innerHTML = '';
+      tiers.forEach((tier) => {
+        const tierRows = rows.filter((r) => r.closure_tier === tier);
+        const card = document.createElement('div');
+        card.className = 'partner-kpi';
+        const lab = document.createElement('div');
+        lab.className = 'partner-kpi-label';
+        lab.textContent = tier;
+        const val = document.createElement('div');
+        val.className = 'partner-kpi-value';
+        val.textContent = money.format(tierRows.length);
+        const sub = document.createElement('div');
+        sub.className = 'detail-meta';
+        sub.textContent = `EV ${fmtDealSize(tierRows.reduce((acc, r) => acc + Number(r.closure_ev || 0), 0))}`;
+        card.appendChild(lab);
+        card.appendChild(val);
+        card.appendChild(sub);
+        kpis.appendChild(card);
+      });
+
+      body.innerHTML = '';
+      if (!rows.length) {
+        const tr = document.createElement('tr');
+        const td = makeCell('td', 'No closure priority rows match current filters.', 'partner-muted');
+        td.colSpan = 14;
+        tr.appendChild(td);
+        body.appendChild(tr);
+      } else {
+        rows.forEach((r) => {
+          const input = closureInputFor(r);
+          const tr = document.createElement('tr');
+          appendClosureTierCell(tr, r.closure_tier);
+          tr.appendChild(makeCell('td', String(r.closure_score)));
+          tr.appendChild(makeCell('td', r.closure_seller));
+          tr.appendChild(makeCell('td', `${partnerDisplay(r.logo)} / ${partnerDisplay(r.deal)}`));
+          tr.appendChild(makeCell('td', connectDisplayStage(r)));
+          tr.appendChild(makeCell('td', r.closure_quarter.label));
+          tr.appendChild(makeCell('td', fmtDealSize(r.closure_ev)));
+          tr.appendChild(makeCell('td', `${partnerDisplay(r.next_meeting_date)} (${r.closure_risk.label})`));
+          const needTd = document.createElement('td');
+          needTd.appendChild(makeClosureSelect(r, 'need', ['', 'Low', 'Medium', 'High', 'Critical']));
+          tr.appendChild(needTd);
+          const whyTd = document.createElement('td');
+          whyTd.appendChild(makeClosureInput(r, 'why_now', 'Why now?'));
+          tr.appendChild(whyTd);
+          const buyerTd = document.createElement('td');
+          buyerTd.appendChild(makeClosureSelect(r, 'economic_buyer', ['', 'No', 'Yes']));
+          buyerTd.appendChild(makeClosureSelect(r, 'champion', ['', 'Weak', 'Medium', 'Strong']));
+          tr.appendChild(buyerTd);
+          const leverTd = document.createElement('td');
+          const stack = document.createElement('div');
+          stack.className = 'closure-lever-stack';
+          stack.appendChild(makeClosureSelect(r, 'exec_lever', ['', 'Needed', 'Requested', 'Completed', 'Not needed']));
+          stack.appendChild(makeClosureSelect(r, 'partner_lever', ['', 'Needed', 'Mapped', 'AE engaged', 'Registered', 'Active co-sell', 'Not applicable']));
+          stack.appendChild(makeClosureSelect(r, 'inperson_lever', ['', 'Needed', 'Scheduled', 'Completed', 'Not needed']));
+          leverTd.appendChild(stack);
+          tr.appendChild(leverTd);
+          const blockerTd = document.createElement('td');
+          blockerTd.appendChild(makeClosureInput(r, 'blocker', 'Main blocker'));
+          tr.appendChild(blockerTd);
+          tr.appendChild(makeCell('td', closureRecommendedAction(r)));
+          body.appendChild(tr);
+        });
+      }
+
+      const must = rows.filter((r) => r.closure_tier === 'Must Chase This Week');
+      const noNext = rows.filter((r) => !r.next_meeting_date);
+      const leverGaps = rows.filter((r) => {
+        const input = closureInputFor(r);
+        return closureLeverGap(input, 'exec_lever') || closureLeverGap(input, 'partner_lever') || closureLeverGap(input, 'inperson_lever');
+      });
+      const lines = [
+        `${closurePrioritySelectedSeller}: ${money.format(must.length)} must-chase thread(s), ${money.format(noNext.length)} with no next meeting, ${money.format(leverGaps.length)} with at least one leverage gap.`,
+      ];
+      const top = rows[0];
+      if (top) lines.push(`Top thread: ${partnerDisplay(top.logo)} / ${partnerDisplay(top.deal)} (${top.closure_tier}, score ${top.closure_score}).`);
+      lines.push('Seller inputs are intentionally editable in-table so this can become the weekly review surface, not just another static report.');
+      setInsight('insight-closurepriority', lines);
+    }
+
 	    function setupTabs() {
 	      const appendixRow = document.getElementById('tabs-appendix');
 	      const tabCross = document.getElementById('tab-crosstab');
@@ -7294,6 +7776,7 @@
 	      const tabOperating = document.getElementById('tab-operating');
 	      const tabPartnerships = document.getElementById('tab-partnerships');
 	      const tabConnectHealth = document.getElementById('tab-connecthealth');
+	      const tabClosurePriority = document.getElementById('tab-closurepriority');
 	      const tabCycleTime = document.getElementById('tab-cycletime');
 	      const tabAssumptions = document.getElementById('tab-assumptions');
 	      const tabAppendix = document.getElementById('tab-appendix');
@@ -7313,6 +7796,7 @@
 		      const viewOperating = document.getElementById('view-operating');
 		      const viewPartnerships = document.getElementById('view-partnerships');
 		      const viewConnectHealth = document.getElementById('view-connecthealth');
+		      const viewClosurePriority = document.getElementById('view-closurepriority');
 		      const viewCycleTime = document.getElementById('view-cycletime');
 		      const viewAssumptions = document.getElementById('view-assumptions');
 		      const viewAdmin = document.getElementById('view-admin');
@@ -7343,6 +7827,7 @@
 		        tabOperating.classList.toggle('active', name === 'operating');
 		        tabPartnerships.classList.toggle('active', name === 'partnerships');
 		        tabConnectHealth.classList.toggle('active', name === 'connecthealth');
+		        tabClosurePriority.classList.toggle('active', name === 'closurepriority');
 		        tabCycleTime.classList.toggle('active', name === 'cycletime');
 		        tabAssumptions.classList.toggle('active', name === 'assumptions');
 		        tabAdmin.classList.toggle('active', name === 'admin');
@@ -7361,12 +7846,13 @@
 		        viewOperating.classList.toggle('active', name === 'operating');
 		        viewPartnerships.classList.toggle('active', name === 'partnerships');
 		        viewConnectHealth.classList.toggle('active', name === 'connecthealth');
+		        viewClosurePriority.classList.toggle('active', name === 'closurepriority');
 		        viewCycleTime.classList.toggle('active', name === 'cycletime');
 		        viewAssumptions.classList.toggle('active', name === 'assumptions');
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'about') {
+	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'closurepriority' || name === 'about') {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
@@ -7391,6 +7877,7 @@
 		      tabOperating.addEventListener('click', () => activate('operating'));
 		      tabPartnerships.addEventListener('click', () => activate('partnerships'));
 		      tabConnectHealth.addEventListener('click', () => activate('connecthealth'));
+		      tabClosurePriority.addEventListener('click', () => activate('closurepriority'));
 		      tabCycleTime.addEventListener('click', () => activate('cycletime'));
 		      tabAssumptions.addEventListener('click', () => activate('assumptions'));
 		      tabAdmin.addEventListener('click', () => activate('admin'));
@@ -11030,6 +11517,10 @@
 	        const partnershipSellerSelect = document.getElementById('partnership-seller');
 	        const partnershipPartnerSelect = document.getElementById('partnership-partner');
 	        const connectHealthSellerSelect = document.getElementById('connecthealth-seller');
+	        const closureSellerSelect = document.getElementById('closure-seller');
+	        const closureQuarterSelect = document.getElementById('closure-quarter');
+	        const closureTierSelect = document.getElementById('closure-tier');
+	        const closureLeverSelect = document.getElementById('closure-lever');
 	        const cycleSellerSelect = document.getElementById('cycle-seller');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
@@ -11039,6 +11530,7 @@
         let funnelMinMonth = funnelMonths[0] || null;
         likelihoodState = loadLikelihoodState();
         quarterTargetsState = loadQuarterTargetsState();
+        closureInputsState = loadClosureInputs();
         dashboardSettingsState = loadDashboardSettingsState();
         currentAuthStore = loadAuthStore();
         ensureOverallForecastTargets({ persist: false });
@@ -11142,6 +11634,7 @@
 	          renderOperatingMetrics(data);
 	          renderPartnerships(data);
 	          renderConnectHealth(data);
+	          renderClosurePriorities(data);
 	          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
 	        }
 
@@ -11338,6 +11831,30 @@
           connectHealthSellerSelect.addEventListener('change', () => {
             connectHealthSelectedSeller = connectHealthSellerSelect.value || 'Overall';
             renderConnectHealth(data);
+          });
+        }
+        if (closureSellerSelect) {
+          closureSellerSelect.addEventListener('change', () => {
+            closurePrioritySelectedSeller = closureSellerSelect.value || 'Overall';
+            renderClosurePriorities(data);
+          });
+        }
+        if (closureQuarterSelect) {
+          closureQuarterSelect.addEventListener('change', () => {
+            closurePriorityQuarterFocus = closureQuarterSelect.value || 'both';
+            renderClosurePriorities(data);
+          });
+        }
+        if (closureTierSelect) {
+          closureTierSelect.addEventListener('change', () => {
+            closurePriorityTierFilter = closureTierSelect.value || 'all';
+            renderClosurePriorities(data);
+          });
+        }
+        if (closureLeverSelect) {
+          closureLeverSelect.addEventListener('change', () => {
+            closurePriorityLeverFilter = closureLeverSelect.value || 'all';
+            renderClosurePriorities(data);
           });
         }
         cycleSellerSelect.addEventListener('change', () => renderCycleTime(data, cycleSellerSelect.value || 'Overall'));
