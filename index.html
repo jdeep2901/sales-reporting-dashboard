@@ -2911,9 +2911,21 @@
 	            <h1>Seller Connect Health</h1>
 	            <div class="sub">Active-pipeline follow-up hygiene for Somya, Akshay, and Peri using the latest pulled Next Meeting Date.</div>
 	          </div>
+	          <div class="controls">
+	            <div>
+	              <label for="connecthealth-seller">Seller</label>
+	              <select id="connecthealth-seller"></select>
+	            </div>
+	          </div>
 	        </div>
 	        <ul id="insight-connecthealth" class="insight-list"></ul>
 	        <div id="connecthealth-kpis" class="partner-kpi-grid"></div>
+	        <div class="partner-stage-filter">
+	          <div class="pill-picker">
+	            <span class="label">Deal Stage</span>
+	            <div id="connecthealth-stage-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+	          </div>
+	        </div>
 	        <div class="partner-table-wrap">
 	          <table class="partner-table">
 	            <thead>
@@ -4068,7 +4080,7 @@
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
     const APP_VERSION = 'v2.0';
     const VERSION_HISTORY_ITEMS = [
-      { version: 'v2.0', date: '2026-05-15', commit: '-', changes: 'Added Seller Connect Health with Next Meeting Date follow-up flags for Somya, Akshay, and Peri; promoted app to v2.0.' },
+      { version: 'v2.0', date: '2026-05-15', commit: '-', changes: 'Added Seller Connect Health with seller/stage filters and Next Meeting Date follow-up flags for Somya, Akshay, and Peri; promoted app to v2.0.' },
       { version: 'v1.1.23', date: '2026-05-14', commit: '-', changes: 'Preserved Partnerships stage pill selections across seller/partner changes and default-deselected terminal/latent stages.' },
       { version: 'v1.1.22', date: '2026-05-14', commit: '-', changes: 'Added pill-style multi-select deal stage filters to the Partnerships review tab.' },
       { version: 'v1.1.21', date: '2026-05-14', commit: '-', changes: 'Reduced Monday sync timeout risk by returning a compact post-sync response and improving 504 messaging.' },
@@ -4207,6 +4219,9 @@
     let partnershipSelectedPartner = 'All';
     let partnershipStageFilter = null; // null = all; else Set(stage labels)
     let partnershipStageFilterTouched = false;
+    let connectHealthSelectedSeller = 'Overall';
+    let connectHealthStageFilter = null; // null = all; else Set(stage labels)
+    let connectHealthStageFilterTouched = false;
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
 	    let stageConvSelectedSeller = 'Overall';
@@ -7103,6 +7118,79 @@
       });
     }
 
+    function connectDisplayStage(row) {
+      return partnerDisplay(row && (row.stage || row.deal_stage || row.dealStage));
+    }
+
+    function connectFilteredRows(rows) {
+      return (rows || [])
+        .filter((r) => !connectHealthSelectedSeller || connectHealthSelectedSeller === 'Overall' || r.connect_seller === connectHealthSelectedSeller)
+        .filter((r) => {
+          if (!connectHealthStageFilter || connectHealthStageFilter.size === 0) return true;
+          return connectHealthStageFilter.has(connectDisplayStage(r));
+        });
+    }
+
+    function connectStageUniverse(rows) {
+      const stages = new Set();
+      (rows || [])
+        .filter((r) => !connectHealthSelectedSeller || connectHealthSelectedSeller === 'Overall' || r.connect_seller === connectHealthSelectedSeller)
+        .forEach((r) => stages.add(connectDisplayStage(r)));
+      return Array.from(stages).sort((a, b) => (stageSortKey(a) - stageSortKey(b)) || a.localeCompare(b));
+    }
+
+    function syncConnectSellerFilter() {
+      const sel = document.getElementById('connecthealth-seller');
+      if (!sel) return;
+      const options = ['Overall', ...CONNECT_HEALTH_SELLERS];
+      sel.innerHTML = '';
+      options.forEach((seller) => {
+        const opt = document.createElement('option');
+        opt.value = seller;
+        opt.textContent = seller;
+        sel.appendChild(opt);
+      });
+      if (!options.includes(connectHealthSelectedSeller)) connectHealthSelectedSeller = 'Overall';
+      sel.value = connectHealthSelectedSeller;
+    }
+
+    function renderConnectStagePills(data, allRows) {
+      const el = document.getElementById('connecthealth-stage-pills');
+      if (!el) return;
+      const stages = connectStageUniverse(allRows);
+      const valid = new Set(stages);
+      if (!connectHealthStageFilterTouched) {
+        connectHealthStageFilter = new Set(stages);
+      } else if (connectHealthStageFilter) {
+        connectHealthStageFilter = new Set([...connectHealthStageFilter].filter((s) => valid.has(s)));
+        if (!connectHealthStageFilter.size) connectHealthStageFilter = new Set(stages);
+      }
+      el.innerHTML = '';
+      if (!stages.length) {
+        const empty = document.createElement('span');
+        empty.className = 'detail-meta';
+        empty.textContent = 'No active stages in current seller filter';
+        el.appendChild(empty);
+        return;
+      }
+      stages.forEach((stage) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pill-btn';
+        btn.textContent = stage;
+        btn.classList.toggle('active', connectHealthStageFilter ? connectHealthStageFilter.has(stage) : true);
+        btn.addEventListener('click', () => {
+          connectHealthStageFilterTouched = true;
+          const next = new Set(connectHealthStageFilter || stages);
+          if (next.has(stage)) next.delete(stage);
+          else next.add(stage);
+          connectHealthStageFilter = next.size ? next : new Set(stages);
+          renderConnectHealth(data);
+        });
+        el.appendChild(btn);
+      });
+    }
+
     function appendConnectFlagCell(tr, bucket) {
       const td = document.createElement('td');
       const span = document.createElement('span');
@@ -7116,7 +7204,10 @@
       const kpis = document.getElementById('connecthealth-kpis');
       const body = document.getElementById('connecthealth-body');
       if (!kpis || !body) return;
-      const rows = connectHealthRows(data);
+      syncConnectSellerFilter();
+      const allRows = connectHealthRows(data);
+      renderConnectStagePills(data, allRows);
+      const rows = connectFilteredRows(allRows);
       const bySeller = Object.fromEntries(CONNECT_HEALTH_SELLERS.map((seller) => [seller, { stale: 0, soon: 0, later: 0, total: 0 }]));
       rows.forEach((r) => {
         const bucket = r.connect_bucket.key;
@@ -7161,7 +7252,7 @@
           appendConnectFlagCell(tr, bucket);
           tr.appendChild(makeCell('td', partnerDisplay(r.logo || r.account)));
           tr.appendChild(makeCell('td', partnerDisplay(r.deal)));
-          tr.appendChild(makeCell('td', partnerDisplay(r.stage || r.deal_stage || r.dealStage)));
+          tr.appendChild(makeCell('td', connectDisplayStage(r)));
           tr.appendChild(makeCell('td', Number.isFinite(Number(r.deal_size)) ? `$ ${money.format(Number(r.deal_size))}` : '-'));
           tr.appendChild(makeCell('td', partnerDisplay(r.intro_date)));
           tr.appendChild(makeCell('td', partnerDisplay(r.next_meeting_date)));
@@ -7179,7 +7270,7 @@
         .map((seller) => ({ seller, stale: (bySeller[seller] || {}).stale || 0 }))
         .sort((a, b) => b.stale - a.stale || a.seller.localeCompare(b.seller))[0];
       const lines = [
-        `Active connect health: ${money.format(totalStale)} need reconnect, ${money.format(totalSoon)} have a connect within 2 weeks, ${money.format(totalLater)} are scheduled more than 2 weeks out.`,
+        `Active connect health (${connectHealthSelectedSeller || 'Overall'}): ${money.format(totalStale)} need reconnect, ${money.format(totalSoon)} have a connect within 2 weeks, ${money.format(totalLater)} are scheduled more than 2 weeks out.`,
       ];
       if (worst && worst.stale) lines.push(`Highest reconnect load: ${worst.seller} with ${money.format(worst.stale)} active deal(s) missing or past next meeting date.`);
       lines.push('Use this as the weekly operating list: stale first, then near-term connects, then future-dated follow-ups.');
@@ -10938,6 +11029,7 @@
 	        const operatingSellerSelect = document.getElementById('operating-seller');
 	        const partnershipSellerSelect = document.getElementById('partnership-seller');
 	        const partnershipPartnerSelect = document.getElementById('partnership-partner');
+	        const connectHealthSellerSelect = document.getElementById('connecthealth-seller');
 	        const cycleSellerSelect = document.getElementById('cycle-seller');
         const orderedStages = getOrderedStages(data.stages);
         const selectedStages = new Set(orderedStages);
@@ -11240,6 +11332,12 @@
           partnershipPartnerSelect.addEventListener('change', () => {
             partnershipSelectedPartner = partnershipPartnerSelect.value || 'All';
             renderPartnerships(data);
+          });
+        }
+        if (connectHealthSellerSelect) {
+          connectHealthSellerSelect.addEventListener('change', () => {
+            connectHealthSelectedSeller = connectHealthSellerSelect.value || 'Overall';
+            renderConnectHealth(data);
           });
         }
         cycleSellerSelect.addEventListener('change', () => renderCycleTime(data, cycleSellerSelect.value || 'Overall'));

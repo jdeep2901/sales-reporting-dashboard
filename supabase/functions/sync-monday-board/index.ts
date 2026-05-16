@@ -845,6 +845,19 @@ function primaryToken(text: string | null | undefined, fallback = "(blank)"): st
   return (s.split(",")[0] || "").trim() || fallback;
 }
 
+function looksLikeBadLogo(text: string | null | undefined): boolean {
+  const s = String(text || "").trim();
+  if (!s || s === "(blank)") return true;
+  return /^\d+(?:\.\d+)?$/.test(s);
+}
+
+function logoFromDealName(dealName: string | null | undefined): string {
+  const s = String(dealName || "").trim();
+  if (!s) return "(blank)";
+  const parts = s.split(/\s+(?:-|–|—)\s+/).map((x) => x.trim()).filter(Boolean);
+  return (parts[0] || s).trim() || "(blank)";
+}
+
 function normalizeChannel(sourceOfLead: string | null | undefined, revenueSource: string | null | undefined): string {
   const raw = `${String(sourceOfLead || "").trim()} | ${String(revenueSource || "").trim()}`.toLowerCase();
   if (!raw.replace(/\|/g, "").trim()) return "Unknown";
@@ -1119,7 +1132,8 @@ async function mondayGraphql(token: string, query: string, variables?: Record<st
       Authorization: token,
     },
     // Avoid hanging until the edge runtime kills the request (which surfaces as 546 upstream).
-    signal: AbortSignal.timeout(25_000),
+    // Monday can occasionally take >25s for the paged Deals board pull, so allow one slow page.
+    signal: AbortSignal.timeout(55_000),
     body: JSON.stringify({ query, variables: variables || {} }),
   });
   const body = await res.json();
@@ -1933,7 +1947,7 @@ async function buildDataset(
         }
       }
     }
-    const logo = primaryToken(logoRawText);
+    const logo = looksLikeBadLogo(logoRawText) ? logoFromDealName(dealName) : primaryToken(logoRawText);
     // Prefer Contacts join-derived Business Group when available.
     let businessGroupRaw = "";
     let bizFnRaw = "";
