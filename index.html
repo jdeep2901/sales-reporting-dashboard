@@ -2883,6 +2883,7 @@
 	        <button id="tab-connecthealth" class="tab-btn" type="button">Connect Health</button>
 	        <button id="tab-closurepriority" class="tab-btn" type="button">Closure Priorities</button>
 	        <button id="tab-leadershipforecast" class="tab-btn" type="button">Leadership Forecast</button>
+	        <button id="tab-lttrends" class="tab-btn" type="button">LT Trends</button>
 	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
@@ -3136,6 +3137,55 @@
 	          </table>
 	        </div>
 	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses last-12-month Akshay/Somya/Abhinav conversion assumptions in business stage order: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
+	      </div>
+
+	      <div id="view-lttrends" class="view">
+	        <div class="head">
+	          <div>
+	            <h1>LT Biweekly Trends</h1>
+	            <div class="sub">Semi-monthly point-in-time trend of actuals, empirical pipeline EV, contracting value, and net-new funnel additions across saved Supabase snapshots.</div>
+	          </div>
+	        </div>
+	        <div id="insight-lttrends" class="insight"></div>
+	        <div class="forecast-wrap" id="lttrend-wrap">
+	          <div class="forecast-detail">
+	            <h3>1. Actuals</h3>
+	            <div class="table-scroll">
+	              <table class="forecast-table">
+	                <thead id="lttrend-actuals-head"></thead>
+	                <tbody id="lttrend-actuals-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	          <div class="forecast-detail">
+	            <h3>2. Pipeline EV</h3>
+	            <div class="table-scroll">
+	              <table class="forecast-table">
+	                <thead id="lttrend-ev-head"></thead>
+	                <tbody id="lttrend-ev-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	          <div class="forecast-detail">
+	            <h3>3. Dollar Value in Contracting</h3>
+	            <div class="table-scroll">
+	              <table class="forecast-table">
+	                <thead id="lttrend-contracting-head"></thead>
+	                <tbody id="lttrend-contracting-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	          <div class="forecast-detail">
+	            <h3>4. Net-New Deals Added to Funnel</h3>
+	            <div class="table-scroll">
+	              <table class="forecast-table">
+	                <thead id="lttrend-new-head"></thead>
+	                <tbody id="lttrend-new-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="operating-footnote">Assumptions: trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals are QTD won revenue paced by Start Date + Duration for the fiscal quarter containing the anchor. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Contracting value uses current snapshot rows in Contracting only. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4268,8 +4318,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.3';
+    const APP_VERSION = 'v2.0.4';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.4', date: '2026-05-19', commit: '-', changes: 'Added LT Biweekly Trends view using historical Supabase snapshots for actuals, empirical EV, contracting value, and net-new funnel additions.' },
       { version: 'v2.0.3', date: '2026-05-19', commit: '-', changes: 'Corrected Leadership Forecast empirical EV assumptions so Commercial Proposal precedes Contracting in conversion ordering.' },
       { version: 'v2.0.2', date: '2026-05-18', commit: '-', changes: 'Added Leadership Forecast screen with empirical EV summary, prioritized deal table, risk flags, and partner involvement callouts.' },
       { version: 'v2.0.1', date: '2026-05-16', commit: '-', changes: 'Added Closure Priorities screen with scoring, filters, lever gaps, and seller-input fields.' },
@@ -4424,6 +4475,7 @@
     let leadershipForecastSelectedSeller = 'Overall';
     let leadershipForecastQuarterFocus = 'both';
     let leadershipForecastRiskFilter = 'all';
+    let ltTrendsRenderSeq = 0;
     let closureInputsState = {};
 	    let stageConvIntroMonthsState = [];
 	    let stageConvIntroCutoffMonthState = null;
@@ -8124,6 +8176,234 @@
       setInsight('insight-leadershipforecast', lines);
     }
 
+    function ltTrendDateLabel(dateLike, prefix) {
+      const d = operatingDateOnly(dateLike);
+      if (!d) return '-';
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return prefix ? `${prefix} ${label}` : label;
+    }
+
+    function ltTrendAnchorEnd(dateLike) {
+      const d = operatingDateOnly(dateLike);
+      if (!d) return null;
+      d.setHours(23, 59, 59, 999);
+      return d;
+    }
+
+    function ltTrendBuildAnchors() {
+      const versions = (Array.isArray(versionsMetaState) ? versionsMetaState : [])
+        .map((v) => ({ meta: v, createdAt: operatingVersionCreatedAt(v) }))
+        .filter((v) => v.createdAt)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      if (!versions.length) return [];
+      const first = operatingDateOnly(versions[0].createdAt);
+      const latest = operatingDateOnly(versions[versions.length - 1].createdAt);
+      if (!first || !latest) return [];
+      const anchors = [];
+      const cursor = new Date(first.getFullYear(), first.getMonth(), first.getDate() <= 1 ? 1 : first.getDate() <= 15 ? 15 : 1, 12);
+      if (first.getDate() > 15) cursor.setMonth(cursor.getMonth() + 1);
+      while (cursor.getTime() <= latest.getTime()) {
+        anchors.push({ date: new Date(cursor), label: ltTrendDateLabel(cursor) });
+        if (cursor.getDate() === 1) cursor.setDate(15);
+        else {
+          cursor.setMonth(cursor.getMonth() + 1);
+          cursor.setDate(1);
+        }
+      }
+      const lastAnchor = anchors[anchors.length - 1];
+      if (!lastAnchor || latest.getTime() > lastAnchor.date.getTime()) {
+        anchors.push({ date: latest, label: ltTrendDateLabel(latest, 'Latest') });
+      }
+      return anchors;
+    }
+
+    function ltTrendVersionForAnchor(anchorDate) {
+      const anchorEnd = ltTrendAnchorEnd(anchorDate);
+      if (!anchorEnd) return null;
+      let best = null;
+      (Array.isArray(versionsMetaState) ? versionsMetaState : []).forEach((v) => {
+        const createdAt = operatingVersionCreatedAt(v);
+        if (!createdAt || createdAt.getTime() > anchorEnd.getTime()) return;
+        if (!best || createdAt.getTime() > best.createdAt.getTime()) best = { meta: v, createdAt };
+      });
+      return best ? best.meta : null;
+    }
+
+    async function ltTrendLoadPoints(data) {
+      const anchors = ltTrendBuildAnchors();
+      const points = anchors.map((anchor) => {
+        const meta = ltTrendVersionForAnchor(anchor.date);
+        return { ...anchor, meta, id: meta && meta.id ? String(meta.id) : null, dataset: null };
+      }).filter((p) => p.id);
+      const ids = Array.from(new Set(points.map((p) => p.id)));
+      await Promise.all(ids.map(async (id) => {
+        const payload = await fetchVersionDataCached(id);
+        points.forEach((p) => {
+          if (p.id === id) p.dataset = (payload && payload.dataset) || data;
+        });
+      }));
+      return points.filter((p) => p.dataset && Array.isArray(p.dataset.all_deals_rows));
+    }
+
+    function ltTrendSellerNames(points, data) {
+      const names = new Set();
+      (LEADERSHIP_FORECAST_SELLERS || []).forEach((s) => names.add(s));
+      ((data && data.sellers) || []).forEach((s) => {
+        if (s && s !== 'All (unique deals)') names.add(s);
+      });
+      points.forEach((p) => {
+        ((p.dataset && p.dataset.all_deals_rows) || []).forEach((r) => {
+          const matched = Array.isArray(r && r.matched_sellers) ? r.matched_sellers : [];
+          matched.forEach((s) => { if (s) names.add(s); });
+          const fallback = partnerSellerLabel(r);
+          if (fallback && fallback !== '-') names.add(fallback);
+        });
+      });
+      const priority = new Map(LEADERSHIP_FORECAST_SELLERS.map((s, idx) => [s, idx]));
+      return Array.from(names).sort((a, b) => {
+        const ap = priority.has(a) ? priority.get(a) : 999;
+        const bp = priority.has(b) ? priority.get(b) : 999;
+        if (ap !== bp) return ap - bp;
+        return a.localeCompare(b);
+      });
+    }
+
+    function ltTrendQLabel(point) {
+      return scorecardQuarterLabelForDate(point && point.date);
+    }
+
+    function ltTrendRows(point, seller) {
+      const rows = Array.isArray(point && point.dataset && point.dataset.all_deals_rows) ? point.dataset.all_deals_rows : [];
+      return rows.filter((r) => closureSellerMatches(r, seller));
+    }
+
+    function ltTrendActuals(point, seller) {
+      const qLabel = ltTrendQLabel(point);
+      const asOf = ltTrendAnchorEnd(point && point.date);
+      if (!qLabel || !asOf) return 0;
+      return ltTrendRows(point, seller).reduce((acc, r) => {
+        if (!isWonStage(r && r.stage)) return acc;
+        const start = parseIsoLocalDate(r && r.start_date);
+        const total = dealSizeValue(r && r.deal_size);
+        if (!start || total <= 0) return acc;
+        const durationRaw = Number(r && r.duration_months || 0);
+        const duration = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : 1;
+        const monthly = total / duration;
+        let contribution = 0;
+        for (let i = 0; i < duration; i += 1) {
+          const monthDate = addMonthsSafe(start, i);
+          if (monthDate <= asOf && scorecardQuarterLabelForDate(monthDate) === qLabel) contribution += monthly;
+        }
+        return acc + contribution;
+      }, 0);
+    }
+
+    function ltTrendPipelineEv(point, seller) {
+      const qLabel = ltTrendQLabel(point);
+      if (!qLabel) return 0;
+      return ltTrendRows(point, seller).reduce((acc, r) => {
+        if (!closureActiveStage(r)) return acc;
+        return acc + leadershipEmpiricalEv(r, qLabel);
+      }, 0);
+    }
+
+    function ltTrendContractingValue(point, seller) {
+      return ltTrendRows(point, seller).reduce((acc, r) => {
+        if (!closureActiveStage(r)) return acc;
+        if (stageNumber(r && r.stage) !== 6) return acc;
+        return acc + dealSizeValue(r && r.deal_size);
+      }, 0);
+    }
+
+    function ltTrendActiveFunnelKeys(point, seller) {
+      const keys = new Set();
+      ltTrendRows(point, seller).forEach((r) => {
+        if (!closureActiveStage(r)) return;
+        const key = closureDealKey(r);
+        if (key) keys.add(key);
+      });
+      return keys;
+    }
+
+    function ltTrendNewDeals(point, prevPoint, seller) {
+      if (!prevPoint) return null;
+      const now = ltTrendActiveFunnelKeys(point, seller);
+      const prev = ltTrendActiveFunnelKeys(prevPoint, seller);
+      let count = 0;
+      now.forEach((key) => {
+        if (!prev.has(key)) count += 1;
+      });
+      return count;
+    }
+
+    function ltTrendFormat(value, kind) {
+      if (value == null) return '-';
+      if (kind === 'count') return money.format(Number(value || 0));
+      return fmtDealSize(value);
+    }
+
+    function ltTrendRenderMetric(metric, points, sellers) {
+      const head = document.getElementById(metric.headId);
+      const body = document.getElementById(metric.bodyId);
+      if (!head || !body) return;
+      head.innerHTML = '';
+      body.innerHTML = '';
+      const hr = document.createElement('tr');
+      hr.appendChild(makeCell('th', 'Seller'));
+      points.forEach((p) => {
+        const th = makeCell('th', p.label);
+        th.title = p.meta ? `Snapshot: ${fmtTs(p.meta.created_at)}\nQuarter: ${ltTrendQLabel(p)}` : '';
+        hr.appendChild(th);
+      });
+      head.appendChild(hr);
+
+      const rows = ['Overall', ...sellers].filter((seller, idx) => {
+        if (idx === 0) return true;
+        return points.some((p, pIdx) => Number(metric.compute(p, points[pIdx - 1], seller) || 0) !== 0);
+      });
+      rows.forEach((seller) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(makeCell('td', seller));
+        points.forEach((p, pIdx) => {
+          tr.appendChild(makeCell('td', ltTrendFormat(metric.compute(p, points[pIdx - 1], seller), metric.kind)));
+        });
+        body.appendChild(tr);
+      });
+    }
+
+    async function renderLtTrends(data) {
+      const seq = ++ltTrendsRenderSeq;
+      const wrap = document.getElementById('lttrend-wrap');
+      if (!wrap) return;
+      setInsight('insight-lttrends', ['Loading historical Supabase snapshots for LT trend view...']);
+      try {
+        const points = await ltTrendLoadPoints(data);
+        if (seq !== ltTrendsRenderSeq) return;
+        if (!points.length) {
+          setInsight('insight-lttrends', ['No versioned Supabase snapshots are available for LT trending yet.']);
+          return;
+        }
+        const sellers = ltTrendSellerNames(points, data);
+        const metrics = [
+          { headId: 'lttrend-actuals-head', bodyId: 'lttrend-actuals-body', kind: 'money', compute: ltTrendActuals },
+          { headId: 'lttrend-ev-head', bodyId: 'lttrend-ev-body', kind: 'money', compute: ltTrendPipelineEv },
+          { headId: 'lttrend-contracting-head', bodyId: 'lttrend-contracting-body', kind: 'money', compute: ltTrendContractingValue },
+          { headId: 'lttrend-new-head', bodyId: 'lttrend-new-body', kind: 'count', compute: ltTrendNewDeals },
+        ];
+        metrics.forEach((metric) => ltTrendRenderMetric(metric, points, sellers));
+        const latest = points[points.length - 1];
+        const latestOverallEv = ltTrendPipelineEv(latest, 'Overall');
+        const latestOverallContracting = ltTrendContractingValue(latest, 'Overall');
+        setInsight('insight-lttrends', [
+          `${money.format(points.length)} semi-monthly trend point(s) loaded from ${ltTrendDateLabel(points[0].date)} to ${ltTrendDateLabel(latest.date)}.`,
+          `Latest overall ${ltTrendQLabel(latest)} pipeline EV: ${fmtDealSize(latestOverallEv)}; contracting value: ${fmtDealSize(latestOverallContracting)}.`,
+          'Hover column headers to see the exact Supabase refresh timestamp used for each anchor.',
+        ]);
+      } catch (e) {
+        setInsight('insight-lttrends', [e.message || 'Failed to build LT trend view from historical snapshots.']);
+      }
+    }
+
     function setupTabs() {
 	      const appendixRow = document.getElementById('tabs-appendix');
 	      const tabCross = document.getElementById('tab-crosstab');
@@ -8143,6 +8423,7 @@
 	      const tabConnectHealth = document.getElementById('tab-connecthealth');
 	      const tabClosurePriority = document.getElementById('tab-closurepriority');
 	      const tabLeadershipForecast = document.getElementById('tab-leadershipforecast');
+	      const tabLtTrends = document.getElementById('tab-lttrends');
 	      const tabCycleTime = document.getElementById('tab-cycletime');
 	      const tabAssumptions = document.getElementById('tab-assumptions');
 	      const tabAppendix = document.getElementById('tab-appendix');
@@ -8164,6 +8445,7 @@
 		      const viewConnectHealth = document.getElementById('view-connecthealth');
 		      const viewClosurePriority = document.getElementById('view-closurepriority');
 		      const viewLeadershipForecast = document.getElementById('view-leadershipforecast');
+		      const viewLtTrends = document.getElementById('view-lttrends');
 		      const viewCycleTime = document.getElementById('view-cycletime');
 		      const viewAssumptions = document.getElementById('view-assumptions');
 		      const viewAdmin = document.getElementById('view-admin');
@@ -8196,6 +8478,7 @@
 		        tabConnectHealth.classList.toggle('active', name === 'connecthealth');
 		        tabClosurePriority.classList.toggle('active', name === 'closurepriority');
 		        tabLeadershipForecast.classList.toggle('active', name === 'leadershipforecast');
+		        tabLtTrends.classList.toggle('active', name === 'lttrends');
 		        tabCycleTime.classList.toggle('active', name === 'cycletime');
 		        tabAssumptions.classList.toggle('active', name === 'assumptions');
 		        tabAdmin.classList.toggle('active', name === 'admin');
@@ -8216,12 +8499,13 @@
 		        viewConnectHealth.classList.toggle('active', name === 'connecthealth');
 		        viewClosurePriority.classList.toggle('active', name === 'closurepriority');
 		        viewLeadershipForecast.classList.toggle('active', name === 'leadershipforecast');
+		        viewLtTrends.classList.toggle('active', name === 'lttrends');
 		        viewCycleTime.classList.toggle('active', name === 'cycletime');
 		        viewAssumptions.classList.toggle('active', name === 'assumptions');
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'closurepriority' || name === 'leadershipforecast' || name === 'about') {
+	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'closurepriority' || name === 'leadershipforecast' || name === 'lttrends' || name === 'about') {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
@@ -8248,6 +8532,7 @@
 		      tabConnectHealth.addEventListener('click', () => activate('connecthealth'));
 		      tabClosurePriority.addEventListener('click', () => activate('closurepriority'));
 		      tabLeadershipForecast.addEventListener('click', () => activate('leadershipforecast'));
+		      tabLtTrends.addEventListener('click', () => activate('lttrends'));
 		      tabCycleTime.addEventListener('click', () => activate('cycletime'));
 		      tabAssumptions.addEventListener('click', () => activate('assumptions'));
 		      tabAdmin.addEventListener('click', () => activate('admin'));
@@ -12009,6 +12294,7 @@
 	          renderConnectHealth(data);
 	          renderClosurePriorities(data);
 	          renderLeadershipForecast(data);
+	          renderLtTrends(data);
 	          renderCycleTime(data, (cycleSellerSelect && cycleSellerSelect.value) || 'Overall');
 	        }
 
