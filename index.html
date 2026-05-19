@@ -3135,7 +3135,7 @@
 	            <tbody id="leadership-deal-body"></tbody>
 	          </table>
 	        </div>
-	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses last-12-month Akshay/Somya/Abhinav conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Proposal 45%, Contracting 44%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
+	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses last-12-month Akshay/Somya/Abhinav conversion assumptions in business stage order: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4268,8 +4268,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.2';
+    const APP_VERSION = 'v2.0.3';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.3', date: '2026-05-19', commit: '-', changes: 'Corrected Leadership Forecast empirical EV assumptions so Commercial Proposal precedes Contracting in conversion ordering.' },
       { version: 'v2.0.2', date: '2026-05-18', commit: '-', changes: 'Added Leadership Forecast screen with empirical EV summary, prioritized deal table, risk flags, and partner involvement callouts.' },
       { version: 'v2.0.1', date: '2026-05-16', commit: '-', changes: 'Added Closure Priorities screen with scoring, filters, lever gaps, and seller-input fields.' },
       { version: 'v2.0', date: '2026-05-15', commit: '-', changes: 'Added Seller Connect Health with seller/stage filters and Next Meeting Date follow-up flags for Somya, Akshay, and Peri; promoted app to v2.0.' },
@@ -7842,8 +7843,8 @@
       2: { p: 0.10, label: 'Qualification' },
       3: { p: 0.19, label: 'Capability' },
       4: { p: 0.29, label: 'Problem Scoping' },
-      5: { p: 0.44, label: 'Contracting' },
-      6: { p: 0.45, label: 'Commercial Proposal' },
+      5: { p: 0.44, label: 'Commercial Proposal' },
+      6: { p: 0.90, label: 'Contracting' },
     };
 
     function leadershipQuarterLabelToInfo(qKey) {
