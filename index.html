@@ -3054,21 +3054,21 @@
         </div>
       </div>
 	      <div class="tabs tabs-main">
+	        <button id="tab-leadershipforecast" class="tab-btn" type="button">Vertical Performance</button>
 	        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly Scorecard</button>
 	        <button id="tab-introtrend" class="tab-btn" type="button">Call Trends</button>
-	        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
-	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
 	        <button id="tab-operating" class="tab-btn" type="button">Operating Metrics</button>
-	        <button id="tab-partnerships" class="tab-btn" type="button">Partnerships</button>
-	        <button id="tab-connecthealth" class="tab-btn" type="button">Connect Health</button>
-	        <button id="tab-closurepriority" class="tab-btn" type="button">Closure Priorities</button>
-	        <button id="tab-leadershipforecast" class="tab-btn" type="button">Leadership Forecast</button>
 	        <button id="tab-lttrends" class="tab-btn" type="button">LT Trends</button>
 	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
 	        <button id="tab-admin" class="tab-btn" type="button" style="display:none;">Admin</button>
 	      </div>
 	      <div id="tabs-appendix" class="tabs tabs-appendix" style="display:none;">
+	        <button id="tab-forecast" class="tab-btn" type="button">Revenue Forecast</button>
+	        <button id="tab-forecast-actuals" class="tab-btn" type="button">Revenue Forecast (Actuals)</button>
+	        <button id="tab-partnerships" class="tab-btn" type="button">Partnerships</button>
+	        <button id="tab-connecthealth" class="tab-btn" type="button">Connect Health</button>
+	        <button id="tab-closurepriority" class="tab-btn" type="button">Closure Priorities</button>
 	        <button id="tab-crosstab" class="tab-btn" type="button">Crosstab</button>
 	        <button id="tab-funnel" class="tab-btn" type="button">Funnel Metrics</button>
 	        <button id="tab-industry" class="tab-btn" type="button">Industry Action</button>
@@ -3250,7 +3250,7 @@
 	      <div id="view-leadershipforecast" class="view">
 	        <div class="head">
 	          <div>
-	            <h1>Leadership Forecast</h1>
+	            <h1>Vertical Performance</h1>
 	            <div class="sub">Email-ready current-quarter / next-quarter forecast using empirical conversion assumptions, prioritized deal detail, risk flags, and partner motion.</div>
 	          </div>
 	          <div class="controls">
@@ -4506,8 +4506,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.14';
+    const APP_VERSION = 'v2.0.15';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.15', date: '2026-05-20', commit: '-', changes: 'Cleaned main navigation, renamed Leadership Forecast to Vertical Performance, and moved secondary tabs into Appendix.' },
       { version: 'v2.0.14', date: '2026-05-20', commit: '-', changes: 'Fixed Operating Metrics edit mode by switching from read-only Overall into an editable seller row.' },
       { version: 'v2.0.13', date: '2026-05-20', commit: '-', changes: 'Added editable weekly key-lever inputs to Operating Metrics and saved them through Supabase shared state.' },
       { version: 'v2.0.12', date: '2026-05-20', commit: '-', changes: 'Replaced LT Biweekly Trends Contracting table with Actuals + Pipeline EV projected quarter outcome.' },
@@ -8683,7 +8684,8 @@
 		      const viewCycleTime = document.getElementById('view-cycletime');
 		      const viewAssumptions = document.getElementById('view-assumptions');
 		      const viewAdmin = document.getElementById('view-admin');
-		      const appendixViews = new Set(['crosstab', 'funnel', 'industry', 'winloss', 'stageconv', 'compare', 'momentum', 'cycletime', 'assumptions']);
+		      const mainViews = new Set(['leadershipforecast', 'scorecard', 'introtrend', 'operating', 'lttrends', 'about', 'admin']);
+		      const appendixViews = new Set(['forecast', 'forecast-actuals', 'partnerships', 'connecthealth', 'closurepriority', 'crosstab', 'funnel', 'industry', 'winloss', 'stageconv', 'compare', 'momentum', 'cycletime', 'assumptions']);
 		      let appendixOpen = false;
 
       function setAppendixOpen(next) {
@@ -8739,7 +8741,7 @@
 		        viewAdmin.classList.toggle('active', name === 'admin');
 
 	        // Keep appendix tabs hidden unless explicitly opened or user is on an appendix view.
-	        if (name === 'admin' || name === 'scorecard' || name === 'introtrend' || name === 'forecast' || name === 'forecast-actuals' || name === 'operating' || name === 'partnerships' || name === 'connecthealth' || name === 'closurepriority' || name === 'leadershipforecast' || name === 'lttrends' || name === 'about') {
+	        if (mainViews.has(name)) {
 	          setAppendixOpen(false);
 	        } else if (isAppendixView) {
 	          setAppendixOpen(true);
