@@ -3248,7 +3248,7 @@
 	        <div class="head">
 	          <div>
 	            <h1>LT Biweekly Trends</h1>
-	            <div class="sub">Semi-monthly point-in-time trend of actuals, empirical pipeline EV, contracting value, and net-new funnel additions across saved Supabase snapshots.</div>
+	            <div class="sub">Semi-monthly point-in-time trend of actuals, empirical pipeline EV, projected quarter outcome, and net-new funnel additions across saved Supabase snapshots.</div>
 	          </div>
 	        </div>
 	        <div id="insight-lttrends" class="insight"></div>
@@ -3272,11 +3272,11 @@
 	            </div>
 	          </div>
 	          <div class="lt-trend-card">
-	            <h3>3. Current-Quarter Contracting $</h3>
+	            <h3>3. Actuals + Pipeline EV</h3>
 	            <div class="lt-trend-scroll">
 	              <table class="lt-trend-table">
-	                <thead id="lttrend-contracting-head"></thead>
-	                <tbody id="lttrend-contracting-body"></tbody>
+	                <thead id="lttrend-projected-head"></thead>
+	                <tbody id="lttrend-projected-body"></tbody>
 	              </table>
 	            </div>
 	          </div>
@@ -3290,7 +3290,7 @@
 	            </div>
 	          </div>
 	        </div>
-	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals match Leadership Forecast: won revenue allocated into the fiscal quarter containing the anchor using Start Date + Duration, based on deals known in that snapshot. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Current-quarter Contracting $ uses only open Contracting rows and allocates Deal Size into the fiscal quarter containing that snapshot using Start Date + Duration. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
+	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals match Leadership Forecast: won revenue allocated into the fiscal quarter containing the anchor using Start Date + Duration, based on deals known in that snapshot. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Actuals + Pipeline EV combines won quarter actuals and risk-adjusted open pipeline EV for the same snapshot quarter. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4423,8 +4423,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.11';
+    const APP_VERSION = 'v2.0.12';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.12', date: '2026-05-20', commit: '-', changes: 'Replaced LT Biweekly Trends Contracting table with Actuals + Pipeline EV projected quarter outcome.' },
       { version: 'v2.0.11', date: '2026-05-20', commit: '-', changes: 'Aligned LT Biweekly Trends Actuals with Leadership Forecast full-quarter actuals definition for each snapshot.' },
       { version: 'v2.0.10', date: '2026-05-20', commit: '-', changes: 'Changed LT Biweekly Trends Contracting metric to current-quarter paced Contracting value instead of full open deal size.' },
       { version: 'v2.0.9', date: '2026-05-20', commit: '-', changes: 'Made LT Biweekly Trends Overall row calculate as the arithmetic sum of displayed seller rows across all metrics.' },
@@ -8446,14 +8447,8 @@
       }, 0);
     }
 
-    function ltTrendContractingValue(point, seller) {
-      const qLabel = ltTrendQLabel(point);
-      if (!qLabel) return 0;
-      return ltTrendRows(point, seller).reduce((acc, r) => {
-        if (!closureActiveStage(r)) return acc;
-        if (stageNumber(r && r.stage) !== 6) return acc;
-        return acc + ltTrendQuarterPacedAmount(r, qLabel);
-      }, 0);
+    function ltTrendProjectedOutcome(point, seller) {
+      return ltTrendActuals(point, seller) + ltTrendPipelineEv(point, seller);
     }
 
     function ltTrendActiveFunnelKeys(point, seller) {
@@ -8538,16 +8533,16 @@
         const metrics = [
           { headId: 'lttrend-actuals-head', bodyId: 'lttrend-actuals-body', kind: 'money', compute: ltTrendActuals },
           { headId: 'lttrend-ev-head', bodyId: 'lttrend-ev-body', kind: 'money', compute: ltTrendPipelineEv },
-          { headId: 'lttrend-contracting-head', bodyId: 'lttrend-contracting-body', kind: 'money', compute: ltTrendContractingValue },
+          { headId: 'lttrend-projected-head', bodyId: 'lttrend-projected-body', kind: 'money', compute: ltTrendProjectedOutcome },
           { headId: 'lttrend-new-head', bodyId: 'lttrend-new-body', kind: 'count', compute: ltTrendNewDeals },
         ];
         metrics.forEach((metric) => ltTrendRenderMetric(metric, points, sellers));
         const latest = points[points.length - 1];
         const latestOverallEv = sellers.reduce((acc, seller) => acc + ltTrendPipelineEv(latest, seller), 0);
-        const latestOverallContracting = sellers.reduce((acc, seller) => acc + ltTrendContractingValue(latest, seller), 0);
+        const latestOverallProjected = sellers.reduce((acc, seller) => acc + ltTrendProjectedOutcome(latest, seller), 0);
         setInsight('insight-lttrends', [
           `${money.format(points.length)} semi-monthly trend point(s) loaded from ${ltTrendDateLabel(points[0].date)} to ${ltTrendDateLabel(latest.date)}.`,
-          `Latest overall ${ltTrendQLabel(latest)} pipeline EV: ${fmtDealSize(latestOverallEv)}; contracting value: ${fmtDealSize(latestOverallContracting)}.`,
+          `Latest overall ${ltTrendQLabel(latest)} pipeline EV: ${fmtDealSize(latestOverallEv)}; Actuals + EV: ${fmtDealSize(latestOverallProjected)}.`,
           skipped.length ? `${money.format(skipped.length)} historical point(s) were skipped because Supabase timed out or returned an invalid snapshot; refresh the tab to retry them.` : '',
           'Hover column headers to see the exact Supabase refresh timestamp used for each anchor.',
         ].filter(Boolean));
