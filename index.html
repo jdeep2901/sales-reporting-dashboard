@@ -2671,6 +2671,63 @@
       gap: 10px;
     }
 
+    .operating-savebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border: 1px solid #dbe3f1;
+      border-radius: 12px;
+      background: #f8fbff;
+    }
+
+    .operating-savebar .status {
+      color: #4f5f7a;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .operating-savebar .status.dirty {
+      color: #9b5b00;
+    }
+
+    .operating-savebar .status.saved {
+      color: #12633d;
+    }
+
+    .operating-savebar .status.error {
+      color: #9d1c1c;
+    }
+
+    .operating-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .operating-actions button {
+      border: 1px solid #cdd8ea;
+      border-radius: 999px;
+      background: #fff;
+      color: #24436f;
+      padding: 8px 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .operating-actions button.primary {
+      background: #1764f5;
+      border-color: #1764f5;
+      color: #fff;
+    }
+
+    .operating-actions button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
     .operating-table {
       width: max-content;
       min-width: 100%;
@@ -2749,6 +2806,24 @@
     .operating-cell.neutral {
       background: #edf3ff;
       color: #264069;
+    }
+
+    .operating-manual-input {
+      width: 72px;
+      border: 1px solid #cfd9e9;
+      border-radius: 999px;
+      padding: 5px 8px;
+      text-align: right;
+      color: #183356;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      background: #fff;
+    }
+
+    .operating-manual-input:focus {
+      border-color: #1764f5;
+      box-shadow: 0 0 0 3px rgba(23, 100, 245, 0.12);
+      outline: none;
     }
 
     .operating-footnote {
@@ -3297,7 +3372,7 @@
 	        <div class="head">
 	          <div>
 	            <h1>Weekly Operating Metrics</h1>
-	            <div class="sub">Metrics 1-7 from the operating scorecard, shown as fixed weekly columns from Jan 1, 2026. Each cell uses the closest saved refresh snapshot for that week.</div>
+	            <div class="sub">Metrics 1-7 use saved refresh snapshots; key-lever metrics are seller-entered weekly inputs saved back to Supabase.</div>
 	          </div>
 	          <div class="controls">
 	            <div>
@@ -3307,6 +3382,14 @@
 	          </div>
 	        </div>
 	        <div class="operating-wrap">
+	          <div class="operating-savebar">
+	            <div id="operating-save-status" class="status">Saved inputs loaded from Supabase.</div>
+	            <div class="operating-actions">
+	              <button id="operating-refresh-inputs" type="button">Refresh Saved</button>
+	              <button id="operating-edit-inputs" type="button">Edit Inputs</button>
+	              <button id="operating-save-inputs" class="primary" type="button" disabled>Save Inputs</button>
+	            </div>
+	          </div>
 	          <div class="table-wrap">
 	            <table class="operating-table" id="operating-table">
 	              <thead>
@@ -4423,8 +4506,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.12';
+    const APP_VERSION = 'v2.0.13';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.13', date: '2026-05-20', commit: '-', changes: 'Added editable weekly key-lever inputs to Operating Metrics and saved them through Supabase shared state.' },
       { version: 'v2.0.12', date: '2026-05-20', commit: '-', changes: 'Replaced LT Biweekly Trends Contracting table with Actuals + Pipeline EV projected quarter outcome.' },
       { version: 'v2.0.11', date: '2026-05-20', commit: '-', changes: 'Aligned LT Biweekly Trends Actuals with Leadership Forecast full-quarter actuals definition for each snapshot.' },
       { version: 'v2.0.10', date: '2026-05-20', commit: '-', changes: 'Changed LT Biweekly Trends Contracting metric to current-quarter paced Contracting value instead of full open deal size.' },
@@ -4572,6 +4656,8 @@
     let scorecardComparePrevIdState = null;
     let operatingSelectedSeller = 'Overall';
     let operatingRenderSeq = 0;
+    let operatingEditMode = false;
+    let operatingSaveStatus = { tone: 'saved', text: 'Saved inputs loaded from Supabase.' };
     let partnershipSelectedSeller = 'Overall';
     let partnershipSelectedPartner = 'All';
     let partnershipStageFilter = null; // null = all; else Set(stage labels)
@@ -10743,6 +10829,132 @@
       return money.format(Math.round(n));
     }
 
+    const OPERATING_MANUAL_NAMESPACE = '__operating_manual_metrics';
+    const OPERATING_MANUAL_METRICS = [
+      { id: 8, key: 'cofo_intros', label: '# of Co-Fo intros', meta: 'Seller-entered weekly count', category: 'Key Levers' },
+      { id: 9, key: 'in_person_connects_workshops', label: '# of in-person connects / workshops', meta: 'Seller-entered weekly count', category: 'Key Levers' },
+      { id: 10, key: 'leads_mapped_to_alliances', label: '# of leads mapped to alliances', meta: 'Seller-entered weekly count', category: 'Key Levers' },
+    ];
+
+    function operatingWeekKey(weekStart) {
+      if (!weekStart || Number.isNaN(weekStart.getTime())) return '';
+      return [
+        weekStart.getFullYear(),
+        String(weekStart.getMonth() + 1).padStart(2, '0'),
+        String(weekStart.getDate()).padStart(2, '0'),
+      ].join('-');
+    }
+
+    function operatingManualRoot(stateObj = likelihoodState) {
+      if (!stateObj || typeof stateObj !== 'object') return {};
+      const root = stateObj[OPERATING_MANUAL_NAMESPACE];
+      return root && typeof root === 'object' ? root : {};
+    }
+
+    function ensureOperatingManualRoot() {
+      if (!likelihoodState || typeof likelihoodState !== 'object') likelihoodState = {};
+      if (!likelihoodState[OPERATING_MANUAL_NAMESPACE] || typeof likelihoodState[OPERATING_MANUAL_NAMESPACE] !== 'object') {
+        likelihoodState[OPERATING_MANUAL_NAMESPACE] = {};
+      }
+      return likelihoodState[OPERATING_MANUAL_NAMESPACE];
+    }
+
+    function operatingManualValueForSeller(seller, weekStart, metricKey, stateObj = likelihoodState) {
+      const root = operatingManualRoot(stateObj);
+      const sellerBucket = root[String(seller || '').trim()] || {};
+      const weekBucket = sellerBucket[operatingWeekKey(weekStart)] || {};
+      const value = Number(weekBucket[metricKey]);
+      return Number.isFinite(value) && value >= 0 ? value : null;
+    }
+
+    function operatingManualSellers(data) {
+      return (Array.isArray(data && data.sellers) ? data.sellers : [])
+        .filter((s) => s && s !== 'All (unique deals)');
+    }
+
+    function operatingManualValue(data, seller, weekStart, metricKey, stateObj = likelihoodState) {
+      if (seller === 'Overall') {
+        return operatingManualSellers(data).reduce((acc, s) => acc + Number(operatingManualValueForSeller(s, weekStart, metricKey, stateObj) || 0), 0);
+      }
+      return operatingManualValueForSeller(seller, weekStart, metricKey, stateObj);
+    }
+
+    function operatingManualHasValue(data, seller, weekStart, metricKey, stateObj = likelihoodState) {
+      if (seller === 'Overall') {
+        return operatingManualSellers(data).some((s) => operatingManualValueForSeller(s, weekStart, metricKey, stateObj) != null);
+      }
+      return operatingManualValueForSeller(seller, weekStart, metricKey, stateObj) != null;
+    }
+
+    function setOperatingManualValue(seller, weekStart, metricKey, rawValue) {
+      const sellerName = String(seller || '').trim();
+      if (!sellerName || sellerName === 'Overall') return;
+      const weekKey = operatingWeekKey(weekStart);
+      if (!weekKey || !metricKey) return;
+      const root = ensureOperatingManualRoot();
+      if (!root[sellerName] || typeof root[sellerName] !== 'object') root[sellerName] = {};
+      if (!root[sellerName][weekKey] || typeof root[sellerName][weekKey] !== 'object') root[sellerName][weekKey] = {};
+      const n = Number(rawValue);
+      if (String(rawValue || '').trim() === '' || !Number.isFinite(n) || n < 0) {
+        delete root[sellerName][weekKey][metricKey];
+      } else {
+        root[sellerName][weekKey][metricKey] = Math.round(n);
+      }
+      root[sellerName][weekKey].updated_at = new Date().toISOString();
+      root[sellerName][weekKey].updated_by = currentUser && currentUser.username ? currentUser.username : 'local';
+      saveLikelihoodState();
+    }
+
+    function operatingManualDirty() {
+      const current = JSON.stringify(operatingManualRoot(likelihoodState));
+      const saved = JSON.stringify(operatingManualRoot(liveLikelihoodState));
+      return current !== saved;
+    }
+
+    function setOperatingSaveStatus(text, tone = 'saved') {
+      operatingSaveStatus = { text, tone };
+      const el = document.getElementById('operating-save-status');
+      if (!el) return;
+      el.textContent = text;
+      el.className = `status ${tone || 'saved'}`;
+    }
+
+    function updateOperatingSaveControls() {
+      const editBtn = document.getElementById('operating-edit-inputs');
+      const saveBtn = document.getElementById('operating-save-inputs');
+      const refreshBtn = document.getElementById('operating-refresh-inputs');
+      const dirty = operatingManualDirty();
+      const saving = operatingSaveStatus && operatingSaveStatus.tone === 'saving';
+      if (editBtn) editBtn.textContent = operatingEditMode ? 'Stop Editing' : 'Edit Inputs';
+      if (saveBtn) saveBtn.disabled = !dirty || saving;
+      if (refreshBtn) refreshBtn.disabled = saving;
+      if (dirty && (!operatingSaveStatus || operatingSaveStatus.tone !== 'saving')) {
+        setOperatingSaveStatus('Unsaved changes. Click Save Inputs to write to Supabase.', 'dirty');
+      } else if (!dirty && (!operatingSaveStatus || operatingSaveStatus.tone === 'dirty')) {
+        setOperatingSaveStatus('Saved inputs match Supabase.', 'saved');
+      } else if (operatingSaveStatus && operatingSaveStatus.text) {
+        setOperatingSaveStatus(operatingSaveStatus.text, operatingSaveStatus.tone);
+      }
+    }
+
+    async function saveOperatingManualInputs(data) {
+      if (!currentUser || !sessionPassword) {
+        setOperatingSaveStatus('Sign in first, then save inputs to Supabase.', 'error');
+        updateOperatingSaveControls();
+        return;
+      }
+      setOperatingSaveStatus('Saving weekly inputs to Supabase...', 'saving');
+      updateOperatingSaveControls();
+      try {
+        await pushSharedStoreNow({ throwOnError: true });
+        setOperatingSaveStatus('Saved to Supabase. You are looking at the latest saved inputs.', 'saved');
+      } catch (e) {
+        setOperatingSaveStatus(e && e.message ? e.message : 'Unable to save inputs to Supabase.', 'error');
+      }
+      updateOperatingSaveControls();
+      renderOperatingMetrics(data);
+    }
+
     function operatingWeekStarts(startIso, endDateLike) {
       const start = parseIsoLocalDate(startIso);
       const end = parseDateOrNow(endDateLike || new Date());
@@ -11089,8 +11301,7 @@
       if (!sellerEl || !head || !body) return;
       const renderSeq = ++operatingRenderSeq;
 
-      const sellers = ['Overall', ...((Array.isArray(data && data.sellers) ? data.sellers : [])
-        .filter((s) => s && s !== 'All (unique deals)'))];
+      const sellers = ['Overall', ...operatingManualSellers(data)];
       const current = operatingSelectedSeller || 'Overall';
       sellerEl.innerHTML = '';
       sellers.forEach((seller) => {
@@ -11128,6 +11339,7 @@
         { id: 5, label: 'Intro to qualification conversion %', meta: 'Green >= 50%; red below 40%', category: 'Pipeline' },
         { id: 6, label: 'Deals in late stage (stage 5-6)', meta: 'Green when count improves vs prior week', category: 'Pipeline' },
         { id: 7, label: 'Days since last win per portfolio', meta: 'Green <= 30 days', category: 'Pipeline' },
+        ...OPERATING_MANUAL_METRICS.map((m) => ({ ...m, manual: true })),
       ];
 
       const snapshots = await operatingSnapshotsForWeeks(data, weeks);
@@ -11280,6 +11492,7 @@
       };
 
       body.innerHTML = '';
+      updateOperatingSaveControls();
 
       metrics.forEach((metric) => {
         const tr = document.createElement('tr');
@@ -11288,6 +11501,35 @@
         tr.appendChild(name);
         snapshots.forEach((snapshot, idx) => {
           const td = makeCell('td', '');
+          if (metric.manual) {
+            const manualValue = operatingManualValue(data, seller, snapshot.weekStart, metric.key);
+            const hasManualValue = operatingManualHasValue(data, seller, snapshot.weekStart, metric.key);
+            const displayValue = hasManualValue ? String(manualValue || 0) : '';
+            if (operatingEditMode && seller !== 'Overall') {
+              const input = document.createElement('input');
+              input.className = 'operating-manual-input';
+              input.type = 'number';
+              input.min = '0';
+              input.step = '1';
+              input.value = displayValue;
+              input.title = `Update ${metric.label} for ${seller}, Wk of ${operatingWeekLabel(snapshot.weekStart)}`;
+              input.addEventListener('input', () => {
+                setOperatingManualValue(seller, snapshot.weekStart, metric.key, input.value);
+                updateOperatingSaveControls();
+              });
+              td.appendChild(input);
+            } else {
+              const text = hasManualValue ? money.format(manualValue || 0) : '-';
+              td.innerHTML = operatingCellHtml({ text, status: manualValue && Number(manualValue) > 0 ? 'good' : 'neutral' });
+            }
+            td.title = [
+              'Seller-entered weekly input saved to Supabase.',
+              seller === 'Overall' ? 'Overall is the sum of displayed seller inputs.' : `${seller} | Wk of ${operatingWeekLabel(snapshot.weekStart)}`,
+              operatingManualDirty() ? 'Unsaved local edits exist.' : 'Inputs match latest loaded Supabase state.',
+            ].join('\n');
+            tr.appendChild(td);
+            return;
+          }
           const cell = valueFor(metric.id, snapshot, idx);
           td.innerHTML = operatingCellHtml(cell);
           td.title = Array.isArray(cell.details) ? cell.details.filter(Boolean).join('\n') : operatingSnapshotLabel(snapshot);
@@ -11307,7 +11549,7 @@
       });
 
       if (foot) {
-        foot.textContent = `Assumptions: weekly columns are fixed 7-day windows anchored on Jan 1, 2026. Each column uses the saved refresh snapshot closest to that week ending date; if multiple refreshes exist on that date, the latest refresh is used. Metric 1 uses open stage 1-6 pipeline EV allocated into the next 4 fiscal quarters using this fixed actuals curve: ${actualsReference.label}. New logos/wins use Start Date and require stage = Won. Intro metrics use Intro Meeting Date and exclude No Show / Reschedule. Late-stage deals are stage 5-6 rows in the selected snapshot.`;
+        foot.textContent = `Assumptions: weekly columns are fixed 7-day windows anchored on Jan 1, 2026. Metrics 1-7 use the saved refresh snapshot closest to that week ending date; if multiple refreshes exist on that date, the latest refresh is used. Metric 1 uses open stage 1-6 pipeline EV allocated into the next 4 fiscal quarters using this fixed actuals curve: ${actualsReference.label}. New logos/wins use Start Date and require stage = Won. Intro metrics use Intro Meeting Date and exclude No Show / Reschedule. Late-stage deals are stage 5-6 rows in the selected snapshot. Metrics 8-10 are manually entered weekly seller inputs; Overall sums seller entries and Save Inputs writes them to Supabase shared state.`;
       }
       renderOperatingDetailTable('Operating Metric Detail', [], 'Click any metric cell to see the underlying rows.');
     }
@@ -12619,6 +12861,38 @@
         if (operatingSellerSelect) {
           operatingSellerSelect.addEventListener('change', () => {
             operatingSelectedSeller = operatingSellerSelect.value || 'Overall';
+            renderOperatingMetrics(data);
+          });
+        }
+        const operatingEditBtn = document.getElementById('operating-edit-inputs');
+        const operatingSaveBtn = document.getElementById('operating-save-inputs');
+        const operatingRefreshBtn = document.getElementById('operating-refresh-inputs');
+        if (operatingEditBtn) {
+          operatingEditBtn.addEventListener('click', () => {
+            operatingEditMode = !operatingEditMode;
+            updateOperatingSaveControls();
+            renderOperatingMetrics(data);
+          });
+        }
+        if (operatingSaveBtn) {
+          operatingSaveBtn.addEventListener('click', () => saveOperatingManualInputs(data));
+        }
+        if (operatingRefreshBtn) {
+          operatingRefreshBtn.addEventListener('click', async () => {
+            if (!currentUser || !sessionPassword) {
+              setOperatingSaveStatus('Sign in first to refresh saved Supabase inputs.', 'error');
+              updateOperatingSaveControls();
+              return;
+            }
+            setOperatingSaveStatus('Refreshing saved inputs from Supabase...', 'saving');
+            updateOperatingSaveControls();
+            try {
+              await loadSharedStore();
+              setOperatingSaveStatus('Saved inputs refreshed from Supabase.', 'saved');
+            } catch (e) {
+              setOperatingSaveStatus(e && e.message ? e.message : 'Unable to refresh saved inputs.', 'error');
+            }
+            updateOperatingSaveControls();
             renderOperatingMetrics(data);
           });
         }
