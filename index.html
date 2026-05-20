@@ -74,6 +74,32 @@
       border-color: #0b5fff;
     }
 
+    .tabs-main {
+      gap: 28px;
+      padding: 14px 18px 0;
+      border-bottom: 0.5px solid rgba(0,0,0,0.08);
+      background: #FAFAFA;
+      scrollbar-width: none;
+    }
+
+    .tabs-main .tab-btn {
+      border: 0;
+      border-bottom: 1.5px solid transparent;
+      border-radius: 0;
+      padding: 0 0 12px;
+      background: transparent;
+      color: #6B7280;
+      font-size: 16px;
+      font-weight: 400;
+    }
+
+    .tabs-main .tab-btn.active {
+      background: transparent;
+      border-color: #000;
+      color: #000;
+      font-weight: 500;
+    }
+
     .view {
       display: none;
     }
@@ -2504,7 +2530,7 @@
     #view-leadershipforecast {
       --vp-bg: #FAFAFA;
       --vp-card: #FFFFFF;
-      --vp-warm: #F5F3EC;
+      --vp-secondary: #F4F4F5;
       --vp-line: rgba(0,0,0,0.08);
       --vp-text: #000000;
       --vp-muted: #6B7280;
@@ -2520,9 +2546,9 @@
     }
 
     #view-leadershipforecast .vp-shell {
-      padding: 32px 24px 24px;
+      padding: 22px;
       display: grid;
-      gap: 24px;
+      gap: 18px;
     }
 
     #view-leadershipforecast .vp-filter-row,
@@ -2536,7 +2562,7 @@
     }
 
     #view-leadershipforecast .vp-header {
-      display: none;
+      display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
@@ -2586,7 +2612,7 @@
 
     #view-leadershipforecast .vp-tab {
       border: 0;
-      border-bottom: 1px solid transparent;
+      border-bottom: 1.5px solid transparent;
       background: transparent;
       color: var(--vp-muted);
       padding: 0 0 10px;
@@ -2597,7 +2623,7 @@
 
     #view-leadershipforecast .vp-tab.active {
       color: var(--vp-text);
-      border-bottom-color: var(--vp-accent);
+      border-bottom-color: var(--vp-text);
       font-weight: 500;
     }
 
@@ -2631,10 +2657,10 @@
     }
 
     #view-leadershipforecast select {
-      min-width: 270px;
-      height: 56px;
-      padding: 0 42px 0 18px;
-      font-size: 19px;
+      min-width: 210px;
+      height: 40px;
+      padding: 0 32px 0 10px;
+      font-size: 13px;
     }
 
     #view-leadershipforecast .vp-email-btn,
@@ -2650,42 +2676,44 @@
 
     #view-leadershipforecast .vp-email-btn {
       margin-left: auto;
-      min-height: 64px;
-      padding: 10px 22px;
+      min-height: 40px;
+      padding: 6px 12px;
       color: var(--vp-text);
       border-color: rgba(0,0,0,0.18);
       background: #fff;
-      font-size: 16px;
+      font-size: 13px;
       max-width: 140px;
     }
 
     #view-leadershipforecast .vp-mini-btn {
-      padding: 6px 9px;
-      font-size: 12px;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 6px;
     }
 
     #view-leadershipforecast .vp-kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 16px;
+      gap: 8px;
     }
 
     #view-leadershipforecast .vp-card {
-      padding: 24px 26px;
+      padding: 12px 14px;
       display: grid;
-      gap: 10px;
-      min-height: 128px;
-      background: var(--vp-warm);
+      gap: 4px;
+      min-height: 72px;
+      background: var(--vp-secondary);
       border: 0;
+      border-radius: 8px;
     }
 
     #view-leadershipforecast .vp-card-label {
-      font-size: 18px;
+      font-size: 12px;
       color: var(--vp-muted);
     }
 
     #view-leadershipforecast .vp-card-number {
-      font-size: 40px;
+      font-size: 22px;
       line-height: 1;
       font-weight: 500;
       font-variant-numeric: tabular-nums;
@@ -2693,7 +2721,7 @@
     }
 
     #view-leadershipforecast .vp-card-sub {
-      font-size: 17px;
+      font-size: 11px;
       color: var(--vp-tertiary);
       font-variant-numeric: tabular-nums;
     }
@@ -2715,12 +2743,12 @@
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      padding: 0 0 16px;
+      padding: 0 0 10px;
       border-bottom: 0.5px solid var(--vp-line);
     }
 
     #view-leadershipforecast .vp-section-head h2 {
-      font-size: 26px;
+      font-size: 20px;
     }
 
     #view-leadershipforecast .vp-table-wrap {
@@ -2730,12 +2758,12 @@
     #view-leadershipforecast table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 16px;
+      font-size: 13px;
     }
 
     #view-leadershipforecast th,
     #view-leadershipforecast td {
-      padding: 18px 20px;
+      padding: 12px 10px;
       border-bottom: 0.5px solid var(--vp-line);
       text-align: left;
       font-weight: 400;
@@ -2744,7 +2772,7 @@
 
     #view-leadershipforecast th {
       color: var(--vp-muted);
-      font-size: 16px;
+      font-size: 12px;
       background: #fff;
     }
 
@@ -2769,13 +2797,13 @@
     #view-leadershipforecast .vp-seller-cell {
       display: flex;
       align-items: center;
-      gap: 16px;
-      min-width: 250px;
+      gap: 10px;
+      min-width: 210px;
     }
 
     #view-leadershipforecast .vp-avatar {
-      width: 40px;
-      height: 40px;
+      width: 28px;
+      height: 28px;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
@@ -2783,19 +2811,19 @@
       border: 0.5px solid var(--vp-line);
       color: var(--vp-text);
       background: #fff;
-      font-size: 15px;
+      font-size: 12px;
       font-weight: 500;
     }
 
     #view-leadershipforecast .vp-name {
       font-weight: 500;
-      font-size: 20px;
+      font-size: 13px;
     }
 
     #view-leadershipforecast .vp-meta {
       margin-top: 2px;
       color: var(--vp-muted);
-      font-size: 16px;
+      font-size: 12px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -2803,33 +2831,40 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      border: 0.5px solid var(--vp-line);
-      border-left: 2px solid var(--vp-tertiary);
+      border: 0;
       border-radius: 999px;
-      padding: 6px 12px;
-      font-size: 15px;
+      padding: 3px 7px;
+      min-width: 22px;
+      justify-content: center;
+      font-size: 11px;
       color: var(--vp-muted);
-      background: #fff;
+      background: var(--vp-secondary);
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 
-    #view-leadershipforecast .vp-pill.red { border-left-color: var(--vp-red); color: var(--vp-red); }
-    #view-leadershipforecast .vp-pill.amber { border-left-color: var(--vp-amber); color: var(--vp-amber); }
-    #view-leadershipforecast .vp-pill.green { border-left-color: var(--vp-green); color: var(--vp-green); }
+    #view-leadershipforecast .vp-pill.red { background: #FEE2E2; color: #B91C1C; }
+    #view-leadershipforecast .vp-pill.amber { background: #FEF3C7; color: #92400E; }
+    #view-leadershipforecast .vp-pill.green { background: #DCFCE7; color: #166534; }
+
+    #view-leadershipforecast .vp-deal-item .vp-pill {
+      min-width: 82px;
+      justify-content: center;
+      padding: 4px 8px;
+    }
 
     #view-leadershipforecast .vp-ratio {
-      min-width: 120px;
+      min-width: 150px;
       display: grid;
-      grid-template-columns: 240px auto;
+      grid-template-columns: minmax(90px, 1fr) auto;
       align-items: center;
-      gap: 14px;
+      gap: 8px;
       font-variant-numeric: tabular-nums;
     }
 
     #view-leadershipforecast .vp-bar {
-      height: 7px;
-      background: #D9D8D0;
+      height: 4px;
+      background: #D4D4D8;
       border-radius: 999px;
       overflow: hidden;
     }
@@ -2851,16 +2886,16 @@
 
     #view-leadershipforecast .vp-expanded td {
       padding: 0;
-      background: var(--vp-warm);
+      background: var(--vp-secondary);
     }
 
     #view-leadershipforecast .vp-panel {
       display: grid;
       grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr);
       gap: 14px;
-      padding: 24px;
+      padding: 14px;
       border-left: 0;
-      background: var(--vp-warm);
+      background: var(--vp-secondary);
     }
 
     #view-leadershipforecast .vp-panel-box {
@@ -2873,29 +2908,44 @@
     }
 
     #view-leadershipforecast .vp-panel-box h3 {
-      font-size: 20px;
+      font-size: 13px;
       color: var(--vp-muted);
     }
 
     #view-leadershipforecast textarea {
-      min-height: 230px;
+      min-height: 120px;
       resize: vertical;
-      padding: 20px;
-      line-height: 1.45;
-      font-size: 20px;
-      border-color: rgba(0,0,0,0.16);
+      padding: 10px;
+      line-height: 1.55;
+      font-size: 12px;
+      border-color: var(--vp-line);
+      border-radius: 6px;
+      background: #fff;
     }
 
     #view-leadershipforecast .vp-actions {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
     }
 
     #view-leadershipforecast .vp-split-table td,
     #view-leadershipforecast .vp-split-table th {
-      padding: 7px 8px;
-      font-size: 12px;
+      padding: 5px 6px;
+      font-size: 11px;
+      line-height: 12px;
+    }
+
+    #view-leadershipforecast .vp-trend {
+      width: 72px;
+      max-width: 72px;
+      overflow: hidden;
+    }
+
+    #view-leadershipforecast .vp-risk-table td:last-child {
+      white-space: normal;
+      max-width: 360px;
+      line-height: 1.35;
     }
 
     #view-leadershipforecast .vp-deal-list {
@@ -2907,10 +2957,10 @@
       border: 0.5px solid var(--vp-line);
       border-left: 2px solid var(--vp-tertiary);
       border-radius: 10px;
-      padding: 16px 18px;
+      padding: 9px 10px;
       cursor: pointer;
       display: grid;
-      gap: 8px;
+      gap: 5px;
       background: #fff;
     }
 
@@ -3523,7 +3573,7 @@
 	        <button id="tab-leadershipforecast" class="tab-btn" type="button">Vertical performance</button>
 	        <button id="tab-scorecard" class="tab-btn active" type="button">Weekly scorecard</button>
 	        <button id="tab-introtrend" class="tab-btn" type="button">Call trends</button>
-	        <button id="tab-operating" class="tab-btn" type="button">Operating</button>
+	        <button id="tab-operating" class="tab-btn" type="button">Operating metrics</button>
 	        <button id="tab-lttrends" class="tab-btn" type="button">LT trends</button>
 	        <button id="tab-about" class="tab-btn" type="button">About</button>
 	        <button id="tab-appendix" class="tab-btn" type="button" aria-expanded="false">Appendix</button>
@@ -3723,30 +3773,34 @@
 	            <div id="leadership-asof" class="vp-asof">as of -</div>
 	          </div>
 	          <div class="vp-tabs" aria-label="Vertical performance sections">
-	            <button class="vp-tab active" type="button">scorecard</button>
-	            <button class="vp-tab" type="button">open deals</button>
-	            <button class="vp-tab" type="button">risk review</button>
+	            <button class="vp-tab active" type="button">Vertical performance</button>
+	            <button class="vp-tab" type="button">Weekly scorecard</button>
+	            <button class="vp-tab" type="button">Call trends</button>
+	            <button class="vp-tab" type="button">Operating metrics</button>
+	            <button class="vp-tab" type="button">LT trends</button>
+	            <button class="vp-tab" type="button">About</button>
+	            <button class="vp-tab" type="button">Appendix</button>
 	          </div>
 	          <div class="vp-filter-row">
 	            <div class="vp-field">
-	              <label class="vp-label" for="leadership-seller">seller</label>
+	              <label class="vp-label" for="leadership-seller">Seller</label>
 	              <select id="leadership-seller"></select>
 	            </div>
 	            <div class="vp-field">
-	              <label class="vp-label" for="leadership-quarter">quarter</label>
+	              <label class="vp-label" for="leadership-quarter">Quarter</label>
 	              <select id="leadership-quarter">
-	                <option value="both">Q1 + Q2</option>
+	                <option value="both">Q1+Q2 '27</option>
 	                <option value="current">Q1</option>
 	                <option value="next">Q2</option>
 	              </select>
 	            </div>
 	            <div class="vp-field">
-	              <label class="vp-label" for="leadership-risk">risk filter</label>
+	              <label class="vp-label" for="leadership-risk">Risk</label>
 	              <select id="leadership-risk">
-	                <option value="all">all deals</option>
-	                <option value="risk">at risk only</option>
-	                <option value="partner">partner involved</option>
-	                <option value="nopartner">no partner captured</option>
+	                <option value="all">All deals</option>
+	                <option value="risk">At risk only</option>
+	                <option value="partner">Partner involved</option>
+	                <option value="nopartner">No partner captured</option>
 	              </select>
 	            </div>
 	            <button id="leadership-email" class="vp-email-btn" type="button">Email summary</button>
@@ -3754,18 +3808,19 @@
 	          <div id="leadership-kpis" class="vp-kpis"></div>
 	          <div class="vp-table-card">
 	            <div class="vp-section-head">
-	              <h2>seller scorecard</h2>
-	              <div class="vp-small">sorted by gap to target, worst first</div>
+	              <h2>Seller scorecard · Q1+Q2 '27 combined</h2>
+	              <div class="vp-small">Click row for closure plan</div>
 	            </div>
 	            <div class="vp-table-wrap">
 	              <table>
 	                <thead>
 	                  <tr>
-	                    <th>seller</th>
-	                    <th class="num">target</th>
-	                    <th class="num">ev</th>
-	                    <th>ev / target</th>
-	                    <th>risk</th>
+	                    <th>Seller</th>
+	                    <th class="num">Target</th>
+	                    <th class="num">Actual + Est</th>
+	                    <th class="num">EV</th>
+	                    <th>EV / target</th>
+	                    <th>Risk</th>
 	                    <th>8-wk trend</th>
 	                  </tr>
 	                </thead>
@@ -3775,20 +3830,20 @@
 	          </div>
 	          <div class="vp-table-card">
 	            <div class="vp-section-head">
-	              <h2>at-risk deals</h2>
-	              <div class="vp-small">click a deal for detail</div>
+	              <h2>At-risk deals</h2>
+	              <div class="vp-small">Click a deal for detail</div>
 	            </div>
 	            <div class="vp-table-wrap">
 	              <table class="vp-risk-table">
 	                <thead>
 	                  <tr>
-	                    <th data-vp-risk-sort="seller">seller</th>
-	                    <th data-vp-risk-sort="deal">deal</th>
-	                    <th data-vp-risk-sort="stage">stage</th>
-	                    <th class="num" data-vp-risk-sort="value">value</th>
-	                    <th class="num" data-vp-risk-sort="days">days stuck</th>
-	                    <th data-vp-risk-sort="last">last touch</th>
-	                    <th>next action</th>
+	                    <th data-vp-risk-sort="seller">Seller</th>
+	                    <th data-vp-risk-sort="deal">Deal</th>
+	                    <th data-vp-risk-sort="stage">Stage</th>
+	                    <th class="num" data-vp-risk-sort="value">Value</th>
+	                    <th class="num" data-vp-risk-sort="days">Days stuck</th>
+	                    <th data-vp-risk-sort="last">Last touch</th>
+	                    <th>Next action</th>
 	                  </tr>
 	                </thead>
 	                <tbody id="leadership-deal-body"></tbody>
@@ -4988,8 +5043,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.1.1';
+    const APP_VERSION = 'v2.1.2';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.1.2', date: '2026-05-20', commit: '-', changes: 'Refined Vertical Performance polish: neutral gray palette, compact KPI cards, sentence-case labels, compact currency, restored Actual + Est, tighter pills, and cleaner closure panel.' },
       { version: 'v2.1.1', date: '2026-05-20', commit: '-', changes: 'Tightened Vertical Performance visual system to match the reference mock: larger filters/KPIs, warmer scorecard canvas, simpler seller columns, and cleaner expansion styling.' },
       { version: 'v2.1.0', date: '2026-05-20', commit: '-', changes: 'Redesigned Vertical Performance with executive KPI cards, aggregate seller scorecard, expandable coaching panels, at-risk table, drawer, and email summary.' },
       { version: 'v2.0.15', date: '2026-05-20', commit: '-', changes: 'Cleaned main navigation, renamed Leadership Forecast to Vertical Performance, and moved secondary tabs into Appendix.' },
@@ -8802,7 +8858,12 @@
     }
 
     function leadershipMoney(value) {
-      return fmtDealSize(Number(value || 0));
+      const n = Number(value || 0);
+      const sign = n < 0 ? '-' : '';
+      const abs = Math.abs(n);
+      if (abs < 1000) return `${sign}$${money.format(Math.round(abs))}`;
+      if (abs < 1000000) return `${sign}$${money.format(Math.round(abs / 1000))}K`;
+      return `${sign}$${(abs / 1000000).toFixed(2)}M`;
     }
 
     function leadershipRatioTone(ratio) {
@@ -8821,13 +8882,20 @@
     function leadershipDealStatus(row) {
       const risk = row && row.leadership_risk;
       const label = String((risk && risk.label) || '').toLowerCase();
-      if (label.includes('no next')) return 'no-meeting';
+      if (label.includes('no next')) return 'No meeting';
       const stale = label.match(/last connect\s+([\d,]+)d/);
       if (stale) return `${stale[1]}d stale`;
-      if (label.includes('overdue')) return 'overdue';
-      if (stageNumber(row && row.stage) >= 5) return 'advanced';
-      if (!(row && row.leadership_partner && row.leadership_partner.involved)) return 'needs-exec-cover';
-      return 'on track';
+      if (label.includes('overdue')) return 'Overdue';
+      if (!(row && row.leadership_partner && row.leadership_partner.involved)) return 'Exec air cover';
+      if (stageNumber(row && row.stage) >= 5) return 'Advanced';
+      return 'Advanced';
+    }
+
+    function leadershipStatusIcon(status) {
+      if (status === 'No meeting') return '✉';
+      if (String(status || '').includes('stale') || status === 'Overdue') return '◷';
+      if (status === 'Advanced') return '↗';
+      return '◇';
     }
 
     function leadershipDaysStuck(row) {
@@ -8912,7 +8980,8 @@
       }).join(' ');
       const direction = values[7] > values[0] ? 'green' : values[7] < values[0] ? 'red' : 'gray';
       const stroke = direction === 'green' ? '#16A34A' : direction === 'red' ? '#DC2626' : '#9CA3AF';
-      return `<svg width="60" height="20" viewBox="0 0 60 20" aria-label="8 week trend"><polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const dash = direction === 'gray' ? ' stroke-dasharray="3 3"' : '';
+      return `<svg width="60" height="20" viewBox="0 0 60 20" aria-label="8 week trend"><polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"${dash}/></svg>`;
     }
 
     function leadershipPlanKey(seller) {
@@ -9037,8 +9106,8 @@
 
       kpiWrap.innerHTML = '';
       [
-        ['target Q1+Q2', leadershipMoney(target), `${money.format(allOpenRows.length)} open deals`, 'gray'],
-        ['empirical forecast', leadershipMoney(ev), `${leadershipMoney(ev - target)} gap to target`, ev >= target ? 'green' : 'red'],
+        ['Target Q1+Q2', leadershipMoney(target), `${money.format(allOpenRows.length)} open deals`, 'gray'],
+        ['Empirical forecast', leadershipMoney(ev), `${leadershipMoney(ev - target)} gap`, ev >= target ? 'green' : 'red'],
         ['EV / target', target ? `${ratio.toFixed(2)}x` : '-', ratio >= 0.6 ? 'At or above 0.6x bar' : 'Below 0.6x bar', leadershipRatioTone(ratio)],
         ['At risk', `${money.format(atRisk.length)}/${money.format(allOpenRows.length)}`, `${leadershipMoney(atRisk.reduce((acc, r) => acc + Number(r.leadership_contribution || 0), 0))} exposure`, atRisk.length ? 'red' : 'green'],
       ].forEach(([label, value, sub, tone]) => {
@@ -9052,7 +9121,7 @@
       if (!aggregates.length) {
         const tr = document.createElement('tr');
         const td = makeCell('td', 'No seller rows match current filters.', 'partner-muted');
-        td.colSpan = 6;
+        td.colSpan = 7;
         tr.appendChild(td);
         summaryBody.appendChild(tr);
       }
@@ -9066,6 +9135,7 @@
         sellerTd.innerHTML = `<div class="vp-seller-cell"><span class="vp-avatar">${r.seller.slice(0, 1)}</span><div><div class="vp-name">${r.seller}</div><div class="vp-meta">${sellerMeta}</div></div></div>`;
         tr.appendChild(sellerTd);
         tr.appendChild(makeCell('td', leadershipMoney(r.target), 'num'));
+        tr.appendChild(makeCell('td', leadershipMoney(r.actualEstimated), 'num'));
         const discount = r.actualEstimated > 0 && r.ev < r.actualEstimated * 0.8 ? r.actualEstimated - r.ev : 0;
         const evTd = makeCell('td', leadershipMoney(r.ev), 'num');
         evTd.title = `actual + est: ${leadershipMoney(r.actualEstimated)}${discount > 0 ? ` | empirical discount: ${leadershipMoney(discount)}` : ''}`;
@@ -9075,9 +9145,10 @@
         ratioTd.innerHTML = `<div class="vp-ratio"><div class="vp-bar"><span style="--w:${Math.min(100, Math.round(r.ratio * 100))}%;--c:var(--vp-${tone})"></span></div><span>${r.target ? `${r.ratio.toFixed(1)}x` : '-'}</span></div>`;
         tr.appendChild(ratioTd);
         const riskTd = document.createElement('td');
-        riskTd.innerHTML = `<span class="vp-pill ${r.atRisk ? 'red' : 'green'}">${money.format(r.atRisk)}/${money.format(r.open)}</span>`;
+        riskTd.innerHTML = `<span class="vp-pill ${r.atRisk ? 'red' : 'green'}">${money.format(r.atRisk)}</span>`;
         tr.appendChild(riskTd);
         const trendTd = document.createElement('td');
+        trendTd.className = 'vp-trend';
         trendTd.innerHTML = leadershipSparkline(r);
         tr.appendChild(trendTd);
         tr.addEventListener('click', () => {
@@ -9089,7 +9160,7 @@
           const ex = document.createElement('tr');
           ex.className = 'vp-expanded';
           const td = document.createElement('td');
-          td.colSpan = 6;
+          td.colSpan = 7;
           const plan = localStorage.getItem(leadershipPlanKey(r.seller)) || leadershipDefaultPlan(r);
           const topDeals = (r.deals || []).slice().sort((a, b) => {
             if (a.leadership_risk.atRisk !== b.leadership_risk.atRisk) return a.leadership_risk.atRisk ? -1 : 1;
@@ -9098,9 +9169,10 @@
           const splitRows = r.quarters.map((q) => `<tr><td>${q.quarter.label}</td><td class="num">${leadershipMoney(q.target)}</td><td class="num">${leadershipMoney(q.actualEstimated)}</td><td class="num">${leadershipMoney(q.ev)}</td></tr>`).join('');
           const dealHtml = topDeals.map((d) => {
             const dealTone = leadershipRiskTone(d);
-            return `<div class="vp-deal-item ${dealTone}" data-deal-key="${operatingCanonicalKey(d)}"><div class="vp-deal-line"><span>${partnerDisplay(d.logo || d.account)} / ${partnerDisplay(d.deal)}</span><span class="num">${leadershipMoney(d.leadership_contribution)}</span></div><div class="vp-deal-line"><span class="vp-small">${connectDisplayStage(d)}</span><span class="vp-pill ${dealTone}">${leadershipDealStatus(d)}</span></div></div>`;
+            const status = leadershipDealStatus(d);
+            return `<div class="vp-deal-item ${dealTone}" data-deal-key="${operatingCanonicalKey(d)}"><div class="vp-deal-line"><span>${partnerDisplay(d.logo || d.account)} / ${partnerDisplay(d.deal)}</span><span class="num">${leadershipMoney(d.leadership_contribution)}</span></div><div class="vp-deal-line"><span class="vp-small">${connectDisplayStage(d)}</span><span class="vp-pill ${dealTone}">${leadershipStatusIcon(status)} ${status}</span></div></div>`;
           }).join('') || '<div class="vp-small">No open deals in this filter.</div>';
-          td.innerHTML = `<div class="vp-panel"><div class="vp-panel-box"><h3>closure plan to close ${leadershipMoney(Math.max(0, r.target - r.ev))} gap</h3><textarea id="vp-plan-${r.seller.replace(/\W+/g, '-')}">${plan}</textarea><div class="vp-actions"><button class="vp-mini-btn" data-vp-action="save-plan">Edit</button><button class="vp-mini-btn" data-vp-action="regen-plan">Regenerate</button><button class="vp-mini-btn" data-vp-action="copy-plan">Copy</button></div><table class="vp-split-table"><thead><tr><th>quarter</th><th class="num">target</th><th class="num">actual + est</th><th class="num">ev</th></tr></thead><tbody>${splitRows}</tbody></table></div><div class="vp-panel-box"><h3>open deals</h3><div class="vp-deal-list">${dealHtml}</div></div></div>`;
+          td.innerHTML = `<div class="vp-panel"><div class="vp-panel-box"><h3>Closure plan to close ${leadershipMoney(Math.max(0, r.target - r.ev))} gap</h3><textarea id="vp-plan-${r.seller.replace(/\W+/g, '-')}">${plan}</textarea><div class="vp-actions"><button class="vp-mini-btn" data-vp-action="save-plan">✎ Edit</button><button class="vp-mini-btn" data-vp-action="regen-plan">↻ Regenerate</button><button class="vp-mini-btn" data-vp-action="copy-plan">□ Copy</button></div><table class="vp-split-table"><thead><tr><th>Quarter</th><th class="num">Target</th><th class="num">Actual + Est</th><th class="num">EV</th></tr></thead><tbody>${splitRows}</tbody></table></div><div class="vp-panel-box"><h3>Open deals</h3><div class="vp-deal-list">${dealHtml}</div></div></div>`;
           ex.appendChild(td);
           summaryBody.appendChild(ex);
           const textarea = td.querySelector('textarea');
