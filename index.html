@@ -4506,8 +4506,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.13';
+    const APP_VERSION = 'v2.0.14';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.14', date: '2026-05-20', commit: '-', changes: 'Fixed Operating Metrics edit mode by switching from read-only Overall into an editable seller row.' },
       { version: 'v2.0.13', date: '2026-05-20', commit: '-', changes: 'Added editable weekly key-lever inputs to Operating Metrics and saved them through Supabase shared state.' },
       { version: 'v2.0.12', date: '2026-05-20', commit: '-', changes: 'Replaced LT Biweekly Trends Contracting table with Actuals + Pipeline EV projected quarter outcome.' },
       { version: 'v2.0.11', date: '2026-05-20', commit: '-', changes: 'Aligned LT Biweekly Trends Actuals with Leadership Forecast full-quarter actuals definition for each snapshot.' },
@@ -10872,6 +10873,11 @@
         .filter((s) => s && s !== 'All (unique deals)');
     }
 
+    function operatingFirstEditableSeller(data) {
+      const sellers = operatingManualSellers(data);
+      return sellers[0] || null;
+    }
+
     function operatingManualValue(data, seller, weekStart, metricKey, stateObj = likelihoodState) {
       if (seller === 'Overall') {
         return operatingManualSellers(data).reduce((acc, s) => acc + Number(operatingManualValueForSeller(s, weekStart, metricKey, stateObj) || 0), 0);
@@ -10925,7 +10931,7 @@
       const refreshBtn = document.getElementById('operating-refresh-inputs');
       const dirty = operatingManualDirty();
       const saving = operatingSaveStatus && operatingSaveStatus.tone === 'saving';
-      if (editBtn) editBtn.textContent = operatingEditMode ? 'Stop Editing' : 'Edit Inputs';
+      if (editBtn) editBtn.textContent = operatingEditMode ? `Editing ${operatingSelectedSeller || ''}`.trim() : 'Edit Inputs';
       if (saveBtn) saveBtn.disabled = !dirty || saving;
       if (refreshBtn) refreshBtn.disabled = saving;
       if (dirty && (!operatingSaveStatus || operatingSaveStatus.tone !== 'saving')) {
@@ -12861,6 +12867,12 @@
         if (operatingSellerSelect) {
           operatingSellerSelect.addEventListener('change', () => {
             operatingSelectedSeller = operatingSellerSelect.value || 'Overall';
+            if (operatingEditMode && operatingSelectedSeller === 'Overall') {
+              operatingEditMode = false;
+              setOperatingSaveStatus('Overall is read-only because it sums seller inputs. Select a seller and click Edit Inputs.', 'saved');
+            } else if (operatingEditMode) {
+              setOperatingSaveStatus(`Editing ${operatingSelectedSeller}.`, 'saved');
+            }
             renderOperatingMetrics(data);
           });
         }
@@ -12869,7 +12881,23 @@
         const operatingRefreshBtn = document.getElementById('operating-refresh-inputs');
         if (operatingEditBtn) {
           operatingEditBtn.addEventListener('click', () => {
-            operatingEditMode = !operatingEditMode;
+            const nextEditMode = !operatingEditMode;
+            if (nextEditMode && (!operatingSelectedSeller || operatingSelectedSeller === 'Overall')) {
+              const firstSeller = operatingFirstEditableSeller(data);
+              if (firstSeller) {
+                operatingSelectedSeller = firstSeller;
+                if (operatingSellerSelect) operatingSellerSelect.value = firstSeller;
+                setOperatingSaveStatus(`Editing ${firstSeller}. Overall is read-only because it sums seller inputs.`, 'saved');
+              } else {
+                setOperatingSaveStatus('No editable sellers are available in this dataset.', 'error');
+                updateOperatingSaveControls();
+                return;
+              }
+            }
+            operatingEditMode = nextEditMode;
+            if (!operatingEditMode && !operatingManualDirty()) {
+              setOperatingSaveStatus('Saved inputs match Supabase.', 'saved');
+            }
             updateOperatingSaveControls();
             renderOperatingMetrics(data);
           });
