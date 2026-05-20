@@ -3290,7 +3290,7 @@
 	            </div>
 	          </div>
 	        </div>
-	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, and Maruti Peri; Overall includes the full snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals are QTD won revenue paced by Start Date + Duration for the fiscal quarter containing the anchor. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Contracting value uses current snapshot rows in Contracting only. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
+	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals are QTD won revenue paced by Start Date + Duration for the fiscal quarter containing the anchor. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Contracting value uses current snapshot rows in Contracting only. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4423,8 +4423,10 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.7';
+    const APP_VERSION = 'v2.0.9';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.9', date: '2026-05-20', commit: '-', changes: 'Made LT Biweekly Trends Overall row calculate as the arithmetic sum of displayed seller rows across all metrics.' },
+      { version: 'v2.0.8', date: '2026-05-20', commit: '-', changes: 'Added Vitor Quirino to LT Biweekly Trends and made Overall equal the sum of displayed seller rows.' },
       { version: 'v2.0.7', date: '2026-05-19', commit: '-', changes: 'Added Maruti Peri to LT Biweekly Trends and kept the same seller rows visible across all metric tables.' },
       { version: 'v2.0.6', date: '2026-05-19', commit: '-', changes: 'Fixed LT Biweekly Trends seller-level calculations, narrowed seller scope, reduced zero clutter, and improved mobile table scrolling/layout.' },
       { version: 'v2.0.5', date: '2026-05-19', commit: '-', changes: 'Made LT Biweekly Trends load lazily and fetch historical snapshots sequentially to avoid Supabase statement timeouts.' },
@@ -7998,7 +8000,7 @@
     }
 
     const LEADERSHIP_FORECAST_SELLERS = ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Vitor Quirino', 'Maruti Peri', 'Sahana'];
-    const LT_TREND_SELLERS = ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri'];
+    const LT_TREND_SELLERS = ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Vitor Quirino', 'Maruti Peri'];
     const LEADERSHIP_EMPIRICAL_STAGE = {
       1: { p: 0.08, label: 'Intro' },
       2: { p: 0.10, label: 'Qualification' },
@@ -8382,7 +8384,6 @@
     }
 
     function ltTrendSellerMatches(row, seller) {
-      if (!seller || seller === 'Overall') return true;
       const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
       if (matched.length) return matched.includes(seller);
       const raw = String(row && (row.owner || row.seller || row.deal_owner) || '').toLowerCase();
@@ -8395,6 +8396,18 @@
 
     function ltTrendRows(point, seller) {
       const rows = Array.isArray(point && point.dataset && point.dataset.all_deals_rows) ? point.dataset.all_deals_rows : [];
+      if (!seller || seller === 'Overall') {
+        const seen = new Set();
+        const scoped = [];
+        rows.forEach((r) => {
+          if (!LT_TREND_SELLERS.some((s) => ltTrendSellerMatches(r, s))) return;
+          const key = closureDealKey(r) || `${r && r.deal || ''}||${r && r.intro_date || ''}||${r && r.stage || ''}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          scoped.push(r);
+        });
+        return scoped;
+      }
       return rows.filter((r) => ltTrendSellerMatches(r, seller));
     }
 
@@ -8464,6 +8477,13 @@
       return fmtDealSize(value);
     }
 
+    function ltTrendMetricValue(metric, point, seller, prevPoint, sellers) {
+      if (seller === 'Overall') {
+        return (sellers || []).reduce((acc, s) => acc + Number(metric.compute(point, s, prevPoint) || 0), 0);
+      }
+      return metric.compute(point, seller, prevPoint);
+    }
+
     function ltTrendRenderMetric(metric, points, sellers) {
       const head = document.getElementById(metric.headId);
       const body = document.getElementById(metric.bodyId);
@@ -8484,7 +8504,7 @@
         const tr = document.createElement('tr');
         tr.appendChild(makeCell('td', seller));
         points.forEach((p, pIdx) => {
-          const value = metric.compute(p, seller, points[pIdx - 1]);
+          const value = ltTrendMetricValue(metric, p, seller, points[pIdx - 1], sellers);
           const td = makeCell('td', ltTrendFormat(value, metric.kind));
           if (value == null || Number(value || 0) === 0) td.classList.add('lt-empty');
           tr.appendChild(td);
@@ -8516,8 +8536,8 @@
         ];
         metrics.forEach((metric) => ltTrendRenderMetric(metric, points, sellers));
         const latest = points[points.length - 1];
-        const latestOverallEv = ltTrendPipelineEv(latest, 'Overall');
-        const latestOverallContracting = ltTrendContractingValue(latest, 'Overall');
+        const latestOverallEv = sellers.reduce((acc, seller) => acc + ltTrendPipelineEv(latest, seller), 0);
+        const latestOverallContracting = sellers.reduce((acc, seller) => acc + ltTrendContractingValue(latest, seller), 0);
         setInsight('insight-lttrends', [
           `${money.format(points.length)} semi-monthly trend point(s) loaded from ${ltTrendDateLabel(points[0].date)} to ${ltTrendDateLabel(latest.date)}.`,
           `Latest overall ${ltTrendQLabel(latest)} pipeline EV: ${fmtDealSize(latestOverallEv)}; contracting value: ${fmtDealSize(latestOverallContracting)}.`,
