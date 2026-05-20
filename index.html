@@ -3290,7 +3290,7 @@
 	            </div>
 	          </div>
 	        </div>
-	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals are QTD won revenue paced by Start Date + Duration for the fiscal quarter containing the anchor. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Current-quarter Contracting $ uses only open Contracting rows and allocates Deal Size into the fiscal quarter containing that snapshot using Start Date + Duration. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
+	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals match Leadership Forecast: won revenue allocated into the fiscal quarter containing the anchor using Start Date + Duration, based on deals known in that snapshot. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Current-quarter Contracting $ uses only open Contracting rows and allocates Deal Size into the fiscal quarter containing that snapshot using Start Date + Duration. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -4423,8 +4423,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.10';
+    const APP_VERSION = 'v2.0.11';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.0.11', date: '2026-05-20', commit: '-', changes: 'Aligned LT Biweekly Trends Actuals with Leadership Forecast full-quarter actuals definition for each snapshot.' },
       { version: 'v2.0.10', date: '2026-05-20', commit: '-', changes: 'Changed LT Biweekly Trends Contracting metric to current-quarter paced Contracting value instead of full open deal size.' },
       { version: 'v2.0.9', date: '2026-05-20', commit: '-', changes: 'Made LT Biweekly Trends Overall row calculate as the arithmetic sum of displayed seller rows across all metrics.' },
       { version: 'v2.0.8', date: '2026-05-20', commit: '-', changes: 'Added Vitor Quirino to LT Biweekly Trends and made Overall equal the sum of displayed seller rows.' },
@@ -8414,25 +8415,24 @@
 
     function ltTrendActuals(point, seller) {
       const qLabel = ltTrendQLabel(point);
-      const asOf = ltTrendAnchorEnd(point && point.date);
-      if (!qLabel || !asOf) return 0;
+      if (!qLabel) return 0;
       return ltTrendRows(point, seller).reduce((acc, r) => {
         if (!isWonStage(r && r.stage)) return acc;
-        return acc + ltTrendQuarterPacedAmount(r, qLabel, asOf);
+        return acc + ltTrendQuarterPacedAmount(r, qLabel);
       }, 0);
     }
 
-    function ltTrendQuarterPacedAmount(row, qLabel, asOf) {
+    function ltTrendQuarterPacedAmount(row, qLabel) {
       const start = parseIsoLocalDate(row && row.start_date);
       const total = dealSizeValue(row && row.deal_size);
-      if (!qLabel || !asOf || !start || total <= 0) return 0;
+      if (!qLabel || !start || total <= 0) return 0;
       const durationRaw = Number(row && row.duration_months || 0);
       const duration = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : 1;
       const monthly = total / duration;
       let contribution = 0;
       for (let i = 0; i < duration; i += 1) {
         const monthDate = addMonthsSafe(start, i);
-        if (monthDate <= asOf && scorecardQuarterLabelForDate(monthDate) === qLabel) contribution += monthly;
+        if (scorecardQuarterLabelForDate(monthDate) === qLabel) contribution += monthly;
       }
       return contribution;
     }
@@ -8448,12 +8448,11 @@
 
     function ltTrendContractingValue(point, seller) {
       const qLabel = ltTrendQLabel(point);
-      const asOf = ltTrendAnchorEnd(point && point.date);
-      if (!qLabel || !asOf) return 0;
+      if (!qLabel) return 0;
       return ltTrendRows(point, seller).reduce((acc, r) => {
         if (!closureActiveStage(r)) return acc;
         if (stageNumber(r && r.stage) !== 6) return acc;
-        return acc + ltTrendQuarterPacedAmount(r, qLabel, asOf);
+        return acc + ltTrendQuarterPacedAmount(r, qLabel);
       }, 0);
     }
 
