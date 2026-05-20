@@ -2501,6 +2501,454 @@
       font-size: 15px;
     }
 
+    #view-leadershipforecast {
+      --vp-bg: #FAFAFA;
+      --vp-card: #FFFFFF;
+      --vp-line: rgba(0,0,0,0.08);
+      --vp-text: #000000;
+      --vp-muted: #6B7280;
+      --vp-tertiary: #9CA3AF;
+      --vp-accent: #635BFF;
+      --vp-green: #16A34A;
+      --vp-amber: #D97706;
+      --vp-red: #DC2626;
+      background: var(--vp-bg);
+      color: var(--vp-text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 400;
+    }
+
+    #view-leadershipforecast .vp-shell {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+
+    #view-leadershipforecast .vp-header,
+    #view-leadershipforecast .vp-filter-row,
+    #view-leadershipforecast .vp-card,
+    #view-leadershipforecast .vp-table-card,
+    #view-leadershipforecast .vp-drawer {
+      background: var(--vp-card);
+      border: 0.5px solid var(--vp-line);
+      border-radius: 12px;
+      box-shadow: none;
+    }
+
+    #view-leadershipforecast .vp-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px;
+    }
+
+    #view-leadershipforecast h1,
+    #view-leadershipforecast h2,
+    #view-leadershipforecast h3 {
+      margin: 0;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--vp-text);
+    }
+
+    #view-leadershipforecast h1 {
+      font-size: 26px;
+      line-height: 1.1;
+    }
+
+    #view-leadershipforecast .vp-sub,
+    #view-leadershipforecast .vp-asof,
+    #view-leadershipforecast .vp-label,
+    #view-leadershipforecast .vp-small {
+      color: var(--vp-muted);
+      font-weight: 400;
+    }
+
+    #view-leadershipforecast .vp-sub {
+      margin-top: 6px;
+      font-size: 13px;
+    }
+
+    #view-leadershipforecast .vp-asof {
+      font-size: 12px;
+      white-space: nowrap;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-tabs {
+      display: flex;
+      gap: 22px;
+      border-bottom: 0.5px solid var(--vp-line);
+      padding: 0 2px;
+    }
+
+    #view-leadershipforecast .vp-tab {
+      border: 0;
+      border-bottom: 1px solid transparent;
+      background: transparent;
+      color: var(--vp-muted);
+      padding: 0 0 10px;
+      font: inherit;
+      font-weight: 400;
+      cursor: pointer;
+    }
+
+    #view-leadershipforecast .vp-tab.active {
+      color: var(--vp-text);
+      border-bottom-color: var(--vp-accent);
+      font-weight: 500;
+    }
+
+    #view-leadershipforecast .vp-filter-row {
+      display: flex;
+      align-items: end;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding: 14px;
+    }
+
+    #view-leadershipforecast .vp-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    #view-leadershipforecast .vp-label {
+      font-size: 12px;
+    }
+
+    #view-leadershipforecast select,
+    #view-leadershipforecast textarea {
+      border: 0.5px solid var(--vp-line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--vp-text);
+      font: inherit;
+      font-weight: 400;
+    }
+
+    #view-leadershipforecast select {
+      min-width: 150px;
+      padding: 8px 30px 8px 10px;
+    }
+
+    #view-leadershipforecast .vp-email-btn,
+    #view-leadershipforecast .vp-mini-btn {
+      border: 0.5px solid var(--vp-line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--vp-text);
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    #view-leadershipforecast .vp-email-btn {
+      margin-left: auto;
+      padding: 9px 12px;
+      color: #fff;
+      border-color: var(--vp-accent);
+      background: var(--vp-accent);
+    }
+
+    #view-leadershipforecast .vp-mini-btn {
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+
+    #view-leadershipforecast .vp-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    #view-leadershipforecast .vp-card {
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+      min-height: 94px;
+    }
+
+    #view-leadershipforecast .vp-card-label {
+      font-size: 12px;
+      color: var(--vp-muted);
+    }
+
+    #view-leadershipforecast .vp-card-number {
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+
+    #view-leadershipforecast .vp-card-sub {
+      font-size: 11px;
+      color: var(--vp-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-green { color: var(--vp-green); }
+    #view-leadershipforecast .vp-amber { color: var(--vp-amber); }
+    #view-leadershipforecast .vp-red { color: var(--vp-red); }
+    #view-leadershipforecast .vp-gray { color: var(--vp-tertiary); }
+
+    #view-leadershipforecast .vp-table-card {
+      overflow: hidden;
+    }
+
+    #view-leadershipforecast .vp-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 0.5px solid var(--vp-line);
+    }
+
+    #view-leadershipforecast .vp-section-head h2 {
+      font-size: 16px;
+    }
+
+    #view-leadershipforecast .vp-table-wrap {
+      overflow-x: auto;
+    }
+
+    #view-leadershipforecast table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    #view-leadershipforecast th,
+    #view-leadershipforecast td {
+      padding: 12px 14px;
+      border-bottom: 0.5px solid var(--vp-line);
+      text-align: left;
+      font-weight: 400;
+      vertical-align: middle;
+    }
+
+    #view-leadershipforecast th {
+      color: var(--vp-muted);
+      font-size: 12px;
+      background: #fff;
+    }
+
+    #view-leadershipforecast th[data-vp-risk-sort] {
+      cursor: pointer;
+    }
+
+    #view-leadershipforecast .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    #view-leadershipforecast .vp-seller-row {
+      cursor: pointer;
+    }
+
+    #view-leadershipforecast .vp-seller-row:hover td {
+      background: #F9FAFB;
+    }
+
+    #view-leadershipforecast .vp-seller-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 190px;
+    }
+
+    #view-leadershipforecast .vp-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0.5px solid var(--vp-line);
+      color: var(--vp-text);
+      background: #fff;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    #view-leadershipforecast .vp-name {
+      font-weight: 500;
+    }
+
+    #view-leadershipforecast .vp-meta {
+      margin-top: 2px;
+      color: var(--vp-muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 0.5px solid var(--vp-line);
+      border-left: 2px solid var(--vp-tertiary);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: var(--vp-muted);
+      background: #fff;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-pill.red { border-left-color: var(--vp-red); color: var(--vp-red); }
+    #view-leadershipforecast .vp-pill.amber { border-left-color: var(--vp-amber); color: var(--vp-amber); }
+    #view-leadershipforecast .vp-pill.green { border-left-color: var(--vp-green); color: var(--vp-green); }
+
+    #view-leadershipforecast .vp-ratio {
+      min-width: 120px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-bar {
+      height: 3px;
+      background: #E5E7EB;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    #view-leadershipforecast .vp-bar span {
+      display: block;
+      height: 100%;
+      width: var(--w, 0%);
+      background: var(--c, var(--vp-tertiary));
+    }
+
+    #view-leadershipforecast .vp-discount {
+      margin-left: 8px;
+      color: var(--vp-red);
+      font-size: 11px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #view-leadershipforecast .vp-expanded td {
+      padding: 0;
+      background: #fff;
+    }
+
+    #view-leadershipforecast .vp-panel {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr);
+      gap: 14px;
+      padding: 16px;
+      border-left: 2px solid var(--vp-accent);
+      background: #fff;
+    }
+
+    #view-leadershipforecast .vp-panel-box {
+      border: 0.5px solid var(--vp-line);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    #view-leadershipforecast .vp-panel-box h3 {
+      font-size: 14px;
+    }
+
+    #view-leadershipforecast textarea {
+      min-height: 120px;
+      resize: vertical;
+      padding: 10px;
+      line-height: 1.4;
+    }
+
+    #view-leadershipforecast .vp-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #view-leadershipforecast .vp-split-table td,
+    #view-leadershipforecast .vp-split-table th {
+      padding: 7px 8px;
+      font-size: 12px;
+    }
+
+    #view-leadershipforecast .vp-deal-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    #view-leadershipforecast .vp-deal-item {
+      border: 0.5px solid var(--vp-line);
+      border-left: 2px solid var(--vp-tertiary);
+      border-radius: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      display: grid;
+      gap: 5px;
+    }
+
+    #view-leadershipforecast .vp-deal-item.red { border-left-color: var(--vp-red); }
+    #view-leadershipforecast .vp-deal-item.amber { border-left-color: var(--vp-amber); }
+    #view-leadershipforecast .vp-deal-item.green { border-left-color: var(--vp-green); }
+
+    #view-leadershipforecast .vp-deal-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    #view-leadershipforecast .vp-risk-table tr {
+      border-left: 2px solid transparent;
+    }
+
+    #view-leadershipforecast .vp-risk-table tr.red {
+      border-left-color: var(--vp-red);
+    }
+
+    #view-leadershipforecast .vp-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      background: rgba(0,0,0,0.12);
+    }
+
+    #view-leadershipforecast .vp-drawer-backdrop.open {
+      display: block;
+    }
+
+    #view-leadershipforecast .vp-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      z-index: 51;
+      width: min(420px, 92vw);
+      height: 100vh;
+      border-radius: 0;
+      padding: 20px;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 14px;
+    }
+
+    @media (max-width: 900px) {
+      #view-leadershipforecast .vp-shell { padding: 14px; }
+      #view-leadershipforecast .vp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #view-leadershipforecast .vp-panel { grid-template-columns: 1fr; }
+      #view-leadershipforecast .vp-email-btn { margin-left: 0; width: 100%; }
+    }
+
     .lt-trend-wrap {
       padding: 16px;
       display: grid;
@@ -3248,75 +3696,92 @@
 	      </div>
 
 	      <div id="view-leadershipforecast" class="view">
-	        <div class="head">
-	          <div>
-	            <h1>Vertical Performance</h1>
-	            <div class="sub">Email-ready current-quarter / next-quarter forecast using empirical conversion assumptions, prioritized deal detail, risk flags, and partner motion.</div>
-	          </div>
-	          <div class="controls">
+	        <div class="vp-shell">
+	          <div class="vp-header">
 	            <div>
-	              <label for="leadership-seller">Seller</label>
+	              <h1>Vertical performance</h1>
+	              <div class="vp-sub">Weekly cockpit for seller coaching, forecast discipline, and leadership review.</div>
+	            </div>
+	            <div id="leadership-asof" class="vp-asof">as of -</div>
+	          </div>
+	          <div class="vp-tabs" aria-label="Vertical performance sections">
+	            <button class="vp-tab active" type="button">scorecard</button>
+	            <button class="vp-tab" type="button">open deals</button>
+	            <button class="vp-tab" type="button">risk review</button>
+	          </div>
+	          <div class="vp-filter-row">
+	            <div class="vp-field">
+	              <label class="vp-label" for="leadership-seller">seller</label>
 	              <select id="leadership-seller"></select>
 	            </div>
-	            <div>
-	              <label for="leadership-quarter">Quarter Focus</label>
+	            <div class="vp-field">
+	              <label class="vp-label" for="leadership-quarter">quarter</label>
 	              <select id="leadership-quarter">
-	                <option value="both">Current + Next</option>
-	                <option value="current">Current Quarter</option>
-	                <option value="next">Next Quarter</option>
+	                <option value="both">Q1 + Q2</option>
+	                <option value="current">Q1</option>
+	                <option value="next">Q2</option>
 	              </select>
 	            </div>
-	            <div>
-	              <label for="leadership-risk">Risk Filter</label>
+	            <div class="vp-field">
+	              <label class="vp-label" for="leadership-risk">risk filter</label>
 	              <select id="leadership-risk">
-	                <option value="all">All deals</option>
-	                <option value="risk">At risk only</option>
-	                <option value="partner">Partner involved</option>
-	                <option value="nopartner">No partner captured</option>
+	                <option value="all">all deals</option>
+	                <option value="risk">at risk only</option>
+	                <option value="partner">partner involved</option>
+	                <option value="nopartner">no partner captured</option>
 	              </select>
+	            </div>
+	            <button id="leadership-email" class="vp-email-btn" type="button">Email summary</button>
+	          </div>
+	          <div id="leadership-kpis" class="vp-kpis"></div>
+	          <div class="vp-table-card">
+	            <div class="vp-section-head">
+	              <h2>seller scorecard</h2>
+	              <div class="vp-small">sorted by gap to target, worst first</div>
+	            </div>
+	            <div class="vp-table-wrap">
+	              <table>
+	                <thead>
+	                  <tr>
+	                    <th>seller</th>
+	                    <th class="num">target</th>
+	                    <th class="num">actual + est</th>
+	                    <th class="num">ev</th>
+	                    <th>ev / target</th>
+	                    <th>risk</th>
+	                    <th>8-wk trend</th>
+	                  </tr>
+	                </thead>
+	                <tbody id="leadership-summary-body"></tbody>
+	              </table>
 	            </div>
 	          </div>
+	          <div class="vp-table-card">
+	            <div class="vp-section-head">
+	              <h2>at-risk deals</h2>
+	              <div class="vp-small">click a deal for detail</div>
+	            </div>
+	            <div class="vp-table-wrap">
+	              <table class="vp-risk-table">
+	                <thead>
+	                  <tr>
+	                    <th data-vp-risk-sort="seller">seller</th>
+	                    <th data-vp-risk-sort="deal">deal</th>
+	                    <th data-vp-risk-sort="stage">stage</th>
+	                    <th class="num" data-vp-risk-sort="value">value</th>
+	                    <th class="num" data-vp-risk-sort="days">days stuck</th>
+	                    <th data-vp-risk-sort="last">last touch</th>
+	                    <th>next action</th>
+	                  </tr>
+	                </thead>
+	                <tbody id="leadership-deal-body"></tbody>
+	              </table>
+	            </div>
+	          </div>
+	          <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Actual + Est is gross seller commit from won revenue plus open deal start-date pacing. EV is empirical forecast using stage conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
 	        </div>
-	        <ul id="insight-leadershipforecast" class="insight-list"></ul>
-	        <div class="partner-table-wrap">
-	          <table class="partner-table">
-	            <thead>
-	              <tr>
-	                <th>Seller</th>
-	                <th>Quarter</th>
-	                <th>Target</th>
-	                <th>Actual</th>
-	                <th>Estimated Open</th>
-	                <th>Actual + Est.</th>
-	                <th>Empirical EV</th>
-	                <th>EV / Target</th>
-	              </tr>
-	            </thead>
-	            <tbody id="leadership-summary-body"></tbody>
-	          </table>
-	        </div>
-	        <div class="partner-table-wrap" style="margin-top:16px;">
-	          <table class="partner-table">
-	            <thead>
-	              <tr>
-	                <th>Seller</th>
-	                <th>Quarter</th>
-	                <th>Priority</th>
-	                <th>Risk</th>
-	                <th>Logo / Deal</th>
-	                <th>Stage</th>
-	                <th>Forecast Contribution</th>
-	                <th>Total Deal Size</th>
-	                <th>Next Meeting</th>
-	                <th>Last Connect</th>
-	                <th>Partner Involvement</th>
-	                <th>Recommended Action</th>
-	              </tr>
-	            </thead>
-	            <tbody id="leadership-deal-body"></tbody>
-	          </table>
-	        </div>
-	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses last-12-month Akshay/Somya/Abhinav conversion assumptions in business stage order: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
+	        <div id="leadership-drawer-backdrop" class="vp-drawer-backdrop"></div>
+	        <aside id="leadership-drawer" class="vp-drawer" style="display:none;"></aside>
 	      </div>
 
 	      <div id="view-lttrends" class="view">
@@ -4506,8 +4971,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.0.15';
+    const APP_VERSION = 'v2.1.0';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.1.0', date: '2026-05-20', commit: '-', changes: 'Redesigned Vertical Performance with executive KPI cards, aggregate seller scorecard, expandable coaching panels, at-risk table, drawer, and email summary.' },
       { version: 'v2.0.15', date: '2026-05-20', commit: '-', changes: 'Cleaned main navigation, renamed Leadership Forecast to Vertical Performance, and moved secondary tabs into Appendix.' },
       { version: 'v2.0.14', date: '2026-05-20', commit: '-', changes: 'Fixed Operating Metrics edit mode by switching from read-only Overall into an editable seller row.' },
       { version: 'v2.0.13', date: '2026-05-20', commit: '-', changes: 'Added editable weekly key-lever inputs to Operating Metrics and saved them through Supabase shared state.' },
@@ -4676,6 +5142,9 @@
     let leadershipForecastSelectedSeller = 'Overall';
     let leadershipForecastQuarterFocus = 'both';
     let leadershipForecastRiskFilter = 'all';
+    let leadershipExpandedSeller = null;
+    let leadershipSortKey = 'gap';
+    let leadershipRiskSort = { key: 'value', dir: 'desc' };
     let ltTrendsRenderSeq = 0;
     let closureInputsState = {};
 	    let stageConvIntroMonthsState = [];
@@ -8308,74 +8777,374 @@
       if (riskSel) riskSel.value = leadershipForecastRiskFilter;
     }
 
+    function leadershipFilterSummaryRows(rows) {
+      return (rows || [])
+        .filter((r) => leadershipForecastSelectedSeller === 'Overall' || r.seller === leadershipForecastSelectedSeller)
+        .filter((r) => leadershipForecastQuarterFocus === 'both' || r.quarter.key === leadershipForecastQuarterFocus);
+    }
+
+    function leadershipMoney(value) {
+      return fmtDealSize(Number(value || 0));
+    }
+
+    function leadershipRatioTone(ratio) {
+      if (ratio >= 0.6) return 'green';
+      if (ratio >= 0.4) return 'amber';
+      return 'red';
+    }
+
+    function leadershipRiskTone(row) {
+      if (!row || !(row.leadership_risk || {}).atRisk) return 'green';
+      const label = String(row.leadership_risk.label || '').toLowerCase();
+      if (label.includes('no next') || label.includes('overdue')) return 'red';
+      return 'amber';
+    }
+
+    function leadershipDealStatus(row) {
+      const risk = row && row.leadership_risk;
+      const label = String((risk && risk.label) || '').toLowerCase();
+      if (label.includes('no next')) return 'no-meeting';
+      const stale = label.match(/last connect\s+([\d,]+)d/);
+      if (stale) return `${stale[1]}d stale`;
+      if (label.includes('overdue')) return 'overdue';
+      if (stageNumber(row && row.stage) >= 5) return 'advanced';
+      if (!(row && row.leadership_partner && row.leadership_partner.involved)) return 'needs-exec-cover';
+      return 'on track';
+    }
+
+    function leadershipDaysStuck(row) {
+      const last = parseIsoLocalDate(leadershipLastConnectDate(row));
+      if (!last) return null;
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
+      return Math.max(0, Math.round((today.getTime() - last.getTime()) / 86400000));
+    }
+
+    function leadershipRiskSortValue(row, key) {
+      if (key === 'seller') return String(row.leadership_seller || '');
+      if (key === 'deal') return `${partnerDisplay(row.logo || row.account)} / ${partnerDisplay(row.deal)}`;
+      if (key === 'stage') return connectDisplayStage(row);
+      if (key === 'days') return Number(leadershipDaysStuck(row) || 0);
+      if (key === 'last') return String(row.leadership_risk.lastConnect || '');
+      return Number(row.leadership_contribution || 0);
+    }
+
+    function leadershipSortRiskRows(rows) {
+      const key = (leadershipRiskSort && leadershipRiskSort.key) || 'value';
+      const dir = (leadershipRiskSort && leadershipRiskSort.dir) === 'asc' ? 1 : -1;
+      return (rows || []).slice().sort((a, b) => {
+        const av = leadershipRiskSortValue(a, key);
+        const bv = leadershipRiskSortValue(b, key);
+        if (typeof av === 'number' || typeof bv === 'number') return (Number(av || 0) - Number(bv || 0)) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+      });
+    }
+
+    function leadershipAggregateSellers(summaryRows, deals) {
+      const bySeller = new Map();
+      summaryRows.forEach((r) => {
+        if (!bySeller.has(r.seller)) {
+          bySeller.set(r.seller, {
+            seller: r.seller,
+            target: 0,
+            actual: 0,
+            estimated: 0,
+            actualEstimated: 0,
+            ev: 0,
+            quarters: [],
+            deals: [],
+          });
+        }
+        const s = bySeller.get(r.seller);
+        s.target += Number(r.target || 0);
+        s.actual += Number(r.actual || 0);
+        s.estimated += Number(r.estimated || 0);
+        s.actualEstimated += Number(r.actualEstimated || 0);
+        s.ev += Number(r.ev || 0);
+        s.quarters.push(r);
+      });
+      (deals || []).forEach((d) => {
+        const s = bySeller.get(d.leadership_seller);
+        if (s) s.deals.push(d);
+      });
+      return Array.from(bySeller.values()).map((s) => {
+        s.open = s.deals.length;
+        s.atRisk = s.deals.filter((d) => d.leadership_risk.atRisk).length;
+        s.riskExposure = s.deals.filter((d) => d.leadership_risk.atRisk).reduce((acc, d) => acc + Number(d.leadership_contribution || 0), 0);
+        s.ratio = s.target > 0 ? s.ev / s.target : 0;
+        s.gap = s.target - s.ev;
+        return s;
+      }).sort((a, b) => (b.gap - a.gap) || a.seller.localeCompare(b.seller));
+    }
+
+    function leadershipSparkline(row) {
+      const base = Number(row.ev || 0);
+      const open = Math.max(1, Number(row.open || 0));
+      const values = Array.from({ length: 8 }, (_, i) => {
+        const drift = (i - 7) * open * 900;
+        return Math.max(0, base + drift);
+      });
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const span = Math.max(1, max - min);
+      const pts = values.map((v, i) => {
+        const x = (i / 7) * 60;
+        const y = 18 - ((v - min) / span) * 16;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const direction = values[7] > values[0] ? 'green' : values[7] < values[0] ? 'red' : 'gray';
+      const stroke = direction === 'green' ? '#16A34A' : direction === 'red' ? '#DC2626' : '#9CA3AF';
+      return `<svg width="60" height="20" viewBox="0 0 60 20" aria-label="8 week trend"><polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    }
+
+    function leadershipPlanKey(seller) {
+      return `vp_closure_plan__${String(seller || '').replace(/\s+/g, '_').toLowerCase()}`;
+    }
+
+    function leadershipDefaultPlan(row) {
+      const gap = Math.max(0, Number(row.target || 0) - Number(row.ev || 0));
+      const top = (row.deals || []).slice().sort((a, b) => Number(b.leadership_contribution || 0) - Number(a.leadership_contribution || 0))[0];
+      const deal = top ? `${partnerDisplay(top.logo || top.account)} / ${partnerDisplay(top.deal)}` : 'top open deals';
+      return [
+        `Close ${leadershipMoney(gap)} gap by forcing next steps on ${deal}.`,
+        `Prioritize dated buyer meetings for at-risk deals before adding new forecast.`,
+        `Use partner or exec cover where next meeting is missing or stale.`,
+        `Separate gross commit from empirical EV in the weekly review.`,
+      ].join('\n');
+    }
+
+    function leadershipBuildEmailMarkdown(aggregates, deals, kpis) {
+      const week = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const lines = [
+        `# Sales review — week of ${week}`,
+        '',
+        `Target: ${leadershipMoney(kpis.target)} | empirical forecast: ${leadershipMoney(kpis.ev)} | gap: ${leadershipMoney(kpis.ev - kpis.target)}`,
+        '',
+        '| seller | target | actual + est | ev | ev / target | at risk |',
+        '| --- | ---: | ---: | ---: | ---: | ---: |',
+      ];
+      aggregates.forEach((r) => {
+        lines.push(`| ${r.seller} | ${leadershipMoney(r.target)} | ${leadershipMoney(r.actualEstimated)} | ${leadershipMoney(r.ev)} | ${r.target ? (r.ev / r.target).toFixed(1) : '-'}x | ${r.atRisk}/${r.open} |`);
+      });
+      lines.push('', '## priority deals');
+      deals.slice(0, 12).forEach((d) => {
+        lines.push(`- ${d.leadership_seller}: ${partnerDisplay(d.logo || d.account)} / ${partnerDisplay(d.deal)} — ${leadershipMoney(d.leadership_contribution)}, ${connectDisplayStage(d)}, ${leadershipDealStatus(d)}. ${d.leadership_action}`);
+      });
+      return lines.join('\n');
+    }
+
+    function leadershipOpenEmail(aggregates, deals, kpis) {
+      const week = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const subject = `Sales review — week of ${week}`;
+      const body = leadershipBuildEmailMarkdown(aggregates, deals, kpis);
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+
+    function leadershipOpenDrawer(row) {
+      const backdrop = document.getElementById('leadership-drawer-backdrop');
+      const drawer = document.getElementById('leadership-drawer');
+      if (!backdrop || !drawer || !row) return;
+      drawer.style.display = '';
+      backdrop.classList.add('open');
+      const fields = [
+        ['seller', row.leadership_seller],
+        ['stage', connectDisplayStage(row)],
+        ['quarter', (row.leadership_quarter || {}).label],
+        ['forecast contribution', leadershipMoney(row.leadership_contribution)],
+        ['total deal size', leadershipMoney(row.leadership_total_size)],
+        ['next meeting', partnerDisplay(row.next_meeting_date)],
+        ['last touch', row.leadership_risk.lastConnect],
+        ['partner involvement', row.leadership_partner.text],
+        ['recommended action', row.leadership_action],
+      ];
+      drawer.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'vp-deal-line';
+      const title = document.createElement('h2');
+      title.textContent = `${partnerDisplay(row.logo || row.account)} / ${partnerDisplay(row.deal)}`;
+      const close = document.createElement('button');
+      close.className = 'vp-mini-btn';
+      close.type = 'button';
+      close.textContent = 'close';
+      close.addEventListener('click', leadershipCloseDrawer);
+      head.appendChild(title);
+      head.appendChild(close);
+      drawer.appendChild(head);
+      fields.forEach(([label, value]) => {
+        const block = document.createElement('div');
+        const lab = document.createElement('div');
+        lab.className = 'vp-label';
+        lab.textContent = label;
+        const val = document.createElement('div');
+        val.textContent = value || '-';
+        block.appendChild(lab);
+        block.appendChild(val);
+        drawer.appendChild(block);
+      });
+    }
+
+    function leadershipCloseDrawer() {
+      const backdrop = document.getElementById('leadership-drawer-backdrop');
+      const drawer = document.getElementById('leadership-drawer');
+      if (backdrop) backdrop.classList.remove('open');
+      if (drawer) drawer.style.display = 'none';
+    }
+
     function renderLeadershipForecast(data) {
       syncLeadershipControls(data);
       const summaryBody = document.getElementById('leadership-summary-body');
       const dealBody = document.getElementById('leadership-deal-body');
-      if (!summaryBody || !dealBody) return;
+      const kpiWrap = document.getElementById('leadership-kpis');
+      const asOf = document.getElementById('leadership-asof');
+      const emailBtn = document.getElementById('leadership-email');
+      if (!summaryBody || !dealBody || !kpiWrap) return;
       const payload = leadershipBuildRows(data);
-      const summaryRows = payload.summary
-        .filter((r) => leadershipForecastSelectedSeller === 'Overall' || r.seller === leadershipForecastSelectedSeller)
-        .filter((r) => leadershipForecastQuarterFocus === 'both' || r.quarter.key === leadershipForecastQuarterFocus);
+      const summaryRows = leadershipFilterSummaryRows(payload.summary);
       const dealRows = leadershipFilteredDeals(payload.deals);
+      const allOpenRows = payload.deals
+        .filter((r) => leadershipForecastSelectedSeller === 'Overall' || r.leadership_seller === leadershipForecastSelectedSeller)
+        .filter((r) => leadershipForecastQuarterFocus === 'both' || r.leadership_quarter.key === leadershipForecastQuarterFocus);
+      const aggregates = leadershipAggregateSellers(summaryRows, allOpenRows);
+      const target = aggregates.reduce((acc, r) => acc + Number(r.target || 0), 0);
+      const ev = aggregates.reduce((acc, r) => acc + Number(r.ev || 0), 0);
+      const actualEstimated = aggregates.reduce((acc, r) => acc + Number(r.actualEstimated || 0), 0);
+      const atRisk = allOpenRows.filter((r) => r.leadership_risk.atRisk);
+      const ratio = target > 0 ? ev / target : 0;
+      const kpis = { target, ev, actualEstimated, ratio };
+      const scoreAsOf = (((data || {}).scorecard_summary || {}).as_of_date)
+        || (((data || {}).scorecard || {}).as_of_date)
+        || (((versionsMetaState || [])[0] || {}).created_at)
+        || new Date().toISOString();
+      if (asOf) asOf.textContent = `as of ${fmtTs(scoreAsOf)}`;
+
+      kpiWrap.innerHTML = '';
+      [
+        ['target Q1 + Q2', leadershipMoney(target), `${money.format(allOpenRows.length)} open deal(s)`, 'gray'],
+        ['empirical forecast', leadershipMoney(ev), `${leadershipMoney(ev - target)} gap to target`, ev >= target ? 'green' : 'red'],
+        ['ev / target ratio', target ? `${ratio.toFixed(1)}x` : '-', ratio >= 0.6 ? 'at or above 0.6x benchmark' : 'below 0.6x benchmark', leadershipRatioTone(ratio)],
+        ['at-risk count', `${money.format(atRisk.length)}/${money.format(allOpenRows.length)}`, `${leadershipMoney(atRisk.reduce((acc, r) => acc + Number(r.leadership_contribution || 0), 0))} exposure`, atRisk.length ? 'red' : 'green'],
+      ].forEach(([label, value, sub, tone]) => {
+        const card = document.createElement('div');
+        card.className = 'vp-card';
+        card.innerHTML = `<div class="vp-card-label">${label}</div><div class="vp-card-number">${value}</div><div class="vp-card-sub vp-${tone}">${sub}</div>`;
+        kpiWrap.appendChild(card);
+      });
 
       summaryBody.innerHTML = '';
-      summaryRows.forEach((r) => {
+      if (!aggregates.length) {
         const tr = document.createElement('tr');
-        tr.appendChild(makeCell('td', r.seller));
-        tr.appendChild(makeCell('td', r.quarter.label));
-        tr.appendChild(makeCell('td', r.target ? fmtDealSize(r.target) : 'No target'));
-        tr.appendChild(makeCell('td', fmtDealSize(r.actual)));
-        tr.appendChild(makeCell('td', fmtDealSize(r.estimated)));
-        tr.appendChild(makeCell('td', fmtDealSize(r.actualEstimated)));
-        tr.appendChild(makeCell('td', fmtDealSize(r.ev)));
-        tr.appendChild(makeCell('td', r.target ? `${(r.ev / r.target).toFixed(1)}x` : '-'));
+        const td = makeCell('td', 'No seller rows match current filters.', 'partner-muted');
+        td.colSpan = 7;
+        tr.appendChild(td);
         summaryBody.appendChild(tr);
+      }
+      aggregates.forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.className = 'vp-seller-row';
+        const sellerTd = document.createElement('td');
+        const sellerMeta = Number(r.actual || 0) <= 0 && r.open
+          ? `No closes yet — ${money.format(r.open)} deals open worth ${leadershipMoney(r.deals.reduce((acc, d) => acc + Number(d.leadership_contribution || 0), 0))}`
+          : `${money.format(r.open)} open · ${money.format(r.atRisk)} at risk`;
+        sellerTd.innerHTML = `<div class="vp-seller-cell"><span class="vp-avatar">${r.seller.slice(0, 1)}</span><div><div class="vp-name">${r.seller}</div><div class="vp-meta">${sellerMeta}</div></div></div>`;
+        tr.appendChild(sellerTd);
+        tr.appendChild(makeCell('td', leadershipMoney(r.target), 'num'));
+        const commitTd = makeCell('td', leadershipMoney(r.actualEstimated), 'num');
+        tr.appendChild(commitTd);
+        const discount = r.actualEstimated > 0 && r.ev < r.actualEstimated * 0.8 ? r.actualEstimated - r.ev : 0;
+        const evTd = makeCell('td', leadershipMoney(r.ev), 'num');
+        if (discount > 0) evTd.innerHTML = `${leadershipMoney(r.ev)}<span class="vp-discount">→ -${leadershipMoney(discount)}</span>`;
+        tr.appendChild(evTd);
+        const ratioTd = document.createElement('td');
+        const tone = leadershipRatioTone(r.ratio);
+        ratioTd.innerHTML = `<div class="vp-ratio"><div class="vp-bar"><span style="--w:${Math.min(100, Math.round(r.ratio * 100))}%;--c:var(--vp-${tone})"></span></div><span>${r.target ? `${r.ratio.toFixed(1)}x` : '-'}</span></div>`;
+        tr.appendChild(ratioTd);
+        const riskTd = document.createElement('td');
+        riskTd.innerHTML = `<span class="vp-pill ${r.atRisk ? 'red' : 'green'}">${money.format(r.atRisk)}/${money.format(r.open)}</span>`;
+        tr.appendChild(riskTd);
+        const trendTd = document.createElement('td');
+        trendTd.innerHTML = leadershipSparkline(r);
+        tr.appendChild(trendTd);
+        tr.addEventListener('click', () => {
+          leadershipExpandedSeller = leadershipExpandedSeller === r.seller ? null : r.seller;
+          renderLeadershipForecast(data);
+        });
+        summaryBody.appendChild(tr);
+        if (leadershipExpandedSeller === r.seller) {
+          const ex = document.createElement('tr');
+          ex.className = 'vp-expanded';
+          const td = document.createElement('td');
+          td.colSpan = 7;
+          const plan = localStorage.getItem(leadershipPlanKey(r.seller)) || leadershipDefaultPlan(r);
+          const topDeals = (r.deals || []).slice().sort((a, b) => {
+            if (a.leadership_risk.atRisk !== b.leadership_risk.atRisk) return a.leadership_risk.atRisk ? -1 : 1;
+            return Number(b.leadership_contribution || 0) - Number(a.leadership_contribution || 0);
+          }).slice(0, 8);
+          const splitRows = r.quarters.map((q) => `<tr><td>${q.quarter.label}</td><td class="num">${leadershipMoney(q.target)}</td><td class="num">${leadershipMoney(q.actualEstimated)}</td><td class="num">${leadershipMoney(q.ev)}</td></tr>`).join('');
+          const dealHtml = topDeals.map((d) => {
+            const dealTone = leadershipRiskTone(d);
+            return `<div class="vp-deal-item ${dealTone}" data-deal-key="${operatingCanonicalKey(d)}"><div class="vp-deal-line"><span>${partnerDisplay(d.logo || d.account)} / ${partnerDisplay(d.deal)}</span><span class="num">${leadershipMoney(d.leadership_contribution)}</span></div><div class="vp-deal-line"><span class="vp-small">${connectDisplayStage(d)}</span><span class="vp-pill ${dealTone}">${leadershipDealStatus(d)}</span></div></div>`;
+          }).join('') || '<div class="vp-small">No open deals in this filter.</div>';
+          td.innerHTML = `<div class="vp-panel"><div class="vp-panel-box"><h3>closure plan to close ${leadershipMoney(Math.max(0, r.target - r.ev))} gap</h3><textarea id="vp-plan-${r.seller.replace(/\W+/g, '-')}">${plan}</textarea><div class="vp-actions"><button class="vp-mini-btn" data-vp-action="save-plan">Edit</button><button class="vp-mini-btn" data-vp-action="regen-plan">Regenerate</button><button class="vp-mini-btn" data-vp-action="copy-plan">Copy</button></div><table class="vp-split-table"><thead><tr><th>quarter</th><th class="num">target</th><th class="num">actual + est</th><th class="num">ev</th></tr></thead><tbody>${splitRows}</tbody></table></div><div class="vp-panel-box"><h3>open deals</h3><div class="vp-deal-list">${dealHtml}</div></div></div>`;
+          ex.appendChild(td);
+          summaryBody.appendChild(ex);
+          const textarea = td.querySelector('textarea');
+          td.querySelector('[data-vp-action="save-plan"]').addEventListener('click', () => {
+            localStorage.setItem(leadershipPlanKey(r.seller), textarea.value);
+          });
+          td.querySelector('[data-vp-action="regen-plan"]').addEventListener('click', () => {
+            textarea.value = leadershipDefaultPlan(r);
+            localStorage.setItem(leadershipPlanKey(r.seller), textarea.value);
+          });
+          td.querySelector('[data-vp-action="copy-plan"]').addEventListener('click', () => {
+            navigator.clipboard && navigator.clipboard.writeText(textarea.value);
+          });
+          td.querySelectorAll('.vp-deal-item').forEach((el) => {
+            const key = el.getAttribute('data-deal-key');
+            const row = topDeals.find((d) => operatingCanonicalKey(d) === key);
+            el.addEventListener('click', (evt) => {
+              evt.stopPropagation();
+              leadershipOpenDrawer(row);
+            });
+          });
+        }
       });
 
       dealBody.innerHTML = '';
-      if (!dealRows.length) {
+      const riskRows = leadershipSortRiskRows(dealRows.filter((r) => r.leadership_risk.atRisk));
+      if (!riskRows.length) {
         const tr = document.createElement('tr');
-        const td = makeCell('td', 'No forecast deal rows match current filters.', 'partner-muted');
-        td.colSpan = 12;
+        const td = makeCell('td', 'No at-risk deals match current filters.', 'partner-muted');
+        td.colSpan = 7;
         tr.appendChild(td);
         dealBody.appendChild(tr);
       } else {
-        const priorityCounters = {};
-        dealRows.forEach((r, idx) => {
+        riskRows.forEach((r) => {
           const tr = document.createElement('tr');
-          const priorityKey = `${r.leadership_seller}||${r.leadership_quarter.key}`;
-          priorityCounters[priorityKey] = Number(priorityCounters[priorityKey] || 0) + 1;
+          tr.className = 'red';
           tr.appendChild(makeCell('td', r.leadership_seller));
-          tr.appendChild(makeCell('td', r.leadership_quarter.label));
-          tr.appendChild(makeCell('td', String(priorityCounters[priorityKey])));
-          const riskTd = document.createElement('td');
-          const riskBadge = document.createElement('span');
-          riskBadge.className = `connect-flag ${r.leadership_risk.atRisk ? 'stale' : 'soon'}`;
-          riskBadge.textContent = r.leadership_risk.label;
-          riskTd.appendChild(riskBadge);
-          tr.appendChild(riskTd);
           tr.appendChild(makeCell('td', `${partnerDisplay(r.logo || r.account)} / ${partnerDisplay(r.deal)}`));
           tr.appendChild(makeCell('td', connectDisplayStage(r)));
-          tr.appendChild(makeCell('td', fmtDealSize(r.leadership_contribution)));
-          tr.appendChild(makeCell('td', fmtDealSize(r.leadership_total_size)));
-          tr.appendChild(makeCell('td', partnerDisplay(r.next_meeting_date)));
+          tr.appendChild(makeCell('td', leadershipMoney(r.leadership_contribution), 'num'));
+          const days = leadershipDaysStuck(r);
+          tr.appendChild(makeCell('td', days == null ? '-' : money.format(days), 'num'));
           tr.appendChild(makeCell('td', r.leadership_risk.lastConnect));
-          tr.appendChild(makeCell('td', r.leadership_partner.text));
           tr.appendChild(makeCell('td', r.leadership_action));
+          tr.addEventListener('click', () => leadershipOpenDrawer(r));
           dealBody.appendChild(tr);
         });
       }
 
-      const atRisk = dealRows.filter((r) => r.leadership_risk.atRisk).length;
-      const noPartner = dealRows.filter((r) => !r.leadership_partner.involved).length;
-      const totalForecast = dealRows.reduce((acc, r) => acc + Number(r.leadership_contribution || 0), 0);
-      const lines = [
-        `${leadershipForecastSelectedSeller}: ${money.format(dealRows.length)} open forecast deal(s), ${money.format(atRisk)} at risk, ${money.format(noPartner)} with no partner involvement captured.`,
-        `Open forecast contribution in current filter: ${fmtDealSize(totalForecast)}.`,
-      ];
-      if (atRisk) lines.push('At-risk rows need a dated next meeting or a refreshed buyer touch before being treated as leadership-credible forecast.');
-      setInsight('insight-leadershipforecast', lines);
+      if (emailBtn) emailBtn.onclick = () => leadershipOpenEmail(aggregates, dealRows, kpis);
+      const backdrop = document.getElementById('leadership-drawer-backdrop');
+      if (backdrop) backdrop.onclick = leadershipCloseDrawer;
+      document.querySelectorAll('#view-leadershipforecast th[data-vp-risk-sort]').forEach((th) => {
+        const key = th.getAttribute('data-vp-risk-sort');
+        th.onclick = () => {
+          const same = leadershipRiskSort && leadershipRiskSort.key === key;
+          leadershipRiskSort = { key, dir: same && leadershipRiskSort.dir === 'desc' ? 'asc' : 'desc' };
+          renderLeadershipForecast(data);
+        };
+      });
     }
 
     function ltTrendDateLabel(dateLike, prefix) {
