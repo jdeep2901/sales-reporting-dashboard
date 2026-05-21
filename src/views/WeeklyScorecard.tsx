@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData } from '@/lib/queries';
+import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import {
   ACTIVE_SELLERS,
   EMPIRICAL_STAGE,
@@ -785,7 +786,7 @@ export function WeeklyScorecard() {
   const prevRow = prevQuery.data as { dataset?: { all_deals_rows?: DealRow[] } } | null;
   const prevRows: DealRow[] = prevRow?.dataset?.all_deals_rows ?? [];
 
-  const [seller, setSeller] = useState('Overall');
+  const { seller, setSeller } = useSeller();
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const quarterLabels = useMemo(() => buildQuarterLabels(asOfDate || null), [asOfDate]);
 
@@ -854,7 +855,6 @@ export function WeeklyScorecard() {
     : getTarget(quarterTargets, seller, quarterLabels.next);
 
   const maxCount = Math.max(1, ...stageStats.map((s) => s.count));
-  const sellerOptions = ['Overall', ...ACTIVE_SELLERS];
 
   if (storeQuery.isLoading) return <div className="p-6 text-13 text-text-secondary">Loading scorecard...</div>;
   if (storeQuery.isError) return <div className="p-6 text-13 text-status-red">Failed to load data.</div>;
@@ -893,7 +893,7 @@ export function WeeklyScorecard() {
             className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
             style={{ border: '0.5px solid var(--border-emphasis)' }}
           >
-            {sellerOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData, useSaveSharedStore } from '@/lib/queries';
 import { ACTIVE_SELLERS, stageNumber, empiricalEv } from '@/lib/vpCompute';
+import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { formatCurrency, formatPercent } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
 
@@ -243,7 +244,7 @@ export function OperatingMetrics() {
     return Array.isArray(v) ? v as VersionMeta[] : [];
   }, [storeData]);
 
-  const [seller, setSeller] = useState('Overall');
+  const { seller, setSeller } = useSeller();
   const [localLikelihood, setLocalLikelihood] = useState<LikelihoodState | null>(null);
   const [saveStatus, setSaveStatus] = useState('');
 
@@ -307,7 +308,6 @@ export function OperatingMetrics() {
   if (storeQuery.isLoading) return <div className="p-6 text-13 text-text-secondary">Loading operating metrics...</div>;
   if (storeQuery.isError) return <div className="p-6 text-13 text-status-red">Failed to load data.</div>;
 
-  const sellerOptions = ['Overall', ...ACTIVE_SELLERS];
   const visibleWeeks = weekStarts.slice(-20); // show last 20 weeks by default
 
   const computedMetrics = [
@@ -390,7 +390,7 @@ export function OperatingMetrics() {
             className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
             style={{ border: '0.5px solid var(--border-emphasis)' }}
           >
-            {sellerOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>

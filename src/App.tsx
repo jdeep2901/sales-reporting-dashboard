@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Tabs, type TabItem } from '@/components/Tabs';
 import { AuthProvider } from '@/lib/auth';
+import { SellerProvider } from '@/lib/sellerContext';
+import mathcoLogo from '/assets/mathco-logo.svg';
 import { LoginGate } from '@/components/LoginGate';
 import { WeeklyScorecard } from '@/views/WeeklyScorecard';
 import { VerticalPerformance } from '@/views/VerticalPerformance';
@@ -42,6 +44,7 @@ const mainTabs: TabItem[] = [
 ];
 
 const appendixTabs: TabItem[] = [
+  { label: 'Admin', to: '/admin' },
   { label: 'Forecast (EV)', to: '/forecast' },
   { label: 'Forecast (actuals)', to: '/forecast-actuals' },
   { label: 'Partnerships', to: '/partnerships' },
@@ -67,7 +70,7 @@ function Shell() {
           style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
         >
           <div className="flex items-center gap-3">
-            <img src="/assets/mathco-logo.svg" alt="MathCo" className="h-5 w-auto" />
+            <img src={mathcoLogo} alt="MathCo" className="h-5 w-auto" />
             <span className="text-13 font-medium text-text-primary">Sales reporting</span>
           </div>
           <span className="text-11 text-text-tertiary tabular-nums">{appVersion}</span>
@@ -122,9 +125,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter basename="/sales-reporting-dashboard">
-          <Shell />
-        </BrowserRouter>
+        <SellerProvider>
+          <BrowserRouter basename="/sales-reporting-dashboard">
+            <Shell />
+          </BrowserRouter>
+        </SellerProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData } from '@/lib/queries';
+import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { formatCurrency } from '@/lib/formatters';
 import {
   buildRows,
@@ -11,7 +12,6 @@ import {
   stageLabel,
   dealDisplay,
   daysStuck,
-  ACTIVE_SELLERS,
   type SellerAggregate,
   type RichDealRow,
   type QuarterTargets,
@@ -422,7 +422,7 @@ function AtRiskTable({ deals }: { deals: RichDealRow[] }) {
 
 export function VerticalPerformance() {
   const { credentials } = useAuth();
-  const [sellerFilter, setSellerFilter] = useState<string>('Overall');
+  const { seller: sellerFilter, setSeller: setSellerFilter } = useSeller();
   const [quarterFocus, setQuarterFocus] = useState<'both' | 'current' | 'next'>('both');
   const [riskFilter, setRiskFilter] = useState<'all' | 'risk' | 'partner' | 'nopartner'>('all');
 
@@ -594,8 +594,7 @@ export function VerticalPerformance() {
             <div className="flex items-center gap-1.5">
               <label className="text-11 text-text-secondary">Seller</label>
               <select style={selectStyle} value={sellerFilter} onChange={(e) => setSellerFilter(e.target.value)}>
-                <option value="Overall">Overall</option>
-                {ACTIVE_SELLERS.map((s) => <option key={s} value={s}>{s}</option>)}
+                {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="flex items-center gap-1.5">

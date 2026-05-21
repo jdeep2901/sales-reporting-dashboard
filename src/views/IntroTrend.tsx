@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from 'recharts';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore } from '@/lib/queries';
-import { ACTIVE_SELLERS } from '@/lib/vpCompute';
+import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 
 type Granularity = 'week' | 'month';
 
@@ -89,11 +89,11 @@ export function IntroTrend() {
   const dataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
   const introTrend = (dataset?.intro_trend as Record<string, unknown> | null) ?? {};
 
-  const [scope, setScope] = useState('Overall');
+  const { seller: scope, setSeller: setScope } = useSeller();
   const [granularity, setGranularity] = useState<Granularity>('week');
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
-  const scopeOptions = ['Overall', ...ACTIVE_SELLERS];
+  const scopeOptions = SELLER_OPTIONS;
 
   const { labels, points, target, targetLabel } = useMemo(
     () => buildSeries(introTrend, scope, granularity),
