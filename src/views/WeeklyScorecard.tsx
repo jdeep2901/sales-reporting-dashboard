@@ -346,13 +346,15 @@ interface DeltaDeal {
   dealLabel: string;
   seller: string;
   dealSize: number;
+  prevDealSize?: number;     // size-changed deals: what size was in prev snapshot
   fromStage: string | null;  // entered: where they came from (null = brand new deal)
   toStage: string | null;    // exited: where they went (null = not found in current data)
 }
 
 interface StageDelta {
-  exited: DeltaDeal[];  // were at this stage in prev, not now
-  entered: DeltaDeal[]; // are at this stage now, weren't in prev
+  exited: DeltaDeal[];      // were at this stage in prev, not now
+  entered: DeltaDeal[];     // are at this stage now, weren't in prev
+  sizeChanged: DeltaDeal[]; // stayed at this stage but deal_size changed
 }
 
 function buildStageDelta(
@@ -421,7 +423,32 @@ function buildStageDelta(
     entered.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), seller: resolveSeller(r), dealSize: resolveSize(r), fromStage, toStage: null });
   });
 
-  return { exited, entered };
+  // Size changed: stayed at this stage but deal_size was edited
+  const seenSizeChanged = new Set<string>();
+  const sizeChanged: DeltaDeal[] = [];
+  allRows.forEach((r) => {
+    if (!matchSeller(r, seller)) return;
+    if (normStage(r.stage ?? r.deal_stage) !== stage) return;
+    const k = dealKey(r);
+    if (seenSizeChanged.has(k)) return;
+    seenSizeChanged.add(k);
+    const prev = allPrevByKey.get(k);
+    if (!prev) return;
+    if (normStage(prev.stage ?? prev.deal_stage) !== stage) return;
+    const currSize = resolveSize(r);
+    const prevSize = resolveSize(prev);
+    if (currSize === prevSize) return;
+    sizeChanged.push({
+      dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'),
+      seller: resolveSeller(r),
+      dealSize: currSize,
+      prevDealSize: prevSize,
+      fromStage: null,
+      toStage: null,
+    });
+  });
+
+  return { exited, entered, sizeChanged };
 }
 
 // ─── badges ───────────────────────────────────────────────────────────────────
@@ -601,7 +628,7 @@ function FunnelSection({
                     </span>
                     <button onClick={() => setExpandedDelta(null)} className="text-11 text-text-tertiary hover:text-text-primary">Close ×</button>
                   </div>
-                  <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                     {/* Exited */}
                     <div>
                       <div className="text-11 font-medium mb-1.5" style={{ color: 'var(--status-red)' }}>
@@ -616,10 +643,41 @@ function FunnelSection({
                             const isLostDeal = d.toStage === 'Lost';
                             const color = isWon ? 'var(--status-green)' : isLostDeal ? 'var(--status-red)' : 'var(--status-amber)';
                             return (
-                              <div key={i} className="flex items-baseline justify-between gap-2 text-11">
-                                <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
-                                <span className="tabular-nums text-text-tertiary shrink-0">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</span>
-                                <span className="shrink-0 font-medium" style={{ color }}>→ {d.toStage}</span>
+                              <div key={i} className="text-11 space-y-0.5">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                                  <span className="shrink-0 font-medium" style={{ color }}>→ {d.toStage}</span>
+                                </div>
+                                <div className="text-text-tertiary tabular-nums">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Size changes */}
+                    <div>
+                      <div className="text-11 font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                        Size edits ({deltaData.sizeChanged.length})
+                      </div>
+                      {deltaData.sizeChanged.length === 0 ? (
+                        <div className="text-11 text-text-tertiary">None</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {deltaData.sizeChanged.map((d, i) => {
+                            const diff = d.dealSize - (d.prevDealSize ?? 0);
+                            return (
+                              <div key={i} className="text-11 space-y-0.5">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                                  <span className="shrink-0 font-medium tabular-nums"
+                                    style={{ color: diff > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                                    {diff > 0 ? `+${formatCurrency(diff)}` : formatDelta(diff)}
+                                  </span>
+                                </div>
+                                <div className="text-text-tertiary tabular-nums">
+                                  {formatCurrency(d.prevDealSize ?? 0)} → {d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}
+                                </div>
                               </div>
                             );
                           })}
@@ -636,12 +694,14 @@ function FunnelSection({
                       ) : (
                         <div className="space-y-1">
                           {deltaData.entered.map((d, i) => (
-                            <div key={i} className="flex items-baseline justify-between gap-2 text-11">
-                              <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
-                              <span className="tabular-nums text-text-tertiary shrink-0">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</span>
-                              <span className="shrink-0" style={{ color: d.fromStage ? 'var(--status-amber)' : 'var(--accent)' }}>
-                                {d.fromStage ? `← ${d.fromStage}` : '✦ New deal'}
-                              </span>
+                            <div key={i} className="text-11 space-y-0.5">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                                <span className="shrink-0" style={{ color: d.fromStage ? 'var(--status-amber)' : 'var(--accent)' }}>
+                                  {d.fromStage ? `← ${d.fromStage}` : '✦ New deal'}
+                                </span>
+                              </div>
+                              <div className="text-text-tertiary tabular-nums">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</div>
                             </div>
                           ))}
                         </div>
