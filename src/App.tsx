@@ -122,7 +122,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename="/sales-reporting-dashboard">
           <Shell />
         </BrowserRouter>
       </AuthProvider>

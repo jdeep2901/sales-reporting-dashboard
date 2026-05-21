@@ -37,8 +37,10 @@ jobs:
           VITE_APP_VERSION: ${{ github.sha }}
         run: npm run build
 
-      - name: Copy .nojekyll
-        run: cp .nojekyll dist/.nojekyll
+      - name: Copy static files
+        run: |
+          cp .nojekyll dist/.nojekyll
+          cp dist/index.html dist/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
