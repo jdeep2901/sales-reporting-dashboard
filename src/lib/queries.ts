@@ -80,6 +80,35 @@ export function useVersionQa(
   });
 }
 
+// Batch-load multiple version datasets. Returns a stable map versionId → dataset.
+// Uses a single query with all IDs so the hook count stays fixed.
+export function useBatchVersionData(
+  username: string | null,
+  password: string | null,
+  versionIds: string[],
+) {
+  const unique = Array.from(new Set(versionIds.filter(Boolean))).sort();
+  return useQuery({
+    queryKey: ['batchVersionData', username, unique],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        unique.map((id) =>
+          rpc<{ dataset?: Record<string, unknown> }>('get_dashboard_version', {
+            p_username: username!,
+            p_password: password!,
+            p_version_id: id,
+          })
+            .then((row) => [id, row?.dataset ?? null] as [string, Record<string, unknown> | null])
+            .catch(() => [id, null] as [string, null]),
+        ),
+      );
+      return Object.fromEntries(entries) as Record<string, Record<string, unknown> | null>;
+    },
+    enabled: !!username && !!password && unique.length > 0,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 // Save shared state mutation
 export function useSaveSharedStore() {
   const qc = useQueryClient();
