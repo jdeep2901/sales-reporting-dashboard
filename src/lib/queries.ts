@@ -21,33 +21,61 @@ export function useVersions(username: string | null, password: string | null) {
   };
 }
 
-// Full dataset for a specific version
-export function useVersionData(versionId: string | null) {
+// Full dataset for a specific version — credentials required by the RPC signature
+export function useVersionData(
+  username: string | null,
+  password: string | null,
+  versionId: string | null,
+) {
   return useQuery({
-    queryKey: ['versionData', versionId],
-    queryFn: () => rpc('get_dashboard_version', { p_version_id: versionId! }),
-    enabled: !!versionId,
+    queryKey: ['versionData', username, versionId],
+    queryFn: () =>
+      rpc('get_dashboard_version', {
+        p_username: username!,
+        p_password: password!,
+        p_version_id: versionId!,
+      }),
+    enabled: !!username && !!password && !!versionId,
     staleTime: 10 * 60 * 1000,
   });
 }
 
 // Version-to-version comparison
-export function useVersionCompare(leftId: string | null, rightId: string | null) {
+export function useVersionCompare(
+  username: string | null,
+  password: string | null,
+  leftId: string | null,
+  rightId: string | null,
+) {
   return useQuery({
-    queryKey: ['versionCompare', leftId, rightId],
+    queryKey: ['versionCompare', username, leftId, rightId],
     queryFn: () =>
-      rpc('get_dashboard_compare', { p_left_id: leftId!, p_right_id: rightId! }),
-    enabled: !!leftId && !!rightId,
+      rpc('get_dashboard_compare', {
+        p_username: username!,
+        p_password: password!,
+        p_left_version_id: leftId!,
+        p_right_version_id: rightId!,
+      }),
+    enabled: !!username && !!password && !!leftId && !!rightId,
     staleTime: 10 * 60 * 1000,
   });
 }
 
 // Data quality report for a version
-export function useVersionQa(versionId: string | null) {
+export function useVersionQa(
+  username: string | null,
+  password: string | null,
+  versionId: string | null,
+) {
   return useQuery({
-    queryKey: ['versionQa', versionId],
-    queryFn: () => rpc('get_dashboard_version_qa', { p_version_id: versionId! }),
-    enabled: !!versionId,
+    queryKey: ['versionQa', username, versionId],
+    queryFn: () =>
+      rpc('get_dashboard_version_qa', {
+        p_username: username!,
+        p_password: password!,
+        p_version_id: versionId!,
+      }),
+    enabled: !!username && !!password && !!versionId,
     staleTime: 5 * 60 * 1000,
   });
 }

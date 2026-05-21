@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useSharedStore } from '@/lib/queries';
-import { useQuery } from '@tanstack/react-query';
-import { rpc } from '@/lib/supabase';
+import { useSharedStore, useVersionData } from '@/lib/queries';
 import { formatCurrency } from '@/lib/formatters';
 import {
   buildRows,
@@ -435,13 +433,12 @@ export function VerticalPerformance() {
   const activeVersionId = storeData?.active_version_id ?? null;
   const targets: QuarterTargets = storeData?.quarter_targets ?? {};
 
-  // Dataset for active version
-  const versionQuery = useQuery({
-    queryKey: ['versionData', activeVersionId],
-    queryFn: () => rpc<VersionData>('get_dashboard_version', { p_version_id: activeVersionId! }),
-    enabled: !!activeVersionId,
-    staleTime: 10 * 60 * 1000,
-  });
+  // Dataset for active version (credentials required by RPC signature)
+  const versionQuery = useVersionData(
+    credentials?.username ?? null,
+    credentials?.password ?? null,
+    activeVersionId,
+  );
   const versionData = versionQuery.data as VersionData | null;
 
   // Derive quarter labels from dataset as-of date
