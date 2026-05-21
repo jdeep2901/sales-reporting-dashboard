@@ -340,6 +340,90 @@ function buildClosureDeals(rows: DealRow[], seller: string, qLabel: string): Ran
   return deals.sort((a, b) => b.ev - a.ev || b.stageN - a.stageN);
 }
 
+// ─── stage delta computation ──────────────────────────────────────────────────
+
+interface DeltaDeal {
+  dealLabel: string;
+  seller: string;
+  dealSize: number;
+  fromStage: string | null;  // entered: where they came from (null = brand new deal)
+  toStage: string | null;    // exited: where they went (null = not found in current data)
+}
+
+interface StageDelta {
+  exited: DeltaDeal[];  // were at this stage in prev, not now
+  entered: DeltaDeal[]; // are at this stage now, weren't in prev
+}
+
+function buildStageDelta(
+  allRows: DealRow[],
+  prevRows: DealRow[],
+  seller: string,
+  stage: string,
+): StageDelta {
+  const resolveSeller = (r: DealRow): string => {
+    if (seller !== 'Overall') return seller;
+    return Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0
+      ? String(r.matched_sellers[0])
+      : String(r.owner ?? r.seller ?? '—');
+  };
+
+  // Index ALL rows by dealKey → first matching row (any stage/seller)
+  const allCurrByKey = new Map<string, DealRow>();
+  allRows.forEach((r) => { const k = dealKey(r); if (!allCurrByKey.has(k)) allCurrByKey.set(k, r); });
+
+  const allPrevByKey = new Map<string, DealRow>();
+  prevRows.forEach((r) => { const k = dealKey(r); if (!allPrevByKey.has(k)) allPrevByKey.set(k, r); });
+
+  const stageLabelOf = (raw: string | null | undefined): string => {
+    if (!raw) return 'Unknown';
+    const norm = normStage(raw);
+    return STAGE_SHORT[norm] ?? norm;
+  };
+
+  // Exited: was at this stage in prev, is at a different stage (or gone) now
+  const seenExited = new Set<string>();
+  const exited: DeltaDeal[] = [];
+  prevRows.forEach((r) => {
+    if (!matchSeller(r, seller)) return;
+    if (normStage(r.stage ?? r.deal_stage) !== stage) return;
+    const k = dealKey(r);
+    if (seenExited.has(k)) return;
+    seenExited.add(k);
+    const curr = allCurrByKey.get(k);
+    const currStageNorm = curr ? normStage(curr.stage ?? curr.deal_stage) : null;
+    if (currStageNorm === stage) return; // still here, not exited
+    let toStage: string;
+    if (!curr) {
+      toStage = 'Removed from data';
+    } else {
+      const s = String(curr.stage ?? curr.deal_stage ?? '').toLowerCase();
+      if (s.includes('7. win') || s === 'won' || s === 'win') toStage = 'Won ✓';
+      else if (s.includes('lost') || s.includes('loss')) toStage = 'Lost';
+      else toStage = stageLabelOf(curr.stage ?? curr.deal_stage);
+    }
+    exited.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), seller: resolveSeller(r), dealSize: resolveSize(r), fromStage: null, toStage });
+  });
+
+  // Entered: is at this stage now, was at a different stage (or absent) in prev
+  const seenEntered = new Set<string>();
+  const entered: DeltaDeal[] = [];
+  allRows.forEach((r) => {
+    if (!matchSeller(r, seller)) return;
+    if (normStage(r.stage ?? r.deal_stage) !== stage) return;
+    const k = dealKey(r);
+    if (seenEntered.has(k)) return;
+    seenEntered.add(k);
+    const prev = allPrevByKey.get(k);
+    const prevStageNorm = prev ? normStage(prev.stage ?? prev.deal_stage) : null;
+    if (prevStageNorm === stage) return; // was already here
+    const fromStage = prev ? stageLabelOf(prev.stage ?? prev.deal_stage) : null;
+    entered.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), seller: resolveSeller(r), dealSize: resolveSize(r), fromStage, toStage: null });
+  });
+
+  return { exited, entered };
+}
+
 // ─── badges ───────────────────────────────────────────────────────────────────
 
 const MOMENTUM_CONFIG: Record<Momentum, { label: string; dot: string; bg: string; text: string }> = {
@@ -380,12 +464,24 @@ function FunnelSection({
   maxCount,
   onStageClick,
   activeStage,
+  allRows,
+  prevRows,
+  seller,
 }: {
   stats: StageStats[];
   maxCount: number;
   onStageClick?: (stage: string | null) => void;
   activeStage?: string | null;
+  allRows: DealRow[];
+  prevRows: DealRow[];
+  seller: string;
 }) {
+  const [expandedDelta, setExpandedDelta] = useState<string | null>(null);
+  const deltaData = useMemo(() => {
+    if (!expandedDelta) return null;
+    return buildStageDelta(allRows, prevRows, seller, expandedDelta);
+  }, [expandedDelta, allRows, prevRows, seller]);
+
   const totalEv = stats.reduce((a, s) => a + s.totalEv, 0);
   const cols = '140px 1fr 80px 110px 110px';
 
@@ -427,66 +523,133 @@ function FunnelSection({
           const barColor = isLate ? 'var(--status-green)' : isMid ? 'var(--accent)' : 'var(--text-tertiary)';
           const isActive = activeStage === s.stage;
 
+          const isDeltaOpen = expandedDelta === s.stage;
+          const hasDelta = delta !== 0 && prevRows.length > 0;
+
           return (
-            <div
-              key={s.stage}
-              onClick={() => onStageClick?.(isActive ? null : s.stage)}
-              className={`grid px-4 py-2.5 items-center ${!isActive ? 'hover:bg-bg-hover' : ''}`}
-              style={{
-                gridTemplateColumns: cols,
-                borderBottom: '0.5px solid var(--border-hairline)',
-                borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                background: isActive ? 'rgba(99,91,255,0.04)' : undefined,
-                cursor: onStageClick ? 'pointer' : undefined,
-              }}
-            >
-              <span className="text-12 text-text-primary font-medium">{STAGE_SHORT[s.stage] ?? s.stage}</span>
-              <div className="flex items-center gap-2 pr-4">
-                <div className="flex-1 h-4 rounded-sm overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
-                  <div className="h-full rounded-sm transition-all"
-                    style={{ width: `${widthPct}%`, background: barColor, opacity: isActive ? 1 : 0.7 }} />
-                </div>
-                {evShare > 0.02 && (
-                  <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${evShare * 100}%`, background: 'var(--accent)', opacity: 0.5 }} />
+            <div key={s.stage}>
+              <div
+                onClick={() => onStageClick?.(isActive ? null : s.stage)}
+                className={`grid px-4 py-2.5 items-center ${!isActive ? 'hover:bg-bg-hover' : ''}`}
+                style={{
+                  gridTemplateColumns: cols,
+                  borderBottom: isDeltaOpen ? 'none' : '0.5px solid var(--border-hairline)',
+                  borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                  background: isActive ? 'rgba(99,91,255,0.04)' : undefined,
+                  cursor: onStageClick ? 'pointer' : undefined,
+                }}
+              >
+                <span className="text-12 text-text-primary font-medium">{STAGE_SHORT[s.stage] ?? s.stage}</span>
+                <div className="flex items-center gap-2 pr-4">
+                  <div className="flex-1 h-4 rounded-sm overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+                    <div className="h-full rounded-sm transition-all"
+                      style={{ width: `${widthPct}%`, background: barColor, opacity: isActive ? 1 : 0.7 }} />
                   </div>
-                )}
-              </div>
-              {/* Deals + delta */}
-              <div className="text-right">
-                <span className="text-13 font-medium text-text-primary tabular-nums">{s.count}</span>
-                {delta !== 0 && (
-                  <span className="ml-1 text-11 tabular-nums"
-                    style={{ color: delta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                    {delta > 0 ? `+${delta}` : delta}
-                  </span>
-                )}
-              </div>
-              {/* Pipeline $ + delta */}
-              <div className="text-right">
-                <div className="text-12 tabular-nums text-text-secondary">
-                  {s.totalSize > 0 ? formatCurrency(s.totalSize) : '—'}
+                  {evShare > 0.02 && (
+                    <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${evShare * 100}%`, background: 'var(--accent)', opacity: 0.5 }} />
+                    </div>
+                  )}
                 </div>
-                {sizeDelta !== 0 && (s.totalSize > 0 || s.prevTotalSize > 0) && (
-                  <div className="text-11 tabular-nums"
-                    style={{ color: sizeDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                    {formatDelta(sizeDelta)}
-                  </div>
-                )}
-              </div>
-              {/* EV + delta */}
-              <div className="text-right">
-                <div className="text-12 tabular-nums font-medium"
-                  style={{ color: s.totalEv > 0 ? (isLate ? 'var(--status-green)' : 'var(--text-primary)') : 'var(--text-tertiary)' }}>
-                  {s.totalEv > 0 ? formatCurrency(s.totalEv) : '—'}
+                {/* Deals + clickable delta */}
+                <div className="text-right">
+                  <span className="text-13 font-medium text-text-primary tabular-nums">{s.count}</span>
+                  {hasDelta && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setExpandedDelta(isDeltaOpen ? null : s.stage); }}
+                      className="ml-1 text-11 tabular-nums underline decoration-dotted"
+                      title="Click to see what changed"
+                      style={{ color: delta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}
+                    >
+                      {delta > 0 ? `+${delta}` : delta}
+                    </button>
+                  )}
                 </div>
-                {evDeltaVal !== 0 && (s.totalEv > 0 || s.prevTotalEv > 0) && (
-                  <div className="text-11 tabular-nums"
-                    style={{ color: evDeltaVal > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                    {formatDelta(evDeltaVal)}
+                {/* Pipeline $ + delta */}
+                <div className="text-right">
+                  <div className="text-12 tabular-nums text-text-secondary">
+                    {s.totalSize > 0 ? formatCurrency(s.totalSize) : '—'}
                   </div>
-                )}
+                  {sizeDelta !== 0 && (s.totalSize > 0 || s.prevTotalSize > 0) && (
+                    <div className="text-11 tabular-nums"
+                      style={{ color: sizeDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                      {formatDelta(sizeDelta)}
+                    </div>
+                  )}
+                </div>
+                {/* EV + delta */}
+                <div className="text-right">
+                  <div className="text-12 tabular-nums font-medium"
+                    style={{ color: s.totalEv > 0 ? (isLate ? 'var(--status-green)' : 'var(--text-primary)') : 'var(--text-tertiary)' }}>
+                    {s.totalEv > 0 ? formatCurrency(s.totalEv) : '—'}
+                  </div>
+                  {evDeltaVal !== 0 && (s.totalEv > 0 || s.prevTotalEv > 0) && (
+                    <div className="text-11 tabular-nums"
+                      style={{ color: evDeltaVal > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                      {formatDelta(evDeltaVal)}
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Delta breakdown expansion */}
+              {isDeltaOpen && deltaData && (
+                <div className="px-4 py-3" style={{ borderBottom: '0.5px solid var(--border-hairline)', background: 'var(--bg-surface)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-11 font-medium text-text-secondary">
+                      What changed — {STAGE_SHORT[s.stage] ?? s.stage}
+                    </span>
+                    <button onClick={() => setExpandedDelta(null)} className="text-11 text-text-tertiary hover:text-text-primary">Close ×</button>
+                  </div>
+                  <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                    {/* Exited */}
+                    <div>
+                      <div className="text-11 font-medium mb-1.5" style={{ color: 'var(--status-red)' }}>
+                        Exited ({deltaData.exited.length})
+                      </div>
+                      {deltaData.exited.length === 0 ? (
+                        <div className="text-11 text-text-tertiary">None</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {deltaData.exited.map((d, i) => {
+                            const isWon = d.toStage?.includes('Won');
+                            const isLostDeal = d.toStage === 'Lost';
+                            const color = isWon ? 'var(--status-green)' : isLostDeal ? 'var(--status-red)' : 'var(--status-amber)';
+                            return (
+                              <div key={i} className="flex items-baseline justify-between gap-2 text-11">
+                                <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                                <span className="tabular-nums text-text-tertiary shrink-0">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</span>
+                                <span className="shrink-0 font-medium" style={{ color }}>→ {d.toStage}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Entered */}
+                    <div>
+                      <div className="text-11 font-medium mb-1.5" style={{ color: 'var(--status-green)' }}>
+                        Entered ({deltaData.entered.length})
+                      </div>
+                      {deltaData.entered.length === 0 ? (
+                        <div className="text-11 text-text-tertiary">None</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {deltaData.entered.map((d, i) => (
+                            <div key={i} className="flex items-baseline justify-between gap-2 text-11">
+                              <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                              <span className="tabular-nums text-text-tertiary shrink-0">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</span>
+                              <span className="shrink-0" style={{ color: d.fromStage ? 'var(--status-amber)' : 'var(--accent)' }}>
+                                {d.fromStage ? `← ${d.fromStage}` : '✦ New deal'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -999,6 +1162,9 @@ export function WeeklyScorecard() {
         maxCount={maxCount}
         onStageClick={setStageFilter}
         activeStage={stageFilter}
+        allRows={allRows}
+        prevRows={prevRows}
+        seller={seller}
       />
 
       {/* Closure outlook */}
