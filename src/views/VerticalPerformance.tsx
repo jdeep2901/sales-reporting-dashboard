@@ -439,7 +439,9 @@ export function VerticalPerformance() {
     credentials?.password ?? null,
     activeVersionId,
   );
-  const versionData = versionQuery.data as VersionData | null;
+  // RPC returns { version_id, dataset: {...}, likelihood, created_at } — unwrap dataset
+  const versionRow = versionQuery.data as { dataset?: VersionData } | null;
+  const versionData = versionRow?.dataset ?? null;
 
   // Derive quarter labels from dataset as-of date
   const asOf = versionData?.scorecard_summary?.as_of_date
