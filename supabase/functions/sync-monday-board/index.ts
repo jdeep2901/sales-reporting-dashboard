@@ -42,10 +42,10 @@ const SLA_DAYS: Record<string, number> = {
 const SELLERS: Array<[string, string]> = [
   ["somya", "Somya"],
   ["akshay iyer", "Akshay Iyer"],
-  ["abhinav kishore", "Abhinav Kishore"],
   ["maruti peri", "Maruti Peri"],
   ["vitor quirino", "Vitor Quirino"],
   ["sahana", "Sahana"],
+  ["suvom", "Suvom Mitro"],
 ];
 
 type MondayColumn = { id: string; title: string; type: string; settings_str?: string | null };

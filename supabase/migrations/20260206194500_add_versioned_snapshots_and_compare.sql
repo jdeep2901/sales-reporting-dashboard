@@ -396,7 +396,7 @@ declare
   right_dataset jsonb;
   left_meta jsonb;
   right_meta jsonb;
-  sellers text[] := array['Somya','Akshay Iyer','Abhinav Kishore','Maruti Peri','Vitor Quirino'];
+  sellers text[] := array['Akshay Iyer','Somya','Maruti Peri','Vitor Quirino','Sahana','Suvom Mitro'];
   seller text;
   labels text[] := array['1. Intro','2. Qualification','3. Capability','4. Problem Scoping','5. Contracting','6. Commercial Proposal','7. Win','8. Loss'];
   stage_label text;

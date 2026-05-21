@@ -3648,7 +3648,7 @@
 	        <div class="head">
 	          <div>
 	            <h1>Seller Connect Health</h1>
-	            <div class="sub">Active-pipeline follow-up hygiene for Somya, Akshay, and Peri using the latest pulled Next Meeting Date.</div>
+	            <div class="sub">Active-pipeline follow-up hygiene for the active seller cohort using the latest pulled Next Meeting Date.</div>
 	          </div>
 	          <div class="controls">
 	            <div>
@@ -3832,7 +3832,7 @@
 	            <tbody id="leadership-deal-body"></tbody>
 	          </table>
 	        </div>
-	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses last-12-month Akshay/Somya/Abhinav conversion assumptions in business stage order: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
+	        <div class="operating-footnote">Assumptions: actuals require stage = Won and are paced by Start Date + Duration. Estimated open forecast uses open stages 1-6 with Start Date + Duration. Empirical EV uses the latest conversion assumptions in business stage order: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%; quarter allocation uses 21% same-quarter and 53% next-quarter from Intro Date. Risk is flagged when Next Meeting Date is missing/overdue or when a captured last-connect date is more than 14 days old.</div>
 	      </div>
 
 	      <div id="view-leadershipforecast-v2" class="view vp-v2">
@@ -3974,7 +3974,7 @@
 	            </div>
 	          </div>
 	        </div>
-	        <div class="operating-footnote">Assumptions: seller rows are scoped to Somya, Akshay Iyer, Abhinav Kishore, Vitor Quirino, and Maruti Peri. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals match Leadership Forecast: won revenue allocated into the fiscal quarter containing the anchor using Start Date + Duration, based on deals known in that snapshot. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Actuals + Pipeline EV combines won quarter actuals and risk-adjusted open pipeline EV for the same snapshot quarter. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
+	        <div class="operating-footnote">Assumptions: seller rows are scoped to the active reporting cohort: Akshay Iyer, Somya, Maruti Peri, Vitor Quirino, Sahana, and Suvom Mitro. Overall is the arithmetic sum of those displayed seller rows, not the full-company snapshot. The same seller rows are shown in every table, with dashes where that seller has no activity for the metric. Trend anchors are the 1st and 15th of each month, plus latest refresh if newer than the most recent anchor. Each anchor uses the latest saved Supabase snapshot on or before that date; multiple same-day refreshes resolve to the latest refresh. Actuals match Leadership Forecast: won revenue allocated into the fiscal quarter containing the anchor using Start Date + Duration, based on deals known in that snapshot. Pipeline EV uses active stages 1-6 and the latest empirical conversion assumptions: Intro 8%, Qualification 10%, Capability 19%, Problem Scoping 29%, Commercial Proposal 44%, Contracting 90%. Actuals + Pipeline EV combines won quarter actuals and risk-adjusted open pipeline EV for the same snapshot quarter. Net-new funnel additions are active stage 1-6 deals present in the current trend snapshot but absent from the previous trend snapshot.</div>
 	      </div>
 
 	      <div id="view-operating" class="view">
@@ -5115,8 +5115,9 @@
     const SUPABASE_FUNCTIONS_URL = 'https://vqksytduqxpfcovijhko.functions.supabase.co';
     // Bump on every publish so we can sanity-check cache and whether we're on the latest build.
     // Format: vMAJOR.MINOR.PATCH+YYYYMMDD.N
-    const APP_VERSION = 'v2.1.4';
+    const APP_VERSION = 'v2.1.5';
     const VERSION_HISTORY_ITEMS = [
+      { version: 'v2.1.5', date: '2026-05-21', commit: '-', changes: 'Updated the active reporting cohort so Overall views roll up Akshay Iyer, Somya, Maruti Peri, Vitor Quirino, Sahana, and Suvom Mitro; removed Abhinav from active seller rollups.' },
       { version: 'v2.1.4', date: '2026-05-20', commit: '-', changes: 'Restored the main Vertical Performance screen to the v2.0.15 table layout and moved the redesigned executive-clean version into Appendix as Vertical Performance v2.' },
       { version: 'v2.1.3', date: '2026-05-20', commit: '-', changes: 'Fixed Vertical Performance review comments: restored main tab styling, added actual/EV KPI cards, split actual versus estimated in quarter detail, removed panel buttons, showed deal size plus quarterly contribution, and switched sparklines to real 8-week EV snapshot trends.' },
       { version: 'v2.1.2', date: '2026-05-20', commit: '-', changes: 'Refined Vertical Performance polish: neutral gray palette, compact KPI cards, sentence-case labels, compact currency, restored Actual + Est, tighter pills, and cleaner closure panel.' },
@@ -5494,6 +5495,52 @@
       return moneyUsd.format(dealSizeValue(raw));
     }
 
+    const ACTIVE_REPORTING_SELLERS = [
+      'Akshay Iyer',
+      'Somya',
+      'Maruti Peri',
+      'Vitor Quirino',
+      'Sahana',
+      'Suvom Mitro',
+    ];
+
+    const ACTIVE_REPORTING_SELLER_ALIASES = {
+      'Akshay Iyer': ['akshay iyer', 'akshay'],
+      Somya: ['somya'],
+      'Maruti Peri': ['maruti peri', 'peri'],
+      'Vitor Quirino': ['vitor quirino', 'vitor'],
+      Sahana: ['sahana'],
+      'Suvom Mitro': ['suvom mitro', 'suvom'],
+    };
+
+    function activeReportingSellers() {
+      return [...ACTIVE_REPORTING_SELLERS];
+    }
+
+    function sellerAliasList(seller) {
+      const label = String(seller || '').trim();
+      return ACTIVE_REPORTING_SELLER_ALIASES[label] || [label.toLowerCase()].filter(Boolean);
+    }
+
+    function rowMatchesSeller(row, seller) {
+      const label = String(seller || '').trim();
+      if (!label || label === 'Overall') return rowMatchesActiveReportingSeller(row);
+      const aliases = sellerAliasList(label).map((x) => String(x || '').toLowerCase()).filter(Boolean);
+      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
+      if (matched.some((s) => String(s || '').trim().toLowerCase() === label.toLowerCase())) return true;
+      if (matched.some((s) => aliases.includes(String(s || '').trim().toLowerCase()))) return true;
+      const raw = String(row && (row.owner || row.seller || row.deal_owner) || '').toLowerCase();
+      return aliases.some((alias) => alias && raw.includes(alias));
+    }
+
+    function rowMatchesActiveReportingSeller(row) {
+      return ACTIVE_REPORTING_SELLERS.some((seller) => rowMatchesSeller(row, seller));
+    }
+
+    function activeSellerOptions() {
+      return ['Overall', ...activeReportingSellers()];
+    }
+
     function bestDealSize(rec) {
       if (!rec || typeof rec !== 'object') return null;
       const keys = [
@@ -5771,7 +5818,7 @@
     function getTargetSellers() {
       const labels = (scorecardSellerLabels || []).filter((s) => String(s || '').trim());
       const out = labels.filter((s) => s !== 'Overall');
-      const base = out.length ? out : ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Maruti Peri', 'Vitor', 'Sahana'];
+      const base = out.length ? out.filter((s) => activeReportingSellers().includes(s)) : activeReportingSellers();
       return ['Overall', ...base];
     }
 
@@ -6611,7 +6658,7 @@
     function runDiagnostics() {
       const data = window.__salesData || {};
       const rows = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
-      const sellers = (data.sellers || []).filter((s) => s && s !== 'All (unique deals)');
+      const sellers = activeReportingSellers();
       const cutoffMonth = scorecardIntroCutoffMonthState || '2024-10';
       const out = [];
 
@@ -7329,7 +7376,7 @@
       const sellerSelect = document.getElementById('momentum-seller');
       if (!sellerSelect) return;
       const current = sellerSelect.value || 'Overall';
-      const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      const sellers = activeReportingSellers();
       sellerSelect.innerHTML = '';
       ['Overall', ...sellers].forEach((seller) => {
         const o = document.createElement('option');
@@ -7542,7 +7589,7 @@
       const scopeSel = document.getElementById('momentum-scope');
       if (!body || !sellerFilter || !scopeSel) return;
       const scope = scopeSel.value || 'core';
-      const knownSellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      const knownSellers = activeReportingSellers();
       const allRows = buildMomentumRows(payload, scope, knownSellers, leftLookup, rightLookup);
       const pick = sellerFilter.value || 'Overall';
       const rows = pick === 'Overall' ? allRows : allRows.filter((x) => x.seller === pick);
@@ -7578,7 +7625,7 @@
       renderMomentumCards(rows, payload, scope, leftLookup, rightLookup);
       const detailRows = collectMomentumDealRows(payload, scope, leftLookup, rightLookup);
       if (pick === 'Overall') {
-        renderMomentumDealDetails('Overall | All moved deals', detailRows);
+        renderMomentumDealDetails('Overall | All moved deals', detailRows.filter((x) => activeReportingSellers().includes(x.seller)));
       } else {
         renderMomentumDealDetails(`${pick} | All moved deals`, detailRows.filter((x) => x.seller === pick));
       }
@@ -7760,7 +7807,7 @@
       const funnelWrap = document.getElementById('funnel-wrap');
       funnelWrap.innerHTML = '';
 
-      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
+      const sellers = activeReportingSellers();
       const sellerSummaries = [];
       sellers.forEach((seller) => {
         const grouped = buildGroupedTable(data.tables[seller] || {});
@@ -7885,11 +7932,7 @@
     }
 
     function rowMatchesPartnershipSeller(row, seller) {
-      if (!seller || seller === 'Overall') return true;
-      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
-      if (matched.includes(seller)) return true;
-      const raw = partnerText(row && (row.owner || row.seller || row.deal_owner)).toLowerCase();
-      return raw.includes(String(seller || '').toLowerCase());
+      return rowMatchesSeller(row, seller || 'Overall');
     }
 
     function rowHasPartnerMotion(row) {
@@ -8012,7 +8055,7 @@
       const sellerSel = document.getElementById('partnership-seller');
       const partnerSel = document.getElementById('partnership-partner');
       if (sellerSel) {
-        const sellers = ['Overall', ...((data && data.sellers) || []).filter((s) => s !== 'All (unique deals)')];
+        const sellers = activeSellerOptions();
         sellerSel.innerHTML = '';
         sellers.forEach((s) => {
           const opt = document.createElement('option');
@@ -8125,17 +8168,10 @@
       setInsight('insight-partnerships', lines);
     }
 
-    const CONNECT_HEALTH_SELLERS = ['Somya', 'Akshay Iyer', 'Peri'];
+    const CONNECT_HEALTH_SELLERS = activeReportingSellers();
 
     function connectSellerMatches(row, seller) {
-      const target = String(seller || '').trim().toLowerCase();
-      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
-      if (matched.some((s) => String(s || '').trim().toLowerCase() === target)) return true;
-      const raw = partnerText(row && (row.owner || row.seller || row.deal_owner)).toLowerCase();
-      if (target === 'somya') return raw.includes('somya');
-      if (target.includes('akshay')) return raw.includes('akshay');
-      if (target === 'peri') return raw.includes('peri');
-      return raw.includes(target);
+      return rowMatchesSeller(row, seller);
     }
 
     function connectIsActiveStage(row) {
@@ -8314,7 +8350,7 @@
       body.innerHTML = '';
       if (!rows.length) {
         const tr = document.createElement('tr');
-        const td = makeCell('td', 'No active pipeline rows found for Somya, Akshay, or Peri in the current snapshot.', 'partner-muted');
+        const td = makeCell('td', 'No active pipeline rows found for the active seller cohort in the current snapshot.', 'partner-muted');
         td.colSpan = 11;
         tr.appendChild(td);
         body.appendChild(tr);
@@ -8375,11 +8411,7 @@
     }
 
     function closureSellerMatches(row, seller) {
-      if (!seller || seller === 'Overall') return true;
-      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
-      if (matched.includes(seller)) return true;
-      const raw = String(row && (row.owner || row.seller || row.deal_owner) || '').toLowerCase();
-      return raw.includes(String(seller || '').toLowerCase());
+      return rowMatchesSeller(row, seller || 'Overall');
     }
 
     function closureSellerLabel(row) {
@@ -8534,7 +8566,7 @@
       const tierSel = document.getElementById('closure-tier');
       const leverSel = document.getElementById('closure-lever');
       if (sellerSel) {
-        const sellers = ['Overall', ...((data && data.sellers) || []).filter((s) => s && s !== 'All (unique deals)')];
+        const sellers = activeSellerOptions();
         sellerSel.innerHTML = '';
         sellers.forEach((seller) => {
           const opt = document.createElement('option');
@@ -8708,8 +8740,8 @@
       setInsight('insight-closurepriority', lines);
     }
 
-    const LEADERSHIP_FORECAST_SELLERS = ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Vitor Quirino', 'Maruti Peri', 'Sahana'];
-    const LT_TREND_SELLERS = ['Somya', 'Akshay Iyer', 'Abhinav Kishore', 'Vitor Quirino', 'Maruti Peri'];
+    const LEADERSHIP_FORECAST_SELLERS = activeReportingSellers();
+    const LT_TREND_SELLERS = activeReportingSellers();
     const LEADERSHIP_EMPIRICAL_STAGE = {
       1: { p: 0.08, label: 'Intro' },
       2: { p: 0.10, label: 'Qualification' },
@@ -9533,10 +9565,7 @@
     }
 
     function ltTrendSellerMatches(row, seller) {
-      const matched = Array.isArray(row && row.matched_sellers) ? row.matched_sellers : [];
-      if (matched.length) return matched.includes(seller);
-      const raw = String(row && (row.owner || row.seller || row.deal_owner) || '').toLowerCase();
-      return raw.includes(String(seller || '').toLowerCase());
+      return rowMatchesSeller(row, seller);
     }
 
     function ltTrendQLabel(point) {
@@ -9950,12 +9979,7 @@
 	    }
 
 	    function scorecardInSellerScope(rec, sellerLabel) {
-	      if (!sellerLabel || sellerLabel === 'Overall') return true;
-	      const matched = Array.isArray(rec && rec.matched_sellers) ? rec.matched_sellers : [];
-	      if (matched.includes(sellerLabel)) return true;
-	      // Fallback when matched_sellers isn't present/filled: use deal_owner string.
-	      const owner = String((rec && (rec.deal_owner || rec.owner)) || '').toLowerCase();
-	      return owner.includes(String(sellerLabel || '').toLowerCase());
+	      return rowMatchesSeller(rec, sellerLabel || 'Overall');
 	    }
 
     function scorecardAgeDaysFromIntro(introDateRaw, asOfDateRaw) {
@@ -10369,8 +10393,7 @@
 	    function renderScorecard(data) {
 	      const score = data.scorecard || {};
 	      scorecardCompareCurrentIdState = viewedVersionIdState || activeVersionIdState || latestVersionIdState || scorecardCompareCurrentIdState;
-	      const sellers = data.sellers.filter((s) => s !== 'All (unique deals)');
-	      scorecardSellerLabels = ['Overall', ...sellers];
+	      scorecardSellerLabels = activeSellerOptions();
 	      const wrap = document.getElementById('score-wrap');
 	      wrap.innerHTML = '';
 	      wrap.style.gridTemplateColumns = '1fr';
@@ -11054,8 +11077,7 @@
 		      if (!sellerSel || !fromSel || !toSel || !body || !meta || !drillBody) return;
 
 	      // Fill seller options.
-	      const sellers = (data.sellers || []).filter((s) => s && s !== 'All (unique deals)');
-	      const labels = ['Overall', ...sellers];
+	      const labels = activeSellerOptions();
 	      if (!sellerSel.options.length) {
 	        sellerSel.innerHTML = '';
 	        labels.forEach((s) => {
@@ -11182,7 +11204,7 @@
 		      // Seller forward% comparison table (bottom).
 		      if (sellerCmpBody) {
 		        sellerCmpBody.innerHTML = '';
-		        const cmpSellers = ['Overall', ...((data.sellers || []).filter((s) => s && s !== 'All (unique deals)') || [])];
+		        const cmpSellers = activeSellerOptions();
 		        const stageCols = ['1. Intro', '2. Qualification', '3. Capability', '4. Problem Scoping', '6. Commercial Proposal', '5. Contracting'];
 		        const fmtPct = (num, den) => (Number(den || 0) > 0 ? `${((Number(num || 0) / Number(den || 0)) * 100).toFixed(1)}%` : '-');
 
@@ -11264,7 +11286,7 @@
     function renderIndustryAction(data) {
       const root = document.getElementById('industry-wrap');
       root.innerHTML = '';
-      const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+      const sellers = activeReportingSellers();
       const deals = Array.isArray(data.all_deals_rows) ? data.all_deals_rows : [];
 
       const cutoffMonth = industryIntroCutoffMonthState || null;
@@ -11934,8 +11956,7 @@
     }
 
     function operatingManualSellers(data) {
-      return (Array.isArray(data && data.sellers) ? data.sellers : [])
-        .filter((s) => s && s !== 'All (unique deals)');
+      return activeReportingSellers();
     }
 
     function operatingFirstEditableSeller(data) {
@@ -12064,15 +12085,11 @@
     }
 
     function operatingSellerInScope(rec, seller) {
-      if (!seller || seller === 'Overall') return true;
-      const matched = Array.isArray(rec.matched_sellers) ? rec.matched_sellers : [];
-      return matched.includes(seller);
+      return rowMatchesSeller(rec, seller || 'Overall');
     }
 
     function operatingSellerCount(data) {
-      const sellers = Array.isArray(data && data.sellers) ? data.sellers : [];
-      const real = sellers.filter((s) => s && s !== 'All (unique deals)');
-      return Math.max(1, real.length || 1);
+      return Math.max(1, activeReportingSellers().length);
     }
 
     function operatingQuarterKeyFromDate(dateObj) {
@@ -12721,9 +12738,11 @@
         const start = parseIsoLocalDate(r.start_date || r.start || r.startDate);
         if (!intro || !start) return;
         if (cutoff && intro < cutoff) return;
-        if (sellerScope && sellerScope !== 'Overall') {
+        if (!sellerScope || sellerScope === 'Overall') {
+          if (!rowMatchesActiveReportingSeller(r)) return;
+        } else {
           const sellerVal = String(r.deal_owner || r.seller || r.owner || '').trim().toLowerCase();
-          if (!sellerVal.includes(sellerLower)) return;
+          if (!rowMatchesSeller(r, sellerScope) && !sellerVal.includes(sellerLower)) return;
         }
         const introIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(intro));
         const startIdx = fiscalQuarterIndexFromInfo(fiscalQuarterLabel(start));
@@ -12793,9 +12812,11 @@
         const intro = parseIsoLocalDate(r.intro_date || r.intro || r.introDate);
         if (!intro) return;
         if (cutoff && intro < cutoff) return;
-        if (sellerScope && sellerScope !== 'Overall') {
+        if (!sellerScope || sellerScope === 'Overall') {
+          if (!rowMatchesActiveReportingSeller(r)) return;
+        } else {
           const sellerVal = String(r.deal_owner || r.seller || r.owner || '').trim().toLowerCase();
-          if (!sellerVal.includes(sellerLower)) return;
+          if (!rowMatchesSeller(r, sellerScope) && !sellerVal.includes(sellerLower)) return;
         }
         if (isWonStage(stageRaw) || isLostStage(stageRaw)) return;
 
@@ -13515,17 +13536,9 @@
       let stageRows = [];
       if (hasCycleRows) {
         stageRows = data.cycle_time_rows.slice();
-        if (scope !== 'Overall') {
-          const target = String(scope || '').toLowerCase();
-          stageRows = stageRows.filter((r) => {
-            const ms = Array.isArray(r.matched_sellers) ? r.matched_sellers : [];
-            if (ms.some((x) => String(x || '').toLowerCase() === target)) return true;
-            return String(r.seller || '').toLowerCase().includes(target);
-          });
-        }
+        stageRows = stageRows.filter((r) => rowMatchesSeller(r, scope || 'Overall'));
       } else if (scope === 'Overall') {
-        Object.keys(sellerBlocks)
-          .filter((k) => k !== 'All (unique deals)')
+        activeReportingSellers()
           .forEach((k) => {
             const m = sellerBlocks[k] || {};
             stageRows.push(...(((m.kpi_details || {}).stage_7_8 || [])));
@@ -13662,7 +13675,7 @@
 
 	        // Revenue Forecast (Actuals) controls.
 	        if (faSellerSelect) {
-	          const sellers = (data.sellers || []).filter((s) => s !== 'All (unique deals)');
+	          const sellers = activeReportingSellers();
 	          faSellerSelect.innerHTML = '';
 	          ['Overall', ...sellers].forEach((seller) => {
 	            const o = document.createElement('option');
@@ -13891,31 +13904,31 @@
           if (evt.key === 'Escape') closeKpiPopup();
         });
 
-        data.sellers.forEach(s => {
+        ['All (unique deals)', ...activeReportingSellers()].forEach(s => {
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
           sellerSelect.appendChild(o);
         });
-        ['Overall (unique)', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+        ['Overall (unique)', ...activeReportingSellers()].forEach((s) => {
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
           wlSellerSelect.appendChild(o);
         });
-        ['Overall (unique)', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+        ['Overall (unique)', ...activeReportingSellers()].forEach((s) => {
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
           introSellerSelect.appendChild(o);
         });
-        ['Overall', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+        activeSellerOptions().forEach((s) => {
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
           forecastSellerSelect.appendChild(o);
         });
-        ['Overall', ...data.sellers.filter(s => s !== 'All (unique deals)')].forEach((s) => {
+        activeSellerOptions().forEach((s) => {
           const o = document.createElement('option');
           o.value = s;
           o.textContent = s;
