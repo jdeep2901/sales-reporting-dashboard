@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData } from '@/lib/queries';
 import {
   ACTIVE_SELLERS,
+  EMPIRICAL_STAGE,
   stageNumber,
   empiricalEv,
   dealRisk,
@@ -119,6 +120,31 @@ function resolveSize(row: DealRow): number {
   return isFinite(n) && n > 0 ? n : 0;
 }
 
+// Age since intro_date — always populated, unlike last-connect fields.
+function ageDaysFromIntro(row: DealRow): number | null {
+  const raw = row.intro_date as string | null | undefined;
+  if (!raw) return null;
+  const d = new Date(String(raw).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  return Math.max(0, Math.round((today.getTime() - d.getTime()) / 86_400_000));
+}
+
+// EV for closure outlook: stage_probability × deal_size (no quarter-timing weight).
+// The timing weight in empiricalEv requires intro_date and is designed to answer
+// "which quarter does this deal land in?" For closure deals we already know the
+// quarter from start_date, so we just want probability-adjusted deal value.
+function closureEv(row: DealRow): number {
+  const stageNorm = STAGE_NORM[String(row.stage ?? row.deal_stage ?? '').trim()] ?? String(row.stage ?? row.deal_stage ?? '').trim();
+  const n = stageNumber(stageNorm);
+  const cfg = n != null ? EMPIRICAL_STAGE[n] : undefined;
+  if (!cfg) return 0;
+  const size = n != null && n <= 4 ? 100_000 : resolveSize(row);
+  if (size <= 0) return 0;
+  return size * cfg.p;
+}
+
 // ─── main computations ────────────────────────────────────────────────────────
 
 function buildStageStats(
@@ -149,7 +175,7 @@ function buildStageStats(
     const n = stageNumber(stage) ?? 0;
     const totalSize = stRows.reduce((acc, r) => acc + resolveSize(r), 0);
     const totalEv = stRows.reduce((acc, r) => acc + empiricalEv(r, currentQLabel), 0);
-    const daysList = stRows.map((r) => daysStuck(r)).filter((d): d is number => d != null);
+    const daysList = stRows.map((r) => ageDaysFromIntro(r)).filter((d): d is number => d != null);
     const avgDays = daysList.length ? Math.round(daysList.reduce((a, b) => a + b, 0) / daysList.length) : 0;
     return {
       stage,
@@ -164,17 +190,21 @@ function buildStageStats(
 }
 
 function classifyMomentum(row: DealRow, prevStageN: number | null): Momentum {
-  const risk = dealRisk(row);
   const currentN = stageNumber(row.stage ?? row.deal_stage) ?? 0;
   if (prevStageN == null) return 'new';
   if (currentN > prevStageN) return 'advanced';
-  if (risk.atRisk) {
-    const label = risk.label.toLowerCase();
-    if (label.includes('no next') || label.includes('overdue')) return 'at_risk';
-    return 'stuck';
+  // Risk/stuck signals only apply from stage 3 (Capability) upward.
+  // Early-stage deals (Intro/Qual) don't yet have meeting cadence expectations.
+  if (currentN >= 3) {
+    const risk = dealRisk(row);
+    if (risk.atRisk) {
+      const label = risk.label.toLowerCase();
+      if (label.includes('no next') || label.includes('overdue')) return 'at_risk';
+      return 'stuck';
+    }
+    const d = daysStuck(row);
+    if (d != null && d > 14) return 'stuck';
   }
-  const d = daysStuck(row);
-  if (d != null && d > 14) return 'stuck';
   return 'steady';
 }
 
@@ -260,7 +290,7 @@ function buildClosureDeals(
   deduped.forEach((r) => {
     const stageNorm = normStage(r.stage ?? r.deal_stage);
     const stageN = stageNumber(stageNorm) ?? 0;
-    const ev = empiricalEv(r, qLabel);
+    const ev = closureEv(r);
     const sellerOwner = seller === 'Overall'
       ? (Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0 ? String(r.matched_sellers[0]) : String(r.owner ?? r.seller ?? '—'))
       : seller;
@@ -622,14 +652,18 @@ export function WeeklyScorecard() {
   }, [storeData]);
 
   const latestId = String(storeData?.latest_version_id ?? storeData?.active_version_id ?? '');
-  const prevVersionId = useMemo(() => {
-    const sorted = [...versionsMeta].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const latestIdx = sorted.findIndex((v) => v.id === latestId);
-    const prevIdx = latestIdx >= 0 ? latestIdx + 1 : 1;
-    return sorted[prevIdx]?.id ?? null;
+
+  const sortedVersions = useMemo(() => {
+    return [...versionsMeta]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .filter((v) => v.id !== latestId);
   }, [versionsMeta, latestId]);
 
-  const prevQuery = useVersionData(username ?? null, password ?? null, prevVersionId);
+  const autoPrevId = sortedVersions[0]?.id ?? null;
+  const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
+  const effectiveCompareId = compareVersionId ?? autoPrevId;
+
+  const prevQuery = useVersionData(username ?? null, password ?? null, effectiveCompareId);
   const prevRow = prevQuery.data as { dataset?: { all_deals_rows?: DealRow[] } } | null;
   const prevRows: DealRow[] = prevRow?.dataset?.all_deals_rows ?? [];
 
@@ -688,19 +722,42 @@ export function WeeklyScorecard() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-18 font-medium text-text-primary">Weekly scorecard</h2>
-          {asOfDate && <p className="text-12 text-text-tertiary mt-0.5">As of {asOfDate}{prevVersionId ? ' · comparing vs previous snapshot' : ''}</p>}
+          {asOfDate && <p className="text-12 text-text-tertiary mt-0.5">As of {asOfDate}</p>}
         </div>
-        <select
-          value={seller}
-          onChange={(e) => setSeller(e.target.value)}
-          className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
-          style={{ border: '0.5px solid var(--border-emphasis)' }}
-        >
-          {sellerOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Version comparison selector */}
+          {sortedVersions.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-12 text-text-tertiary whitespace-nowrap">Compare vs</span>
+              <select
+                value={compareVersionId ?? ''}
+                onChange={(e) => setCompareVersionId(e.target.value || null)}
+                className="text-12 px-2.5 py-1.5 rounded-md bg-bg-surface text-text-primary"
+                style={{ border: '0.5px solid var(--border-emphasis)' }}
+              >
+                <option value="">Auto (previous)</option>
+                {sortedVersions.slice(0, 20).map((v) => {
+                  const d = new Date(v.created_at);
+                  const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) +
+                    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                  return <option key={v.id} value={v.id}>{label}</option>;
+                })}
+              </select>
+            </div>
+          )}
+          {/* Seller selector */}
+          <select
+            value={seller}
+            onChange={(e) => setSeller(e.target.value)}
+            className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
+            style={{ border: '0.5px solid var(--border-emphasis)' }}
+          >
+            {sellerOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* KPI strip */}
