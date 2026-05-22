@@ -563,19 +563,19 @@ export function VerticalPerformance() {
           {/* KPI strip */}
           <div className="flex gap-3 flex-wrap">
             <KpiCard
-              label="Target Q1+Q2"
+              label={quarterFocus === 'both' ? `Target ${quarterLabels.current}+${quarterLabels.next}` : `Target ${quarterFocus === 'current' ? quarterLabels.current : quarterLabels.next}`}
               value={totalTarget > 0 ? formatCurrency(totalTarget) : '—'}
               sub={`${allOpenForFilter.length} open deals`}
               tone="gray"
             />
             <KpiCard
-              label="Booked"
+              label={quarterFocus === 'both' ? `Booked (${quarterLabels.current}+${quarterLabels.next})` : 'Booked'}
               value={formatCurrency(totalActual)}
               sub={totalActual > 0 ? 'Closed revenue' : 'No closes yet'}
               tone={totalActual > 0 ? 'green' : 'gray'}
             />
             <KpiCard
-              label="Weighted pipeline"
+              label={quarterFocus === 'both' ? `Wtd pipeline (${quarterLabels.current}+${quarterLabels.next})` : 'Weighted pipeline'}
               value={formatCurrency(totalEv)}
               sub={`${totalEv >= totalTarget ? '+' : ''}${formatCurrency(totalEv - totalTarget)} vs target`}
               tone={totalEv >= totalTarget ? 'green' : 'red'}
@@ -634,7 +634,9 @@ export function VerticalPerformance() {
                 >
                   <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
                   <th className="text-right py-2 px-3 font-normal">Target</th>
-                  <th className="text-right py-2 px-3 font-normal">Booked + committed</th>
+                  <th className="text-right py-2 px-3 font-normal">
+                    Booked + committed{quarterFocus === 'both' ? ` (${quarterLabels.current}+${quarterLabels.next})` : ''}
+                  </th>
                   <th className="text-right py-2 px-3 font-normal">Wtd pipeline</th>
                   <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 120 }}>Coverage</th>
                   <th className="text-left py-2 px-3 font-normal">Risk</th>
