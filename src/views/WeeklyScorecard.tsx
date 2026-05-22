@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useSessionState } from '@/lib/hooks';
 import {
   ACTIVE_SELLERS,
   EMPIRICAL_STAGE,
@@ -588,12 +589,12 @@ function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
       <div
         onClick={toggleOpen}
         className="grid px-4 py-2.5 items-center hover:brightness-95 cursor-pointer"
-        style={{ gridTemplateColumns: cols, borderTop: '1.5px solid var(--border-emphasis)', borderLeft: '2px solid var(--status-green)', background: open ? 'rgba(22,163,74,0.12)' : 'var(--status-green-bg)' }}
+        style={{ gridTemplateColumns: cols, borderTop: '1.5px solid var(--border-emphasis)', borderLeft: '2px solid var(--status-green)', background: open ? 'var(--bg-surface)' : 'var(--bg-card)' }}
       >
         <span className="text-12 font-medium" style={{ color: 'var(--status-green-text)' }}>Won (FY)</span>
         <div className="pr-4">
-          <div className="flex-1 h-4 rounded-sm overflow-hidden" style={{ background: 'rgba(22,163,74,0.15)' }}>
-            <div className="h-full rounded-sm" style={{ width: `${widthPct}%`, background: 'var(--status-green)' }} />
+          <div className="flex-1 h-4 rounded-sm overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+            <div className="h-full rounded-sm" style={{ width: `${widthPct}%`, background: 'var(--status-green)', opacity: 0.7 }} />
           </div>
         </div>
         <div className="text-right">
@@ -1198,8 +1199,8 @@ export function WeeklyScorecard() {
   const prevRows: DealRow[] = prevRow?.dataset?.all_deals_rows ?? [];
 
   const { seller, setSeller } = useSeller();
-  const [stageFilter, setStageFilter] = useState<string | null>(null);
-  const [closuresCollapsed, setClosuresCollapsed] = useState(false);
+  const [stageFilter, setStageFilter] = useSessionState<string | null>('ws_stage_filter', null);
+  const [closuresCollapsed, setClosuresCollapsed] = useSessionState<boolean>('ws_closures_collapsed', false);
 
   const handleStageClick = (stage: string | null) => {
     setStageFilter(stage);

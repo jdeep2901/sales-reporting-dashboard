@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useSessionState } from '@/lib/hooks';
 import { ACTIVE_SELLERS, stageNumber } from '@/lib/vpCompute';
 import { formatCurrency } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
@@ -216,11 +217,11 @@ export function Partnerships() {
   const { seller, setSeller } = useSeller();
 
   // ── filters ──
-  const [stageGroup, setStageGroup]     = useState<'all' | 'early' | 'mid' | 'late'>('all');
-  const [partnerFilter, setPartnerFilter] = useState<'all' | PartnerStatus>('all');
-  const [alliancesFilter, setAlliancesFilter] = useState<'all' | 'yes' | 'no'>('all');
-  const [techFilter, setTechFilter]     = useState<string[]>([]);
-  const [search, setSearch]             = useState('');
+  const [stageGroup, setStageGroup]     = useSessionState<'all' | 'early' | 'mid' | 'late'>('pship_stage_group', 'all');
+  const [partnerFilter, setPartnerFilter] = useSessionState<'all' | PartnerStatus>('pship_partner_filter', 'all');
+  const [alliancesFilter, setAlliancesFilter] = useSessionState<'all' | 'yes' | 'no'>('pship_alliances_filter', 'all');
+  const [techFilter, setTechFilter]     = useSessionState<string[]>('pship_tech_filter', []);
+  const [search, setSearch]             = useState(''); // search intentionally not persisted
   const [includeWon, setIncludeWon]     = useState(false);
 
   // ── notes ──
@@ -245,7 +246,7 @@ export function Partnerships() {
   };
 
   const toggleTech = (t: string) =>
-    setTechFilter((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+    setTechFilter(techFilter.includes(t) ? techFilter.filter((x) => x !== t) : [...techFilter, t]);
 
   // ── deduped active deals ──
   const deals = useMemo(() => {

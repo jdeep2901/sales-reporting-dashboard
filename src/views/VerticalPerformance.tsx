@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useSessionState } from '@/lib/hooks';
 import { formatCurrency } from '@/lib/formatters';
 import {
   buildRows,
@@ -428,8 +429,8 @@ function AtRiskTable({ deals }: { deals: RichDealRow[] }) {
 export function VerticalPerformance() {
   const { credentials } = useAuth();
   const { seller: sellerFilter, setSeller: setSellerFilter } = useSeller();
-  const [quarterFocus, setQuarterFocus] = useState<'both' | 'current' | 'next'>('both');
-  const [riskFilter, setRiskFilter] = useState<'all' | 'risk' | 'partner' | 'nopartner'>('all');
+  const [quarterFocus, setQuarterFocus] = useSessionState<'both' | 'current' | 'next'>('vp_quarter_focus', 'both');
+  const [riskFilter, setRiskFilter] = useSessionState<'all' | 'risk' | 'partner' | 'nopartner'>('vp_risk_filter', 'all');
 
   // Shared store (targets + version IDs)
   const sharedStore = useSharedStore(credentials?.username ?? null, credentials?.password ?? null);
