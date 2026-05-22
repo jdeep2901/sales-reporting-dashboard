@@ -1005,8 +1005,10 @@ function DealMomentumSection({
   onClearStageFilter?: () => void;
   staleness: Map<string, DealStaleness>;
 }) {
+  type RiskFilter = 'all' | 'critical' | 'stale_only' | 'no_next_only' | 'on_track';
+
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Momentum | 'all'>('all');
+  const [filter, setFilter] = useState<RiskFilter>('all');
 
   const today = new Date();
   today.setHours(12, 0, 0, 0);
@@ -1014,27 +1016,43 @@ function DealMomentumSection({
   const stageFilterN = stageFilter != null ? stageNumber(stageFilter) : null;
   const stageFiltered = stageFilterN != null ? deals.filter((d) => d.stageN === stageFilterN) : deals;
 
-  const counts = useMemo(() => {
-    const c: Partial<Record<Momentum, number>> = {};
-    stageFiltered.forEach((d) => { c[d.momentum] = (c[d.momentum] ?? 0) + 1; });
-    return c;
-  }, [stageFiltered]);
-
-  const visible = filter === 'all' ? stageFiltered : stageFiltered.filter((d) => d.momentum === filter);
-
-  const filters: Array<{ key: Momentum | 'all'; label: string }> = [
-    { key: 'all', label: `All ${stageFiltered.length}` },
-    { key: 'at_risk', label: `At risk ${counts.at_risk ?? 0}` },
-    { key: 'stuck', label: `Stuck ${counts.stuck ?? 0}` },
-    { key: 'advanced', label: `Advancing ${counts.advanced ?? 0}` },
-    { key: 'new', label: `New ${counts.new ?? 0}` },
-    { key: 'steady', label: `Steady ${counts.steady ?? 0}` },
-  ];
-
   const getStaleness = (d: RankedDeal) => {
     const itemId = String(d.row['item_id'] ?? '');
     return itemId ? staleness.get(itemId) : undefined;
   };
+
+  const dealRiskFlags = (d: RankedDeal) => {
+    const s = getStaleness(d);
+    const threshold = STALENESS_THRESHOLD[d.stageN] ?? 30;
+    const isStale = s != null && s.days_stale >= threshold;
+    const noNextSteps = !d.nextMeeting || new Date(d.nextMeeting) < today;
+    return { isStale, noNextSteps };
+  };
+
+  const riskGroup = (d: RankedDeal): RiskFilter => {
+    const { isStale, noNextSteps } = dealRiskFlags(d);
+    if (isStale && noNextSteps) return 'critical';
+    if (isStale) return 'stale_only';
+    if (noNextSteps) return 'no_next_only';
+    return 'on_track';
+  };
+
+  const counts = useMemo(() => {
+    const c: Record<RiskFilter, number> = { all: stageFiltered.length, critical: 0, stale_only: 0, no_next_only: 0, on_track: 0 };
+    stageFiltered.forEach((d) => { c[riskGroup(d)]++; });
+    return c;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageFiltered, staleness]);
+
+  const visible = filter === 'all' ? stageFiltered : stageFiltered.filter((d) => riskGroup(d) === filter);
+
+  const filterDefs: Array<{ key: RiskFilter; label: string; activeStyle: React.CSSProperties }> = [
+    { key: 'all', label: `All ${counts.all}`, activeStyle: { background: 'var(--text-primary)', color: '#fff' } },
+    { key: 'critical', label: `Stale + no next steps ${counts.critical}`, activeStyle: { background: 'var(--status-red-bg)', color: 'var(--status-red-text)', border: '0.5px solid var(--status-red)' } },
+    { key: 'stale_only', label: `Stale ${counts.stale_only}`, activeStyle: { background: 'var(--status-amber-bg)', color: 'var(--status-amber-text)', border: '0.5px solid var(--status-amber)' } },
+    { key: 'no_next_only', label: `No next steps ${counts.no_next_only}`, activeStyle: { background: 'var(--status-amber-bg)', color: 'var(--status-amber-text)', border: '0.5px solid var(--status-amber)' } },
+    { key: 'on_track', label: `On track ${counts.on_track}`, activeStyle: { background: 'var(--status-green-bg)', color: 'var(--status-green-text)', border: '0.5px solid var(--status-green)' } },
+  ];
 
   const displayStaleness = (d: RankedDeal): { label: string; color: string } => {
     const s = getStaleness(d);
@@ -1063,14 +1081,14 @@ function DealMomentumSection({
             )}
           </div>
           <div className="flex gap-1 flex-wrap justify-end">
-            {filters.map(({ key, label }) => (
+            {filterDefs.map(({ key, label, activeStyle }) => (
               <button
                 key={key}
                 onClick={() => setFilter(key)}
                 className="text-11 px-2 py-0.5 rounded"
-                style={{
-                  background: filter === key ? 'var(--text-primary)' : 'var(--bg-card)',
-                  color: filter === key ? '#fff' : 'var(--text-secondary)',
+                style={filter === key ? activeStyle : {
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-secondary)',
                   border: '0.5px solid var(--border-hairline)',
                 }}
               >
@@ -1100,17 +1118,12 @@ function DealMomentumSection({
             {visible.map((d) => {
               const key = dealKey(d.row);
               const isOpen = expanded === key;
-              const isRisky = d.momentum === 'at_risk' || d.momentum === 'stuck';
               const overdue = d.nextMeeting && new Date(d.nextMeeting) < today;
               const risk = dealRisk(d.row);
               const { label: staleLabel, color: staleColor } = displayStaleness(d);
-              const staleInfo = getStaleness(d);
-              const threshold = STALENESS_THRESHOLD[d.stageN] ?? 30;
-              const isStale = staleInfo != null && staleInfo.days_stale >= threshold;
-              const noNextSteps = !d.nextMeeting || new Date(d.nextMeeting) < today;
-              const leftColor = isStale && noNextSteps ? 'var(--status-red)'
-                : isStale || noNextSteps ? 'var(--status-amber)'
-                : isRisky ? (d.momentum === 'at_risk' ? 'var(--status-red)' : 'var(--status-amber)')
+              const group = riskGroup(d);
+              const leftColor = group === 'critical' ? 'var(--status-red)'
+                : group === 'stale_only' || group === 'no_next_only' ? 'var(--status-amber)'
                 : 'transparent';
 
               return (
