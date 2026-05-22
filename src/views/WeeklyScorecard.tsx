@@ -552,6 +552,9 @@ function FunnelSection({
 
           const isDeltaOpen = expandedDelta === s.stage;
           const hasDelta = delta !== 0 && prevRows.length > 0;
+          const hasSizeDelta = sizeDelta !== 0 && prevRows.length > 0 && (s.totalSize > 0 || s.prevTotalSize > 0);
+          const hasEvDelta = evDeltaVal !== 0 && prevRows.length > 0 && (s.totalEv > 0 || s.prevTotalEv > 0);
+          const openDelta = (e: React.MouseEvent) => { e.stopPropagation(); setExpandedDelta(isDeltaOpen ? null : s.stage); };
 
           return (
             <div key={s.stage}>
@@ -592,29 +595,37 @@ function FunnelSection({
                     </button>
                   )}
                 </div>
-                {/* Pipeline $ + delta */}
+                {/* Pipeline $ + clickable delta */}
                 <div className="text-right">
                   <div className="text-12 tabular-nums text-text-secondary">
                     {s.totalSize > 0 ? formatCurrency(s.totalSize) : '—'}
                   </div>
-                  {sizeDelta !== 0 && (s.totalSize > 0 || s.prevTotalSize > 0) && (
-                    <div className="text-11 tabular-nums"
-                      style={{ color: sizeDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                  {hasSizeDelta && (
+                    <button
+                      onClick={openDelta}
+                      className="text-11 tabular-nums underline decoration-dotted"
+                      title="Click to see what changed"
+                      style={{ color: sizeDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}
+                    >
                       {formatDelta(sizeDelta)}
-                    </div>
+                    </button>
                   )}
                 </div>
-                {/* EV + delta */}
+                {/* EV + clickable delta */}
                 <div className="text-right">
                   <div className="text-12 tabular-nums font-medium"
                     style={{ color: s.totalEv > 0 ? (isLate ? 'var(--status-green)' : 'var(--text-primary)') : 'var(--text-tertiary)' }}>
                     {s.totalEv > 0 ? formatCurrency(s.totalEv) : '—'}
                   </div>
-                  {evDeltaVal !== 0 && (s.totalEv > 0 || s.prevTotalEv > 0) && (
-                    <div className="text-11 tabular-nums"
-                      style={{ color: evDeltaVal > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                  {hasEvDelta && (
+                    <button
+                      onClick={openDelta}
+                      className="text-11 tabular-nums underline decoration-dotted"
+                      title="Click to see what changed"
+                      style={{ color: evDeltaVal > 0 ? 'var(--status-green)' : 'var(--status-red)' }}
+                    >
                       {formatDelta(evDeltaVal)}
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>
@@ -720,8 +731,7 @@ function FunnelSection({
 
 // ─── closure section ──────────────────────────────────────────────────────────
 
-function ClosureSection({ qLabel, deals, target }: { qLabel: string; deals: RankedDeal[]; target: number }) {
-  const [collapsed, setCollapsed] = useState(false);
+function ClosureSection({ qLabel, deals, target, collapsed }: { qLabel: string; deals: RankedDeal[]; target: number; collapsed: boolean }) {
   const totalEv = deals.reduce((a, d) => a + d.ev, 0);
   const coverage = target > 0 ? totalEv / target : 0;
   const coverageColor = coverage >= 0.8 ? 'var(--status-green)' : coverage >= 0.5 ? 'var(--status-amber)' : 'var(--status-red)';
@@ -732,15 +742,7 @@ function ClosureSection({ qLabel, deals, target }: { qLabel: string; deals: Rank
         style={{ borderBottom: collapsed ? 'none' : '0.5px solid var(--border-hairline)', background: 'var(--bg-surface)' }}>
         <div className="flex items-center justify-between">
           <span className="text-13 font-medium text-text-primary">Closures — {qLabel}</span>
-          <div className="flex items-center gap-3">
-            <span className="text-12 text-text-secondary">{deals.length} deals</span>
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="text-12 text-text-tertiary hover:text-text-primary"
-            >
-              {collapsed ? '▸' : '▾'}
-            </button>
-          </div>
+          <span className="text-12 text-text-secondary">{deals.length} deals</span>
         </div>
         <div className="flex items-center gap-3 mt-1.5">
           <span className="text-22 font-medium tabular-nums" style={{ color: coverageColor }}>{formatCurrency(totalEv)}</span>
@@ -1017,6 +1019,13 @@ export function WeeklyScorecard() {
 
   const { seller, setSeller } = useSeller();
   const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [closuresCollapsed, setClosuresCollapsed] = useState(false);
+
+  const handleStageClick = (stage: string | null) => {
+    setStageFilter(stage);
+    if (stage !== null) setClosuresCollapsed(true);
+    else setClosuresCollapsed(false);
+  };
   const quarterLabels = useMemo(() => buildQuarterLabels(asOfDate || null), [asOfDate]);
 
   const stageStats = useMemo(
@@ -1226,7 +1235,7 @@ export function WeeklyScorecard() {
       <FunnelSection
         stats={stageStats}
         maxCount={maxCount}
-        onStageClick={setStageFilter}
+        onStageClick={handleStageClick}
         activeStage={stageFilter}
         allRows={allRows}
         prevRows={prevRows}
@@ -1234,16 +1243,27 @@ export function WeeklyScorecard() {
       />
 
       {/* Closure outlook */}
-      <div className="grid grid-cols-2 gap-4">
-        <ClosureSection qLabel={quarterLabels.current} deals={closureCurrent} target={overallTarget} />
-        <ClosureSection qLabel={quarterLabels.next} deals={closureNext} target={nextTarget} />
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-13 font-medium text-text-secondary">Closure outlook</span>
+          <button
+            onClick={() => setClosuresCollapsed(!closuresCollapsed)}
+            className="text-12 text-text-tertiary hover:text-text-primary flex items-center gap-1"
+          >
+            {closuresCollapsed ? '▸ Expand' : '▾ Collapse'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <ClosureSection qLabel={quarterLabels.current} deals={closureCurrent} target={overallTarget} collapsed={closuresCollapsed} />
+          <ClosureSection qLabel={quarterLabels.next} deals={closureNext} target={nextTarget} collapsed={closuresCollapsed} />
+        </div>
       </div>
 
       {/* Deal momentum */}
       <DealMomentumSection
         deals={rankedDeals}
         stageFilter={stageFilter}
-        onClearStageFilter={() => setStageFilter(null)}
+        onClearStageFilter={() => handleStageClick(null)}
       />
     </div>
   );
