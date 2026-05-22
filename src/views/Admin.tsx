@@ -317,10 +317,12 @@ function SyncSection({ settings }: { settings: Record<string, unknown> | null })
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${anonKey}`,
-          'x-username': credentials!.username,
-          'x-password': credentials!.password,
         },
-        body: JSON.stringify({ board_url: boardUrl }),
+        body: JSON.stringify({
+          username: credentials!.username,
+          password: credentials!.password,
+          board_url: boardUrl,
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
