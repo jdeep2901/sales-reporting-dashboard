@@ -165,6 +165,43 @@ function wonRevenuePacedToQ(rows: DealRow[], seller: string, qLabel: string): nu
   return total;
 }
 
+// ─── won stats (FY) ──────────────────────────────────────────────────────────
+
+interface WonStats {
+  count: number;
+  prevCount: number;
+  totalSize: number;
+  prevTotalSize: number;
+}
+
+function fyStartFromQLabel(qLabel: string): string {
+  const m = qLabel.match(/^Q\d'(\d{2})$/);
+  const fy = m ? 2000 + parseInt(m[1]) : 2027;
+  return `${fy - 1}-04-01`;
+}
+
+function buildWonStats(rows: DealRow[], prevRows: DealRow[], seller: string, currentQLabel: string): WonStats {
+  const fyStart = fyStartFromQLabel(currentQLabel);
+  const filterWon = (r: DealRow): boolean => {
+    if (!matchSeller(r, seller)) return false;
+    if (normStage(r.stage ?? r.deal_stage) !== '7. Win') return false;
+    return String(r.start_date ?? '').slice(0, 10) >= fyStart;
+  };
+  const dedup = (rs: DealRow[]) => {
+    const m = new Map<string, DealRow>();
+    rs.filter(filterWon).forEach((r) => { const k = dealKey(r); if (!m.has(k)) m.set(k, r); });
+    return Array.from(m.values());
+  };
+  const curr = dedup(rows);
+  const prev = dedup(prevRows);
+  return {
+    count: curr.length,
+    prevCount: prev.length,
+    totalSize: curr.reduce((a, r) => a + resolveSize(r), 0),
+    prevTotalSize: prev.reduce((a, r) => a + resolveSize(r), 0),
+  };
+}
+
 // ─── main computations ────────────────────────────────────────────────────────
 
 function buildStageStats(
@@ -484,6 +521,96 @@ function StageBadge({ n, label }: { n: number; label: string }) {
   );
 }
 
+// ─── won row (FY) ────────────────────────────────────────────────────────────
+
+function WonRow({ wonStats, maxCount, cols, allRows, prevRows }: {
+  wonStats: WonStats; maxCount: number; cols: string; allRows: DealRow[]; prevRows: DealRow[];
+}) {
+  const [open, setOpen] = useState(false);
+  const wonDelta = wonStats.count - wonStats.prevCount;
+  const wonSizeDelta = wonStats.totalSize - wonStats.prevTotalSize;
+  const widthPct = maxCount > 0 ? Math.max(4, (wonStats.count / maxCount) * 100) : 4;
+  const hasDelta = prevRows.length > 0;
+
+  const newWins = useMemo(() => {
+    if (!open || !prevRows.length) return [];
+    const prevByKey = new Map<string, DealRow>();
+    prevRows.forEach((r) => { const k = dealKey(r); if (!prevByKey.has(k)) prevByKey.set(k, r); });
+    const seen = new Set<string>();
+    const wins: Array<{ dealLabel: string; dealSize: number; fromStage: string | null }> = [];
+    allRows.forEach((r) => {
+      if (normStage(r.stage ?? r.deal_stage) !== '7. Win') return;
+      const k = dealKey(r);
+      if (seen.has(k)) return; seen.add(k);
+      const prev = prevByKey.get(k);
+      if (prev && normStage(prev.stage ?? prev.deal_stage) === '7. Win') return;
+      const prevNorm = prev ? normStage(prev.stage ?? prev.deal_stage) : null;
+      wins.push({ dealLabel: String(r.deal ?? r.account ?? '—'), dealSize: resolveSize(r), fromStage: prevNorm ? (STAGE_SHORT[prevNorm] ?? prevNorm) : null });
+    });
+    return wins;
+  }, [open, allRows, prevRows]);
+
+  const toggle = (e: React.MouseEvent) => { e.stopPropagation(); setOpen(!open); };
+
+  return (
+    <div>
+      <div className="grid px-4 py-2.5 items-center"
+        style={{ gridTemplateColumns: cols, borderTop: '1.5px solid var(--border-emphasis)', borderLeft: '2px solid var(--status-green)', background: 'var(--status-green-bg)' }}>
+        <span className="text-12 font-medium" style={{ color: 'var(--status-green-text)' }}>Won (FY)</span>
+        <div className="pr-4">
+          <div className="flex-1 h-4 rounded-sm overflow-hidden" style={{ background: 'rgba(22,163,74,0.15)' }}>
+            <div className="h-full rounded-sm" style={{ width: `${widthPct}%`, background: 'var(--status-green)' }} />
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-13 font-medium tabular-nums" style={{ color: 'var(--status-green-text)' }}>{wonStats.count}</span>
+          {hasDelta && wonDelta !== 0 && (
+            <button onClick={toggle} className="ml-1 text-11 tabular-nums underline decoration-dotted"
+              title="Click to see new wins"
+              style={{ color: wonDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+              {wonDelta > 0 ? `+${wonDelta}` : wonDelta}
+            </button>
+          )}
+        </div>
+        <div className="text-right">
+          <div className="text-12 tabular-nums font-medium" style={{ color: 'var(--status-green-text)' }}>
+            {wonStats.totalSize > 0 ? formatCurrency(wonStats.totalSize) : '—'}
+          </div>
+          {hasDelta && wonSizeDelta !== 0 && (
+            <button onClick={toggle} className="text-11 tabular-nums underline decoration-dotted"
+              title="Click to see new wins"
+              style={{ color: wonSizeDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+              {formatDelta(wonSizeDelta)}
+            </button>
+          )}
+        </div>
+        <div className="text-right text-11 text-text-tertiary">—</div>
+      </div>
+      {open && (
+        <div className="px-4 py-3" style={{ borderBottom: '0.5px solid var(--border-hairline)', background: 'var(--status-green-bg)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-11 font-medium" style={{ color: 'var(--status-green-text)' }}>
+              {newWins.length > 0 ? `New wins since last snapshot (${newWins.length})` : 'No new wins since last snapshot'}
+            </span>
+            <button onClick={() => setOpen(false)} className="text-11 text-text-tertiary hover:text-text-primary">Close ×</button>
+          </div>
+          <div className="space-y-1">
+            {newWins.map((d, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-3 text-11">
+                <span className="text-text-primary font-medium truncate">{d.dealLabel}</span>
+                <span className="text-text-secondary tabular-nums shrink-0">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</span>
+                <span className="shrink-0" style={{ color: 'var(--status-green-text)' }}>
+                  {d.fromStage ? `← ${d.fromStage}` : '✦ New deal'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── funnel shape section ─────────────────────────────────────────────────────
 
 function FunnelSection({
@@ -494,6 +621,7 @@ function FunnelSection({
   allRows,
   prevRows,
   seller,
+  wonStats,
 }: {
   stats: StageStats[];
   maxCount: number;
@@ -502,6 +630,7 @@ function FunnelSection({
   allRows: DealRow[];
   prevRows: DealRow[];
   seller: string;
+  wonStats: WonStats;
 }) {
   const [expandedDelta, setExpandedDelta] = useState<string | null>(null);
   const deltaData = useMemo(() => {
@@ -724,6 +853,9 @@ function FunnelSection({
             </div>
           );
         })}
+
+        {/* Won row — FY to date */}
+        <WonRow wonStats={wonStats} maxCount={maxCount} cols={cols} allRows={allRows} prevRows={prevRows} />
       </div>
     </div>
   );
@@ -1040,6 +1172,12 @@ export function WeeklyScorecard() {
     [allRows, prevRows, seller, quarterLabels.current, compareSnapshotDate],
   );
 
+  const wonStats = useMemo(
+    () => buildWonStats(allRows, prevRows, seller, quarterLabels.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allRows, prevRows, seller, quarterLabels.current],
+  );
+
   const closureCurrent = useMemo(
     () => buildClosureDeals(allRows, seller, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1092,7 +1230,7 @@ export function WeeklyScorecard() {
     ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.next), 0)
     : getTarget(quarterTargets, seller, quarterLabels.next);
 
-  const maxCount = Math.max(1, ...stageStats.map((s) => s.count));
+  const maxCount = Math.max(1, wonStats.count, ...stageStats.map((s) => s.count));
 
   if (storeQuery.isLoading) return <div className="p-6 text-13 text-text-secondary">Loading scorecard...</div>;
   if (storeQuery.isError) return <div className="p-6 text-13 text-status-red">Failed to load data.</div>;
@@ -1240,6 +1378,7 @@ export function WeeklyScorecard() {
         allRows={allRows}
         prevRows={prevRows}
         seller={seller}
+        wonStats={wonStats}
       />
 
       {/* Closure outlook */}
