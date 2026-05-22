@@ -165,6 +165,33 @@ function wonRevenuePacedToQ(rows: DealRow[], seller: string, qLabel: string): nu
   return total;
 }
 
+// Committed revenue paced to a fiscal quarter: stages 5-6 at face value.
+function committedPacedToQ(rows: DealRow[], seller: string, qLabel: string): number {
+  const relevant = rows.filter((r) => {
+    if (!matchSeller(r, seller)) return false;
+    const n = stageNumber(r.stage ?? r.deal_stage);
+    return n != null && n >= 5 && n <= 6;
+  });
+  const deduped = new Map<string, DealRow>();
+  relevant.forEach((r) => { const k = dealKey(r); if (!deduped.has(k)) deduped.set(k, r); });
+  let total = 0;
+  deduped.forEach((r) => {
+    const startRaw = r.start_date as string | null | undefined;
+    if (!startRaw) return;
+    const start = new Date(String(startRaw).slice(0, 10) + 'T00:00:00');
+    if (isNaN(start.getTime())) return;
+    const size = resolveSize(r);
+    if (size <= 0) return;
+    const dur = Math.round(Number(r.duration_months ?? 1)) || 1;
+    for (let i = 0; i < dur; i++) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i);
+      if (dateToFiscalQ(d) === qLabel) total += size / dur;
+    }
+  });
+  return total;
+}
+
 // ─── won stats (FY) ──────────────────────────────────────────────────────────
 
 interface WonStats {
@@ -1223,9 +1250,6 @@ export function WeeklyScorecard() {
 
   const lateStageStats = stageStats.filter((s) => s.stageN >= 5);
   const lateCount = lateStageStats.reduce((a, s) => a + s.count, 0);
-  const lateEv = lateStageStats.reduce((a, s) => a + s.totalEv, 0);
-  const prevLateCount = lateStageStats.reduce((a, s) => a + s.prevCount, 0);
-  const lateCountDelta = prevRows.length > 0 ? lateCount - prevLateCount : 0;
 
   const atRiskCount = rankedDeals.filter((d) => d.momentum === 'at_risk' || d.momentum === 'stuck').length;
   const advancingCount = rankedDeals.filter((d) => d.momentum === 'advanced').length;
@@ -1241,6 +1265,18 @@ export function WeeklyScorecard() {
     [prevRows, seller, quarterLabels.current],
   );
   const actualsDelta = prevRows.length > 0 ? currentActuals - prevActuals : 0;
+
+  const currentCommitted = useMemo(
+    () => committedPacedToQ(allRows, seller, quarterLabels.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allRows, seller, quarterLabels.current],
+  );
+  const prevCommitted = useMemo(
+    () => committedPacedToQ(prevRows, seller, quarterLabels.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prevRows, seller, quarterLabels.current],
+  );
+  const committedDelta = prevRows.length > 0 ? currentCommitted - prevCommitted : 0;
 
   const overallTarget = seller === 'Overall'
     ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.current), 0)
@@ -1297,48 +1333,70 @@ export function WeeklyScorecard() {
         </div>
       </div>
 
-      {/* KPI strip — 6 cards, 3 per row */}
-      <div className="grid grid-cols-3 gap-3">
-        {/* Coverage */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${coverageColor}` }}>
-          <div className="text-11 text-text-secondary mb-1">{quarterLabels.current} coverage</div>
-          <div className="text-22 font-medium tabular-nums" style={{ color: coverageColor }}>
-            {coverage > 0 ? `${coverage.toFixed(1)}x` : '—'}
-          </div>
-          <div className="text-11 text-text-tertiary mt-1">
-            Wt. pipeline {formatCurrency(totalEv)} · T {formatCurrency(overallTarget)}
-          </div>
-        </div>
-
-        {/* Active pipeline */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)' }}>
-          <div className="text-11 text-text-secondary mb-1">Active pipeline</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-22 font-medium text-text-primary tabular-nums">{totalActiveDeals}</span>
-            {dealsDelta !== 0 && prevRows.length > 0 && (
-              <span className="text-13 font-medium tabular-nums"
-                style={{ color: dealsDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                {dealsDelta > 0 ? `+${dealsDelta}` : dealsDelta}
+      {/* Coverage header strip */}
+      <div className="rounded-lg px-4 py-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${coverageColor}` }}>
+        <div className="flex items-center justify-between gap-4 mb-2">
+          <div className="flex items-baseline gap-3">
+            {overallTarget > 0 && (
+              <span className="text-11 text-text-secondary">
+                {quarterLabels.current} target {formatCurrency(overallTarget)}
+              </span>
+            )}
+            <span className="text-22 font-medium tabular-nums" style={{ color: overallTarget > 0 ? coverageColor : 'var(--text-primary)' }}>
+              {coverage > 0 ? `${coverage.toFixed(1)}x` : '—'}
+            </span>
+            {overallTarget > 0 && (
+              <span className="text-12 tabular-nums" style={{ color: coverageColor }}>
+                {totalEv >= overallTarget ? '+' : ''}{formatCurrency(totalEv - overallTarget)} vs target
               </span>
             )}
           </div>
-          <div className="text-11 text-text-tertiary mt-1">deals in stages 1–6</div>
+          <span className="text-11 text-text-tertiary">{totalActiveDeals} active deals</span>
+        </div>
+        {overallTarget > 0 && (
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+            <div className="h-full rounded-full transition-all"
+              style={{ width: `${Math.min(100, coverage * 100)}%`, background: coverageColor }} />
+          </div>
+        )}
+      </div>
+
+      {/* 4-column metric strip */}
+      <div className="grid grid-cols-4 gap-3">
+
+        {/* Booked */}
+        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: currentActuals > 0 ? '2px solid var(--status-green)' : undefined }}>
+          <div className="text-11 text-text-secondary mb-1">Booked</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-22 font-medium tabular-nums" style={{ color: currentActuals > 0 ? 'var(--status-green)' : 'var(--text-primary)' }}>
+              {currentActuals > 0 ? formatCurrency(currentActuals) : '—'}
+            </span>
+            {actualsDelta !== 0 && prevRows.length > 0 && (
+              <span className="text-13 font-medium tabular-nums"
+                style={{ color: actualsDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                {formatDelta(actualsDelta)}
+              </span>
+            )}
+          </div>
+          <div className="text-11 text-text-tertiary mt-1">won, {quarterLabels.current} paced</div>
         </div>
 
-        {/* Late stage */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: lateCount > 0 ? '2px solid var(--status-green)' : undefined }}>
-          <div className="text-11 text-text-secondary mb-1">Late stage (5–6) — committed</div>
+        {/* Committed */}
+        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: currentCommitted > 0 ? '2px solid var(--accent)' : undefined }}>
+          <div className="text-11 text-text-secondary mb-1">Committed</div>
           <div className="flex items-baseline gap-2">
-            <span className="text-22 font-medium text-text-primary tabular-nums">{lateCount}</span>
-            {lateCountDelta !== 0 && prevRows.length > 0 && (
+            <span className="text-22 font-medium tabular-nums" style={{ color: currentCommitted > 0 ? 'var(--accent)' : 'var(--text-primary)' }}>
+              {currentCommitted > 0 ? formatCurrency(currentCommitted) : '—'}
+            </span>
+            {committedDelta !== 0 && prevRows.length > 0 && (
               <span className="text-13 font-medium tabular-nums"
-                style={{ color: lateCountDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                {lateCountDelta > 0 ? `+${lateCountDelta}` : lateCountDelta}
+                style={{ color: committedDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
+                {formatDelta(committedDelta)}
               </span>
             )}
           </div>
           <div className="text-11 text-text-tertiary mt-1">
-            {lateEv > 0 ? `${formatCurrency(lateEv)} wt. pipeline` : 'no deals'}
+            stages 5–6 · {lateCount} deal{lateCount !== 1 ? 's' : ''}
           </div>
         </div>
 
@@ -1358,42 +1416,36 @@ export function WeeklyScorecard() {
           </div>
           <div className="text-11 mt-1" style={{ color: topOfFunnelPct > 0.5 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
             {topOfFunnelPct > 0.5
-              ? `${Math.round(topOfFunnelPct * 100)}% top-of-funnel (stages 1–4)`
+              ? `${Math.round(topOfFunnelPct * 100)}% top-of-funnel`
               : 'prob-weighted, all stages'}
           </div>
         </div>
 
-        {/* Booked */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: currentActuals > 0 ? '2px solid var(--status-green)' : undefined }}>
-          <div className="text-11 text-text-secondary mb-1">{quarterLabels.current} booked</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-22 font-medium text-text-primary tabular-nums">
-              {currentActuals > 0 ? formatCurrency(currentActuals) : '—'}
-            </span>
-            {actualsDelta !== 0 && prevRows.length > 0 && (
-              <span className="text-13 font-medium tabular-nums"
-                style={{ color: actualsDelta > 0 ? 'var(--status-green)' : 'var(--status-red)' }}>
-                {formatDelta(actualsDelta)}
+        {/* Pipeline health */}
+        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: atRiskCount > 0 ? '2px solid var(--status-amber)' : undefined }}>
+          <div className="text-11 text-text-secondary mb-2">Pipeline health</div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between text-12">
+              <span className="text-text-tertiary">At risk / stuck</span>
+              <span className="font-medium tabular-nums" style={{ color: atRiskCount > 0 ? 'var(--status-amber)' : 'var(--text-primary)' }}>
+                {atRiskCount}
               </span>
-            )}
+            </div>
+            <div className="flex items-center justify-between text-12">
+              <span className="text-text-tertiary">Advancing</span>
+              <span className="font-medium tabular-nums" style={{ color: advancingCount > 0 ? 'var(--status-green)' : 'var(--text-tertiary)' }}>
+                {advancingCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-12">
+              <span className="text-text-tertiary">New this period</span>
+              <span className="font-medium tabular-nums text-text-primary">
+                {dealsDelta > 0 ? `+${dealsDelta}` : dealsDelta !== 0 ? dealsDelta : '—'}
+              </span>
+            </div>
           </div>
-          <div className="text-11 text-text-tertiary mt-1">won revenue, quarter-paced</div>
         </div>
 
-        {/* Movement signals */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: atRiskCount > 0 ? '2px solid var(--status-amber)' : undefined }}>
-          <div className="text-11 text-text-secondary mb-1">Movement signals</div>
-          <div className="flex items-baseline gap-3">
-            <span className="text-22 font-medium tabular-nums"
-              style={{ color: atRiskCount > 0 ? 'var(--status-amber)' : 'var(--text-primary)' }}>
-              {atRiskCount}
-            </span>
-            <span className="text-12 text-text-tertiary">at risk / stuck</span>
-          </div>
-          <div className="text-11 mt-1" style={{ color: advancingCount > 0 ? 'var(--status-green)' : 'var(--text-tertiary)' }}>
-            {advancingCount} advancing
-          </div>
-        </div>
       </div>
 
       {/* Funnel shape */}
