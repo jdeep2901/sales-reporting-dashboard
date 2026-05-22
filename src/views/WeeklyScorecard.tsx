@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useSharedStore, useVersionData } from '@/lib/queries';
+import { useSharedStore, useVersionData, useDealStaleness } from '@/lib/queries';
+import type { DealStaleness } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { useSessionState } from '@/lib/hooks';
 import {
   ACTIVE_SELLERS,
   EMPIRICAL_STAGE,
+  STALENESS_THRESHOLD,
   stageNumber,
   empiricalEv,
   dealRisk,
-  daysStuck,
   buildQuarterLabels,
   getTarget,
 } from '@/lib/vpCompute';
@@ -287,8 +288,7 @@ function classifyMomentum(row: DealRow, prevStageN: number | null): Momentum {
       if (label.includes('no next') || label.includes('overdue')) return 'at_risk';
       return 'stuck';
     }
-    const d = daysStuck(row);
-    if (d != null && d > 14) return 'stuck';
+    // no last-activity data available; fall through to steady
   }
   return 'steady';
 }
@@ -998,13 +998,18 @@ function DealMomentumSection({
   deals,
   stageFilter,
   onClearStageFilter,
+  staleness,
 }: {
   deals: RankedDeal[];
   stageFilter?: string | null;
   onClearStageFilter?: () => void;
+  staleness: Map<string, DealStaleness>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<Momentum | 'all'>('all');
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
 
   const stageFilterN = stageFilter != null ? stageNumber(stageFilter) : null;
   const stageFiltered = stageFilterN != null ? deals.filter((d) => d.stageN === stageFilterN) : deals;
@@ -1026,10 +1031,21 @@ function DealMomentumSection({
     { key: 'steady', label: `Steady ${counts.steady ?? 0}` },
   ];
 
-  const displayDaysInStage = (d: RankedDeal): string => {
-    if (d.daysInStage == null) return d.momentum === 'new' ? 'New' : '—';
-    if (d.daysInStageIsMin) return `≥${d.daysInStage}d`;
-    return `<${d.daysInStage}d`;
+  const getStaleness = (d: RankedDeal) => {
+    const itemId = String(d.row['item_id'] ?? '');
+    return itemId ? staleness.get(itemId) : undefined;
+  };
+
+  const displayStaleness = (d: RankedDeal): { label: string; color: string } => {
+    const s = getStaleness(d);
+    if (!s) return { label: '—', color: 'var(--text-tertiary)' };
+    const threshold = STALENESS_THRESHOLD[d.stageN] ?? 30;
+    const color = s.days_stale >= threshold * 1.5
+      ? 'var(--status-red)'
+      : s.days_stale >= threshold
+      ? 'var(--status-amber)'
+      : 'var(--text-secondary)';
+    return { label: `${s.days_stale}d`, color };
   };
 
   return (
@@ -1085,10 +1101,17 @@ function DealMomentumSection({
               const key = dealKey(d.row);
               const isOpen = expanded === key;
               const isRisky = d.momentum === 'at_risk' || d.momentum === 'stuck';
-              const overdue = d.nextMeeting && new Date(d.nextMeeting) < new Date();
+              const overdue = d.nextMeeting && new Date(d.nextMeeting) < today;
               const risk = dealRisk(d.row);
-              const stageAge = d.daysInStage ?? 0;
-              const stageAgeColor = d.daysInStageIsMin && stageAge > 21 ? 'var(--status-amber)' : 'var(--text-secondary)';
+              const { label: staleLabel, color: staleColor } = displayStaleness(d);
+              const staleInfo = getStaleness(d);
+              const threshold = STALENESS_THRESHOLD[d.stageN] ?? 30;
+              const isStale = staleInfo != null && staleInfo.days_stale >= threshold;
+              const noNextSteps = !d.nextMeeting || new Date(d.nextMeeting) < today;
+              const leftColor = isStale && noNextSteps ? 'var(--status-red)'
+                : isStale || noNextSteps ? 'var(--status-amber)'
+                : isRisky ? (d.momentum === 'at_risk' ? 'var(--status-red)' : 'var(--status-amber)')
+                : 'transparent';
 
               return (
                 <>
@@ -1097,7 +1120,7 @@ function DealMomentumSection({
                     onClick={() => setExpanded(isOpen ? null : key)}
                     style={{
                       borderBottom: isOpen ? 'none' : '0.5px solid var(--border-hairline)',
-                      borderLeft: `2px solid ${isRisky ? (d.momentum === 'at_risk' ? 'var(--status-red)' : 'var(--status-amber)') : 'transparent'}`,
+                      borderLeft: `2px solid ${leftColor}`,
                       cursor: 'pointer',
                     }}
                     className="hover:bg-bg-hover"
@@ -1114,8 +1137,8 @@ function DealMomentumSection({
                     <td className="py-2 px-2 text-right tabular-nums text-text-secondary">
                       {d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}
                     </td>
-                    <td className="py-2 px-2 text-right tabular-nums" style={{ color: stageAgeColor }}>
-                      {displayDaysInStage(d)}
+                    <td className="py-2 px-2 text-right tabular-nums" style={{ color: staleColor }}>
+                      {staleLabel}
                     </td>
                     <td className="py-2 px-4 text-right" style={{ color: overdue ? 'var(--status-red)' : 'var(--text-secondary)' }}>
                       {d.nextMeeting ?? '—'}
@@ -1248,11 +1271,11 @@ export function WeeklyScorecard() {
   const totalActiveDeals = stageStats.reduce((a, s) => a + s.count, 0);
   const prevTotalDeals = stageStats.reduce((a, s) => a + s.prevCount, 0);
   const dealsDelta = totalActiveDeals - prevTotalDeals;
+  void dealsDelta; // retained for future use; pipeline health card uses staleness counts now
 
   const lateStageStats = stageStats.filter((s) => s.stageN >= 5);
   const lateCount = lateStageStats.reduce((a, s) => a + s.count, 0);
 
-  const atRiskCount = rankedDeals.filter((d) => d.momentum === 'at_risk' || d.momentum === 'stuck').length;
   const advancingCount = rankedDeals.filter((d) => d.momentum === 'advanced').length;
 
   const currentActuals = useMemo(
@@ -1293,6 +1316,24 @@ export function WeeklyScorecard() {
     : getTarget(quarterTargets, seller, quarterLabels.next);
 
   const maxCount = Math.max(1, wonStats.count, ...stageStats.map((s) => s.count));
+
+  const stalenessQuery = useDealStaleness();
+  const staleness = stalenessQuery.data ?? new Map<string, DealStaleness>();
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  // Real staleness-based health counts (for pipeline health card)
+  const staleCount = rankedDeals.filter((d) => {
+    const itemId = String(d.row['item_id'] ?? '');
+    if (!itemId) return false;
+    const s = staleness.get(itemId);
+    if (!s) return false;
+    return s.days_stale >= (STALENESS_THRESHOLD[d.stageN] ?? 30);
+  }).length;
+  const noNextStepsCount = rankedDeals.filter((d) => {
+    return !d.nextMeeting || new Date(d.nextMeeting) < today;
+  }).length;
 
   if (storeQuery.isLoading) return <div className="p-6 text-13 text-text-secondary">Loading scorecard...</div>;
   if (storeQuery.isError) return <div className="p-6 text-13 text-status-red">Failed to load data.</div>;
@@ -1439,25 +1480,25 @@ export function WeeklyScorecard() {
         </div>
 
         {/* Pipeline health */}
-        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: atRiskCount > 0 ? '2px solid var(--status-amber)' : undefined }}>
+        <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: staleCount > 0 ? '2px solid var(--status-amber)' : undefined }}>
           <div className="text-11 text-text-secondary mb-2">Pipeline health</div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between text-12">
-              <span className="text-text-tertiary">At risk / stuck</span>
-              <span className="font-medium tabular-nums" style={{ color: atRiskCount > 0 ? 'var(--status-amber)' : 'var(--text-primary)' }}>
-                {atRiskCount}
+              <span className="text-text-tertiary">Stale in stage</span>
+              <span className="font-medium tabular-nums" style={{ color: staleCount > 0 ? 'var(--status-amber)' : 'var(--text-primary)' }}>
+                {staleCount}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-12">
+              <span className="text-text-tertiary">No next steps</span>
+              <span className="font-medium tabular-nums" style={{ color: noNextStepsCount > 0 ? 'var(--status-red)' : 'var(--text-primary)' }}>
+                {noNextStepsCount}
               </span>
             </div>
             <div className="flex items-center justify-between text-12">
               <span className="text-text-tertiary">Advancing</span>
               <span className="font-medium tabular-nums" style={{ color: advancingCount > 0 ? 'var(--status-green)' : 'var(--text-tertiary)' }}>
                 {advancingCount}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-12">
-              <span className="text-text-tertiary">New this period</span>
-              <span className="font-medium tabular-nums text-text-primary">
-                {dealsDelta > 0 ? `+${dealsDelta}` : dealsDelta !== 0 ? dealsDelta : '—'}
               </span>
             </div>
           </div>
@@ -1500,6 +1541,7 @@ export function WeeklyScorecard() {
         deals={rankedDeals}
         stageFilter={stageFilter}
         onClearStageFilter={() => handleStageClick(null)}
+        staleness={staleness}
       />
     </div>
   );

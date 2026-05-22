@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { rpc } from './supabase';
+import { rpc, supabase } from './supabase';
 
 // Shared dashboard state (targets, likelihood flags, settings)
 export function useSharedStore(username: string | null, password: string | null) {
@@ -106,6 +106,26 @@ export function useBatchVersionData(
     },
     enabled: !!username && !!password && unique.length > 0,
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+// Deal staleness from snapshot history (days since last stage change per deal)
+export interface DealStaleness {
+  item_id: string;
+  days_stale: number;
+  current_stage_num: number;
+}
+
+export function useDealStaleness() {
+  return useQuery({
+    queryKey: ['dealStaleness'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_deal_staleness');
+      if (error) throw new Error(`get_deal_staleness failed: ${error.message}`);
+      const rows = (data ?? []) as DealStaleness[];
+      return new Map<string, DealStaleness>(rows.map((r) => [r.item_id, r]));
+    },
+    staleTime: 60 * 60 * 1000, // 1 hour — recomputed from full history, cache aggressively
   });
 }
 

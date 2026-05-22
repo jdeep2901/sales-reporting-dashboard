@@ -20,7 +20,8 @@ export async function rpc<T = unknown>(
     | 'get_dashboard_compare'
     | 'rename_dashboard_version'
     | 'upsert_dashboard_user'
-    | 'delete_dashboard_user',
+    | 'delete_dashboard_user'
+    | 'get_deal_staleness',
   payload?: Record<string, unknown>,
 ): Promise<T> {
   const { data, error } = await supabase.rpc(fn, payload ?? {});

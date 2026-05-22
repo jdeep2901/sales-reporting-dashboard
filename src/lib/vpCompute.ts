@@ -75,7 +75,12 @@ export const EMPIRICAL_STAGE: Record<number, { p: number; label: string }> = {
   6: { p: 0.90, label: 'Contracting' },
 };
 
+export const STALENESS_THRESHOLD: Record<number, number> = {
+  1: 45, 2: 30, 3: 21, 4: 21, 5: 14, 6: 14,
+};
+
 export interface DealRow {
+  item_id?: string | null;
   stage?: string;
   deal_stage?: string;
   dealStage?: string;

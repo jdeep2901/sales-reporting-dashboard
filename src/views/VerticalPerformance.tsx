@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useSharedStore, useVersionData } from '@/lib/queries';
+import { useSharedStore, useVersionData, useDealStaleness } from '@/lib/queries';
+import type { DealStaleness } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { useSessionState } from '@/lib/hooks';
 import { formatCurrency } from '@/lib/formatters';
@@ -9,10 +10,10 @@ import {
   aggregateSellers,
   buildQuarterLabels,
   ratioTone,
-  riskTone,
   stageLabel,
   dealDisplay,
-  daysStuck,
+  STALENESS_THRESHOLD,
+  stageNumber,
   type SellerAggregate,
   type RichDealRow,
   type QuarterTargets,
@@ -103,37 +104,52 @@ function ProgressBar({ ratio, tone }: { ratio: number; tone: Tone }) {
   );
 }
 
-// ─── risk pill ────────────────────────────────────────────────────────────
+// ─── staleness badge ──────────────────────────────────────────────────────
 
-function RiskPill({ atRisk, label }: { atRisk: boolean; label: string }) {
-  if (!atRisk) {
-    return (
-      <span
-        className="text-11 text-status-green"
-        style={{
-          background: 'var(--status-green-bg)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '2px 7px',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        On track
-      </span>
-    );
-  }
-  const labelLower = label.toLowerCase();
-  const isRed = labelLower.includes('no next') || labelLower.includes('overdue');
+function StaleBadge({ itemId, stageNum, staleness }: {
+  itemId: string | null | undefined;
+  stageNum: number | null;
+  staleness: Map<string, DealStaleness>;
+}) {
+  if (!itemId || stageNum == null) return null;
+  const s = staleness.get(itemId);
+  if (s == null) return null;
+  const threshold = STALENESS_THRESHOLD[stageNum] ?? 30;
+  if (s.days_stale < threshold) return null;
+  const isRed = s.days_stale > threshold * 1.5;
   return (
     <span
-      className={`text-11 ${isRed ? 'text-status-red-text' : 'text-status-amber-text'}`}
+      className="text-11 tabular-nums"
       style={{
         background: isRed ? 'var(--status-red-bg)' : 'var(--status-amber-bg)',
+        color: isRed ? 'var(--status-red-text)' : 'var(--status-amber-text)',
         borderRadius: 'var(--radius-sm)',
-        padding: '2px 7px',
+        padding: '2px 6px',
         whiteSpace: 'nowrap',
       }}
     >
-      {isRed ? 'At risk' : 'Needs action'}
+      Stale {s.days_stale}d
+    </span>
+  );
+}
+
+function NoNextStepsBadge({ nextMeetingDate }: { nextMeetingDate: string | null | undefined }) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const meeting = nextMeetingDate ? new Date(String(nextMeetingDate).slice(0, 10) + 'T12:00:00') : null;
+  if (meeting && meeting >= today) return null;
+  return (
+    <span
+      className="text-11"
+      style={{
+        background: 'var(--status-red-bg)',
+        color: 'var(--status-red-text)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '2px 6px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      No next steps
     </span>
   );
 }
@@ -146,9 +162,11 @@ const PLAN_KEY = (seller: string) =>
 function SellerRow({
   row,
   quarterFocus,
+  staleness,
 }: {
   row: SellerAggregate;
   quarterFocus: 'both' | 'current' | 'next';
+  staleness: Map<string, DealStaleness>;
 }) {
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState(() => {
@@ -159,7 +177,27 @@ function SellerRow({
   const sellerDeals = row.deals.filter(
     (d) => quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus,
   );
-  const atRiskDeals = sellerDeals.filter((d) => d.leadership_risk.atRisk);
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  // Staleness coaching counts
+  const staleDeals = sellerDeals.filter((d) => {
+    if (!d.item_id) return false;
+    const s = staleness.get(d.item_id);
+    if (!s) return false;
+    const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
+    const threshold = n != null ? (STALENESS_THRESHOLD[n] ?? 30) : 30;
+    return s.days_stale >= threshold;
+  });
+  const noNextStepsDeals = sellerDeals.filter((d) => {
+    const meeting = d.next_meeting_date
+      ? new Date(String(d.next_meeting_date).slice(0, 10) + 'T12:00:00')
+      : null;
+    return !meeting || meeting < today;
+  });
+
+  const hasRisk = staleDeals.length > 0 || noNextStepsDeals.length > 0;
 
   function savePlan(val: string) {
     setPlan(val);
@@ -179,7 +217,7 @@ function SellerRow({
         onClick={() => setOpen((v) => !v)}
       >
         {/* Seller */}
-        <td className="py-2 pl-3 pr-4" style={{ borderLeft: `2px solid ${atRiskDeals.length ? 'var(--status-red)' : 'transparent'}` }}>
+        <td className="py-2 pl-3 pr-4" style={{ borderLeft: `2px solid ${hasRisk ? 'var(--status-amber)' : 'transparent'}` }}>
           <div className="flex items-center gap-2">
             <span
               className="text-11 font-medium text-text-secondary flex-shrink-0 flex items-center justify-center"
@@ -195,7 +233,13 @@ function SellerRow({
             <div>
               <p className="text-13 font-medium text-text-primary">{row.seller}</p>
               <p className="text-11 text-text-tertiary">
-                {row.open} open · {row.atRisk} at risk
+                {row.open} open
+                {staleDeals.length > 0 && (
+                  <span style={{ color: 'var(--status-amber)' }}> · {staleDeals.length} stale</span>
+                )}
+                {noNextStepsDeals.length > 0 && (
+                  <span style={{ color: 'var(--status-red)' }}> · {noNextStepsDeals.length} no next steps</span>
+                )}
               </p>
             </div>
           </div>
@@ -229,9 +273,26 @@ function SellerRow({
             {row.target > 0 && <ProgressBar ratio={row.ratio} tone={tone} />}
           </div>
         </td>
-        {/* Risk */}
+        {/* Risk coaching */}
         <td className="py-2 px-3">
-          <RiskPill atRisk={row.atRisk > 0} label={row.atRisk > 0 ? 'At risk' : 'On track'} />
+          {staleDeals.length === 0 && noNextStepsDeals.length === 0 ? (
+            <span className="text-11" style={{ color: 'var(--status-green)', background: 'var(--status-green-bg)', borderRadius: 'var(--radius-sm)', padding: '2px 7px' }}>
+              On track
+            </span>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {staleDeals.length > 0 && (
+                <span className="text-11" style={{ color: 'var(--status-amber-text)' }}>
+                  {staleDeals.length} stale
+                </span>
+              )}
+              {noNextStepsDeals.length > 0 && (
+                <span className="text-11" style={{ color: 'var(--status-red-text)' }}>
+                  {noNextStepsDeals.length} no next steps
+                </span>
+              )}
+            </div>
+          )}
         </td>
         {/* Trend placeholder (8-wk sparkline – static for now) */}
         <td className="py-2 px-3">
@@ -285,29 +346,39 @@ function SellerRow({
                   <p className="text-11 text-text-secondary mb-2">Open deals ({sellerDeals.length})</p>
                   <div className="flex flex-col gap-0">
                     {sellerDeals.slice(0, 8).map((d, i) => {
-                      const tone = riskTone(d);
+                      const stageN = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
+                      const staleInfo = d.item_id ? staleness.get(d.item_id) : undefined;
+                      const threshold = stageN != null ? (STALENESS_THRESHOLD[stageN] ?? 30) : 30;
+                      const isStale = staleInfo != null && staleInfo.days_stale >= threshold;
+                      const meetingDate = d.next_meeting_date
+                        ? new Date(String(d.next_meeting_date).slice(0, 10) + 'T12:00:00')
+                        : null;
+                      const noNextSteps = !meetingDate || meetingDate < today;
+                      const leftColor = isStale && noNextSteps ? 'var(--status-red)'
+                        : isStale || noNextSteps ? 'var(--status-amber)'
+                        : 'var(--border-hairline)';
                       return (
                         <div
                           key={i}
                           className="flex items-center gap-3 py-1.5"
                           style={{ borderTop: i > 0 ? '0.5px solid var(--border-hairline)' : undefined }}
                         >
-                          <span
-                            className="flex-shrink-0 w-0.5 self-stretch"
-                            style={{
-                              background: tone === 'green' ? 'var(--status-green)'
-                                : tone === 'red' ? 'var(--status-red)'
-                                  : 'var(--status-amber)',
-                            }}
-                          />
+                          <span className="flex-shrink-0 w-0.5 self-stretch" style={{ background: leftColor }} />
                           <div className="flex-1 min-w-0">
                             <p className="text-13 text-text-primary truncate">{dealDisplay(d)}</p>
                             <p className="text-11 text-text-tertiary">{stageLabel(d.stage ?? d.deal_stage ?? d.dealStage)} · {d.leadership_quarter.label}</p>
                           </div>
-                          <span className="text-13 tabular-nums text-text-secondary flex-shrink-0">
-                            {formatCurrency(d.leadership_contribution)}
-                          </span>
-                          <RiskPill atRisk={d.leadership_risk.atRisk} label={d.leadership_risk.label} />
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isStale && (
+                              <StaleBadge itemId={d.item_id} stageNum={stageN} staleness={staleness} />
+                            )}
+                            {noNextSteps && (
+                              <NoNextStepsBadge nextMeetingDate={d.next_meeting_date} />
+                            )}
+                            <span className="text-13 tabular-nums text-text-secondary">
+                              {formatCurrency(d.leadership_contribution)}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
@@ -345,7 +416,7 @@ function SellerRow({
 
 type RiskSortKey = 'seller' | 'deal' | 'stage' | 'days' | 'value';
 
-function AtRiskTable({ deals }: { deals: RichDealRow[] }) {
+function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Map<string, DealStaleness> }) {
   const [sortKey, setSortKey] = useState<RiskSortKey>('value');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -354,12 +425,14 @@ function AtRiskTable({ deals }: { deals: RichDealRow[] }) {
     else { setSortKey(key); setSortDir('desc'); }
   }
 
+  const stalenessDays = (d: RichDealRow) => staleness.get(d.item_id ?? '')?.days_stale ?? null;
+
   const sorted = [...deals].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortKey === 'seller') return a.leadership_seller.localeCompare(b.leadership_seller) * dir;
     if (sortKey === 'deal') return dealDisplay(a).localeCompare(dealDisplay(b)) * dir;
     if (sortKey === 'stage') return (stageLabel(a.stage ?? a.deal_stage) ?? '').localeCompare(stageLabel(b.stage ?? b.deal_stage) ?? '') * dir;
-    if (sortKey === 'days') return ((daysStuck(a) ?? 0) - (daysStuck(b) ?? 0)) * dir;
+    if (sortKey === 'days') return ((stalenessDays(a) ?? 0) - (stalenessDays(b) ?? 0)) * dir;
     return ((a.leadership_contribution ?? 0) - (b.leadership_contribution ?? 0)) * dir;
   });
 
@@ -392,23 +465,42 @@ function AtRiskTable({ deals }: { deals: RichDealRow[] }) {
         </thead>
         <tbody>
           {sorted.map((d, i) => {
-            const tone = riskTone(d);
-            const days = daysStuck(d);
+            const days = stalenessDays(d);
+            const stageN = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
+            const threshold = stageN != null ? (STALENESS_THRESHOLD[stageN] ?? 30) : 30;
+            const isStale = days != null && days >= threshold;
+            const today = new Date(); today.setHours(12, 0, 0, 0);
+            const meeting = d.next_meeting_date
+              ? new Date(String(d.next_meeting_date).slice(0, 10) + 'T12:00:00')
+              : null;
+            const noNextSteps = !meeting || meeting < today;
+            const leftColor = isStale && noNextSteps ? 'var(--status-red)'
+              : isStale || noNextSteps ? 'var(--status-amber)'
+              : 'var(--border-hairline)';
             return (
               <tr
                 key={i}
                 className="hover:bg-bg-hover"
                 style={{
-                  borderLeft: `2px solid ${tone === 'red' ? 'var(--status-red)' : 'var(--status-amber)'}`,
+                  borderLeft: `2px solid ${leftColor}`,
                   borderTop: '0.5px solid var(--border-hairline)',
                 }}
               >
                 <td className="py-2 pr-4 text-text-primary pl-2">{d.leadership_seller}</td>
                 <td className="py-2 pr-4 text-text-primary max-w-xs truncate">{dealDisplay(d)}</td>
                 <td className="py-2 pr-4 text-text-secondary">{stageLabel(d.stage ?? d.deal_stage)}</td>
-                <td className="py-2 pr-4 tabular-nums text-text-secondary">{days != null ? `${days}d` : '—'}</td>
-                <td className="py-2 pr-4 text-text-secondary tabular-nums">{d.next_meeting_date ?? '—'}</td>
-                <td className="py-2 pr-4 text-text-secondary text-11 max-w-xs">{d.leadership_risk.label}</td>
+                <td className="py-2 pr-4 tabular-nums" style={{ color: isStale ? 'var(--status-amber)' : 'var(--text-secondary)' }}>
+                  {days != null ? `${days}d` : '—'}
+                </td>
+                <td className="py-2 pr-4 tabular-nums" style={{ color: noNextSteps ? 'var(--status-red)' : 'var(--text-secondary)' }}>
+                  {d.next_meeting_date ? String(d.next_meeting_date).slice(0, 10) : '—'}
+                </td>
+                <td className="py-2 pr-4 text-11 max-w-xs">
+                  <div className="flex flex-wrap gap-1">
+                    {isStale && <StaleBadge itemId={d.item_id} stageNum={stageN} staleness={staleness} />}
+                    {noNextSteps && <NoNextStepsBadge nextMeetingDate={d.next_meeting_date} />}
+                  </div>
+                </td>
                 <td className="py-2 pr-4 tabular-nums text-text-primary text-right">{formatCurrency(d.leadership_contribution)}</td>
               </tr>
             );
@@ -484,6 +576,9 @@ export function VerticalPerformance() {
   const atRiskDeals = allOpenForFilter.filter((d) => d.leadership_risk.atRisk);
   const ratio = totalTarget > 0 ? totalEv / totalTarget : 0;
   const ratioT = ratioTone(ratio);
+
+  const stalenessQuery = useDealStaleness();
+  const staleness = stalenessQuery.data ?? new Map<string, DealStaleness>();
 
   const isLoading = sharedStore.isLoading || versionQuery.isLoading;
   const error = sharedStore.error ?? versionQuery.error;
@@ -654,7 +749,7 @@ export function VerticalPerformance() {
                   </tr>
                 ) : (
                   aggregates.map((r) => (
-                    <SellerRow key={r.seller} row={r} quarterFocus={quarterFocus} />
+                    <SellerRow key={r.seller} row={r} quarterFocus={quarterFocus} staleness={staleness} />
                   ))
                 )}
               </tbody>
@@ -675,7 +770,14 @@ export function VerticalPerformance() {
                       </span>
                     </td>
                     <td className="py-2 px-3">
-                      <RiskPill atRisk={atRiskDeals.length > 0} label="At risk" />
+                      <span className="text-11" style={{
+                        color: atRiskDeals.length > 0 ? 'var(--status-amber-text)' : 'var(--status-green)',
+                        background: atRiskDeals.length > 0 ? 'var(--status-amber-bg)' : 'var(--status-green-bg)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '2px 7px',
+                      }}>
+                        {atRiskDeals.length > 0 ? `${atRiskDeals.length} flagged` : 'On track'}
+                      </span>
                     </td>
                     <td colSpan={2} />
                   </tr>
@@ -690,7 +792,7 @@ export function VerticalPerformance() {
               className="bg-bg-card p-4"
               style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-lg)' }}
             >
-              <AtRiskTable deals={atRiskDeals} />
+              <AtRiskTable deals={atRiskDeals} staleness={staleness} />
             </div>
           )}
         </>
