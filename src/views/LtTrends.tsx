@@ -282,19 +282,19 @@ export function LtTrends() {
       ) : (
         <div className="space-y-4">
           <MetricTable
-            title="Actuals — won revenue (quarter-paced)"
+            title="Booked — won revenue (quarter-paced)"
             points={shownPoints}
             getValue={(p, s) => computeActuals(p.dataset, s, p.date)}
             format="money"
           />
           <MetricTable
-            title="Pipeline EV (empirical stage probability)"
+            title="Weighted pipeline (empirical stage probability)"
             points={shownPoints}
             getValue={(p, s) => computePipelineEv(p.dataset, s, p.date)}
             format="money"
           />
           <MetricTable
-            title="Projected outcome (actuals + EV)"
+            title="Projected outcome (booked + weighted pipeline)"
             points={shownPoints}
             getValue={(p, s) => computeActuals(p.dataset, s, p.date) + computePipelineEv(p.dataset, s, p.date)}
             format="money"

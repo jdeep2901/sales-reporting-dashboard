@@ -203,16 +203,21 @@ function SellerRow({
         <td className="py-2 px-3 text-13 text-text-primary tabular-nums text-right">
           {row.target > 0 ? formatCurrency(row.target) : <span className="text-text-tertiary">—</span>}
         </td>
-        {/* Actual + est */}
+        {/* Booked + committed */}
         <td className="py-2 px-3 text-13 text-text-primary tabular-nums text-right">
-          {formatCurrency(row.actualEstimated)}
-          {row.actual > 0 && (
-            <p className="text-11 text-text-tertiary">{formatCurrency(row.actual)} closed</p>
+          {formatCurrency(row.bookedCommitted)}
+          {row.booked > 0 && (
+            <p className="text-11 text-text-tertiary">{formatCurrency(row.booked)} booked</p>
           )}
         </td>
-        {/* EV */}
+        {/* Weighted pipeline */}
         <td className="py-2 px-3 text-13 text-text-primary tabular-nums text-right">
           {formatCurrency(row.ev)}
+          {row.flooredEv > 0 && row.ev > 0 && row.flooredEv / row.ev > 0.4 && (
+            <p className="text-11" style={{ color: 'var(--status-amber)' }}>
+              {Math.round(row.flooredEv / row.ev * 100)}% top-of-funnel
+            </p>
+          )}
         </td>
         {/* EV / target progress */}
         <td className="py-2 px-3" style={{ minWidth: 120 }}>
@@ -251,9 +256,9 @@ function SellerRow({
                       <tr className="text-11 text-text-tertiary">
                         <th className="text-left pb-1 pr-4 font-normal">Quarter</th>
                         <th className="text-right pb-1 px-3 font-normal">Target</th>
-                        <th className="text-right pb-1 px-3 font-normal">Actual</th>
-                        <th className="text-right pb-1 px-3 font-normal">Est. pipeline</th>
-                        <th className="text-right pb-1 px-3 font-normal">EV</th>
+                        <th className="text-right pb-1 px-3 font-normal">Booked</th>
+                        <th className="text-right pb-1 px-3 font-normal">Committed</th>
+                        <th className="text-right pb-1 px-3 font-normal">Wtd pipeline</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -263,8 +268,8 @@ function SellerRow({
                           <td className="py-1 px-3 text-right tabular-nums">
                             {q.target > 0 ? formatCurrency(q.target) : <span className="text-text-tertiary">—</span>}
                           </td>
-                          <td className="py-1 px-3 text-right tabular-nums">{formatCurrency(q.actual)}</td>
-                          <td className="py-1 px-3 text-right tabular-nums">{formatCurrency(q.estimated)}</td>
+                          <td className="py-1 px-3 text-right tabular-nums">{formatCurrency(q.booked)}</td>
+                          <td className="py-1 px-3 text-right tabular-nums">{formatCurrency(q.committed)}</td>
                           <td className="py-1 px-3 text-right tabular-nums">{formatCurrency(q.ev)}</td>
                         </tr>
                       ))}
@@ -473,8 +478,8 @@ export function VerticalPerformance() {
 
   const totalTarget = aggregates.reduce((a, r) => a + r.target, 0);
   const totalEv = aggregates.reduce((a, r) => a + r.ev, 0);
-  const totalActual = aggregates.reduce((a, r) => a + r.actual, 0);
-  const totalActualEst = aggregates.reduce((a, r) => a + r.actualEstimated, 0);
+  const totalActual = aggregates.reduce((a, r) => a + r.booked, 0);
+  const totalActualEst = aggregates.reduce((a, r) => a + r.bookedCommitted, 0);
   const atRiskDeals = allOpenForFilter.filter((d) => d.leadership_risk.atRisk);
   const ratio = totalTarget > 0 ? totalEv / totalTarget : 0;
   const ratioT = ratioTone(ratio);
@@ -489,12 +494,12 @@ export function VerticalPerformance() {
     const lines = [
       `Sales review — week of ${week}`,
       '',
-      `Target: ${formatCurrency(totalTarget)} | EV: ${formatCurrency(totalEv)} | Actual: ${formatCurrency(totalActual)}`,
+      `Target: ${formatCurrency(totalTarget)} | Wtd pipeline: ${formatCurrency(totalEv)} | Booked: ${formatCurrency(totalActual)}`,
       '',
-      '| Seller | Target | Actual+Est | EV | EV/target | At risk |',
+      '| Seller | Target | Booked+committed | Wtd pipeline | Coverage | At risk |',
       '|---|---:|---:|---:|---:|---:|',
       ...aggregates.map((r) =>
-        `| ${r.seller} | ${formatCurrency(r.target)} | ${formatCurrency(r.actualEstimated)} | ${formatCurrency(r.ev)} | ${r.target ? `${r.ratio.toFixed(2)}x` : '—'} | ${r.atRisk}/${r.open} |`,
+        `| ${r.seller} | ${formatCurrency(r.target)} | ${formatCurrency(r.bookedCommitted)} | ${formatCurrency(r.ev)} | ${r.target ? `${r.ratio.toFixed(2)}x` : '—'} | ${r.atRisk}/${r.open} |`,
       ),
     ];
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
@@ -564,13 +569,13 @@ export function VerticalPerformance() {
               tone="gray"
             />
             <KpiCard
-              label="Actual"
+              label="Booked"
               value={formatCurrency(totalActual)}
               sub={totalActual > 0 ? 'Closed revenue' : 'No closes yet'}
               tone={totalActual > 0 ? 'green' : 'gray'}
             />
             <KpiCard
-              label="EV (empirical)"
+              label="Weighted pipeline"
               value={formatCurrency(totalEv)}
               sub={`${totalEv >= totalTarget ? '+' : ''}${formatCurrency(totalEv - totalTarget)} vs target`}
               tone={totalEv >= totalTarget ? 'green' : 'red'}
@@ -629,8 +634,8 @@ export function VerticalPerformance() {
                 >
                   <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
                   <th className="text-right py-2 px-3 font-normal">Target</th>
-                  <th className="text-right py-2 px-3 font-normal">Actual + est</th>
-                  <th className="text-right py-2 px-3 font-normal">EV</th>
+                  <th className="text-right py-2 px-3 font-normal">Booked + committed</th>
+                  <th className="text-right py-2 px-3 font-normal">Wtd pipeline</th>
                   <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 120 }}>Coverage</th>
                   <th className="text-left py-2 px-3 font-normal">Risk</th>
                   <th className="text-left py-2 px-3 font-normal">Trend</th>

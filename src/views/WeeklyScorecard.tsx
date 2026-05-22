@@ -678,7 +678,7 @@ function FunnelSection({
             </button>
           )}
         </div>
-        <span className="text-12 text-text-tertiary tabular-nums">Total EV {formatCurrency(totalEv)}</span>
+        <span className="text-12 text-text-tertiary tabular-nums">Total wtd pipeline {formatCurrency(totalEv)}</span>
       </div>
       <div className="bg-bg-card">
         <div className="grid px-4 py-2 text-11 text-text-tertiary font-medium"
@@ -687,7 +687,7 @@ function FunnelSection({
           <span>Shape</span>
           <span className="text-right">Deals</span>
           <span className="text-right">Pipeline $</span>
-          <span className="text-right">EV</span>
+          <span className="text-right">Wtd pipeline</span>
         </div>
         {stats.map((s) => {
           const delta = s.count - s.prevCount;
@@ -899,7 +899,7 @@ function ClosureSection({ qLabel, deals, target, collapsed }: { qLabel: string; 
         </div>
         <div className="flex items-center gap-3 mt-1.5">
           <span className="text-22 font-medium tabular-nums" style={{ color: coverageColor }}>{formatCurrency(totalEv)}</span>
-          <span className="text-12 text-text-tertiary">EV</span>
+          <span className="text-12 text-text-tertiary">Wtd pipeline</span>
           {target > 0 && (
             <>
               <span className="text-12 text-text-tertiary">·</span>
@@ -927,7 +927,7 @@ function ClosureSection({ qLabel, deals, target, collapsed }: { qLabel: string; 
               <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                 <th className="text-left py-2 px-4 text-text-secondary font-medium">Deal</th>
                 <th className="text-left py-2 px-2 text-text-secondary font-medium">Stage</th>
-                <th className="text-right py-2 px-2 text-text-secondary font-medium">EV</th>
+                <th className="text-right py-2 px-2 text-text-secondary font-medium">Wtd pipeline</th>
                 <th className="text-right py-2 px-2 text-text-secondary font-medium">Size</th>
                 <th className="text-right py-2 px-2 text-text-secondary font-medium">Start date</th>
                 <th className="text-right py-2 px-4 text-text-secondary font-medium">Next meeting</th>
@@ -1046,7 +1046,7 @@ function DealMomentumSection({
               <th className="text-left py-2 px-4 text-text-secondary font-medium">Deal</th>
               <th className="text-left py-2 px-2 text-text-secondary font-medium">Status</th>
               <th className="text-left py-2 px-2 text-text-secondary font-medium">Stage</th>
-              <th className="text-right py-2 px-2 text-text-secondary font-medium">EV</th>
+              <th className="text-right py-2 px-2 text-text-secondary font-medium">Wtd pipeline</th>
               <th className="text-right py-2 px-2 text-text-secondary font-medium">Size</th>
               <th className="text-right py-2 px-2 text-text-secondary font-medium">Days in stage</th>
               <th className="text-right py-2 px-4 text-text-secondary font-medium">Next meeting</th>
@@ -1213,6 +1213,8 @@ export function WeeklyScorecard() {
   // ── KPI aggregates ──
   const totalEv = stageStats.reduce((a, s) => a + s.totalEv, 0);
   const prevTotalEvAll = stageStats.reduce((a, s) => a + s.prevTotalEv, 0);
+  const topOfFunnelEv = stageStats.filter((s) => s.stageN >= 1 && s.stageN <= 4).reduce((a, s) => a + s.totalEv, 0);
+  const topOfFunnelPct = totalEv > 0 ? topOfFunnelEv / totalEv : 0;
   const evDeltaKpi = prevRows.length > 0 ? totalEv - prevTotalEvAll : 0;
 
   const totalActiveDeals = stageStats.reduce((a, s) => a + s.count, 0);
@@ -1304,7 +1306,7 @@ export function WeeklyScorecard() {
             {coverage > 0 ? `${coverage.toFixed(1)}x` : '—'}
           </div>
           <div className="text-11 text-text-tertiary mt-1">
-            EV {formatCurrency(totalEv)} · T {formatCurrency(overallTarget)}
+            Wt. pipeline {formatCurrency(totalEv)} · T {formatCurrency(overallTarget)}
           </div>
         </div>
 
@@ -1325,7 +1327,7 @@ export function WeeklyScorecard() {
 
         {/* Late stage */}
         <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: lateCount > 0 ? '2px solid var(--status-green)' : undefined }}>
-          <div className="text-11 text-text-secondary mb-1">Late stage (5–6)</div>
+          <div className="text-11 text-text-secondary mb-1">Late stage (5–6) — committed</div>
           <div className="flex items-baseline gap-2">
             <span className="text-22 font-medium text-text-primary tabular-nums">{lateCount}</span>
             {lateCountDelta !== 0 && prevRows.length > 0 && (
@@ -1336,13 +1338,13 @@ export function WeeklyScorecard() {
             )}
           </div>
           <div className="text-11 text-text-tertiary mt-1">
-            {lateEv > 0 ? `${formatCurrency(lateEv)} EV` : 'no deals'}
+            {lateEv > 0 ? `${formatCurrency(lateEv)} wt. pipeline` : 'no deals'}
           </div>
         </div>
 
-        {/* Pipeline EV */}
+        {/* Weighted pipeline */}
         <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)' }}>
-          <div className="text-11 text-text-secondary mb-1">Pipeline EV</div>
+          <div className="text-11 text-text-secondary mb-1">Weighted pipeline</div>
           <div className="flex items-baseline gap-2">
             <span className="text-22 font-medium text-text-primary tabular-nums">
               {totalEv > 0 ? formatCurrency(totalEv) : '—'}
@@ -1354,12 +1356,16 @@ export function WeeklyScorecard() {
               </span>
             )}
           </div>
-          <div className="text-11 text-text-tertiary mt-1">expected value, all stages</div>
+          <div className="text-11 mt-1" style={{ color: topOfFunnelPct > 0.5 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+            {topOfFunnelPct > 0.5
+              ? `${Math.round(topOfFunnelPct * 100)}% top-of-funnel (stages 1–4)`
+              : 'prob-weighted, all stages'}
+          </div>
         </div>
 
-        {/* Actuals */}
+        {/* Booked */}
         <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: currentActuals > 0 ? '2px solid var(--status-green)' : undefined }}>
-          <div className="text-11 text-text-secondary mb-1">{quarterLabels.current} actuals</div>
+          <div className="text-11 text-text-secondary mb-1">{quarterLabels.current} booked</div>
           <div className="flex items-baseline gap-2">
             <span className="text-22 font-medium text-text-primary tabular-nums">
               {currentActuals > 0 ? formatCurrency(currentActuals) : '—'}

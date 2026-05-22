@@ -313,7 +313,7 @@ export function OperatingMetrics() {
   const computedMetrics = [
     {
       id: 1,
-      label: 'Pipeline EV (next 4 quarters)',
+      label: 'Weighted pipeline (next 4 quarters)',
       category: 'Revenue',
       fmt: 'money' as const,
       getValue: (ws: Date, ds: Record<string, unknown> | null) => metric_pipelineEv4Q(ds, seller, ws),

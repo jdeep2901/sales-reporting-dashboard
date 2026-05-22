@@ -121,19 +121,21 @@ export interface QuarterSummary {
   seller: string;
   quarter: { key: 'current' | 'next'; label: string };
   target: number;
-  actual: number;
-  estimated: number;
-  actualEstimated: number;
+  booked: number;
+  committed: number;
+  bookedCommitted: number;
   ev: number;
+  flooredEv: number;
 }
 
 export interface SellerAggregate {
   seller: string;
   target: number;
-  actual: number;
-  estimated: number;
-  actualEstimated: number;
+  booked: number;
+  committed: number;
+  bookedCommitted: number;
   ev: number;
+  flooredEv: number;
   open: number;
   atRisk: number;
   riskExposure: number;
@@ -440,18 +442,22 @@ export function buildRows(
   for (const seller of ACTIVE_SELLERS) {
     for (const quarter of quarters) {
       const target = getTarget(targets, seller, quarter.label);
-      let actual = 0;
-      let estimated = 0;
+      let booked = 0;
+      let committed = 0;
       let ev = 0;
+      let flooredEv = 0;
 
       for (const r of rows) {
         if (!rowMatchesSeller(r, seller)) continue;
         if (isWonStage(r.stage ?? r.deal_stage ?? r.dealStage)) {
-          actual += quarterPacedAmount(r, quarter.label, dealSizeValue(r.deal_size));
+          booked += quarterPacedAmount(r, quarter.label, dealSizeValue(r.deal_size));
           continue;
         }
         if (!closureActiveStage(r)) continue;
-        const contrib = quarterPacedAmount(r, quarter.label, leadershipDealSize(r));
+        const n = stageNumber(r.stage ?? r.deal_stage ?? r.dealStage);
+        const rawSize = dealSizeValue(r.deal_size);
+        const displaySize = leadershipDealSize(r);
+        const contrib = quarterPacedAmount(r, quarter.label, displaySize);
         if (contrib > 0) {
           const risk = dealRisk(r);
           const partner = partnerSummary(r);
@@ -460,17 +466,23 @@ export function buildRows(
             leadership_seller: seller,
             leadership_quarter: quarter,
             leadership_contribution: contrib,
-            leadership_total_size: leadershipDealSize(r),
+            leadership_total_size: displaySize,
             leadership_risk: risk,
             leadership_partner: partner,
             leadership_action: recommendedAction(risk, partner),
           });
-          estimated += contrib;
+          // committed = stages 5-6 only (commercial + contracting), at actual face value
+          if (n != null && n >= 5) {
+            committed += quarterPacedAmount(r, quarter.label, rawSize);
+          }
         }
-        ev += empiricalEv(r, quarter.label);
+        const evContrib = empiricalEv(r, quarter.label);
+        ev += evContrib;
+        // all stage 1-4 EV uses the $100K floor — track as floored
+        if (n != null && n <= 4) flooredEv += evContrib;
       }
 
-      summary.push({ seller, quarter, target, actual, estimated, actualEstimated: actual + estimated, ev });
+      summary.push({ seller, quarter, target, booked, committed, bookedCommitted: booked + committed, ev, flooredEv });
     }
   }
 
@@ -496,17 +508,18 @@ export function aggregateSellers(
     if (!map.has(r.seller)) {
       map.set(r.seller, {
         seller: r.seller,
-        target: 0, actual: 0, estimated: 0, actualEstimated: 0, ev: 0,
+        target: 0, booked: 0, committed: 0, bookedCommitted: 0, ev: 0, flooredEv: 0,
         open: 0, atRisk: 0, riskExposure: 0, ratio: 0, gap: 0,
         quarters: [], deals: [],
       });
     }
     const s = map.get(r.seller)!;
     s.target += r.target;
-    s.actual += r.actual;
-    s.estimated += r.estimated;
-    s.actualEstimated += r.actualEstimated;
+    s.booked += r.booked;
+    s.committed += r.committed;
+    s.bookedCommitted += r.bookedCommitted;
     s.ev += r.ev;
+    s.flooredEv += r.flooredEv;
     s.quarters.push(r);
   }
 
