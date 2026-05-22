@@ -79,19 +79,6 @@ const toneClass: Record<Tone, string> = {
   gray: 'text-text-tertiary',
 };
 
-function KpiCard({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: Tone }) {
-  return (
-    <div
-      className="bg-bg-surface px-3 py-2 flex flex-col gap-0.5"
-      style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-md)', minWidth: 120 }}
-    >
-      <p className="text-11 text-text-secondary">{label}</p>
-      <p className="text-22 font-medium text-text-primary tabular-nums leading-tight">{value}</p>
-      <p className={`text-11 tabular-nums ${toneClass[tone]}`}>{sub}</p>
-    </div>
-  );
-}
-
 // ─── progress bar ─────────────────────────────────────────────────────────
 
 function ProgressBar({ ratio, tone }: { ratio: number; tone: Tone }) {
@@ -572,13 +559,48 @@ export function VerticalPerformance() {
   const totalTarget = aggregates.reduce((a, r) => a + r.target, 0);
   const totalEv = aggregates.reduce((a, r) => a + r.ev, 0);
   const totalActual = aggregates.reduce((a, r) => a + r.booked, 0);
+  const totalCommitted = aggregates.reduce((a, r) => a + r.committed, 0);
   const totalActualEst = aggregates.reduce((a, r) => a + r.bookedCommitted, 0);
+  const totalFlooredEv = aggregates.reduce((a, r) => a + r.flooredEv, 0);
   const atRiskDeals = allOpenForFilter.filter((d) => d.leadership_risk.atRisk);
   const ratio = totalTarget > 0 ? totalEv / totalTarget : 0;
   const ratioT = ratioTone(ratio);
 
+  // Forecast strip derived values (mirrors WS)
+  const forecast = totalActual + totalCommitted;
+  const forecastGap = forecast - totalTarget;
+  const forecastTone = totalTarget === 0 ? 'green' : forecast >= totalTarget ? 'green' : forecast >= totalTarget * 0.7 ? 'amber' : 'red';
+  const forecastColor = `var(--status-${forecastTone})`;
+  const pipelineCoverage = totalTarget > 0 ? totalEv / totalTarget : 0;
+  const topFunnelPct = totalEv > 0 ? totalFlooredEv / totalEv : 0;
+  const lateCount = allOpenForFilter.filter((d) => {
+    const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
+    return n != null && n >= 5;
+  }).length;
+
   const stalenessQuery = useDealStaleness();
   const staleness = stalenessQuery.data ?? new Map<string, DealStaleness>();
+
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const vpStaleCount = allOpenForFilter.filter((d) => {
+    if (!d.item_id) return false;
+    const s = staleness.get(d.item_id);
+    if (!s) return false;
+    const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
+    const threshold = n != null ? (STALENESS_THRESHOLD[n] ?? 30) : 30;
+    return s.days_stale >= threshold;
+  }).length;
+  const vpNoNextCount = allOpenForFilter.filter((d) => {
+    const meeting = d.next_meeting_date
+      ? new Date(String(d.next_meeting_date).slice(0, 10) + 'T12:00:00')
+      : null;
+    return !meeting || meeting < today;
+  }).length;
+
+  const quarterScopeLabel = quarterFocus === 'both'
+    ? `${quarterLabels.current}+${quarterLabels.next}`
+    : quarterFocus === 'current' ? quarterLabels.current : quarterLabels.next;
 
   const isLoading = sharedStore.isLoading || versionQuery.isLoading;
   const error = sharedStore.error ?? versionQuery.error;
@@ -656,38 +678,94 @@ export function VerticalPerformance() {
 
       {!isLoading && !error && (
         <>
-          {/* KPI strip */}
-          <div className="flex gap-3 flex-wrap">
-            <KpiCard
-              label={quarterFocus === 'both' ? `Target ${quarterLabels.current}+${quarterLabels.next}` : `Target ${quarterFocus === 'current' ? quarterLabels.current : quarterLabels.next}`}
-              value={totalTarget > 0 ? formatCurrency(totalTarget) : '—'}
-              sub={`${allOpenForFilter.length} open deals`}
-              tone="gray"
-            />
-            <KpiCard
-              label={quarterFocus === 'both' ? `Booked (${quarterLabels.current}+${quarterLabels.next})` : 'Booked'}
-              value={formatCurrency(totalActual)}
-              sub={totalActual > 0 ? 'Closed revenue' : 'No closes yet'}
-              tone={totalActual > 0 ? 'green' : 'gray'}
-            />
-            <KpiCard
-              label={quarterFocus === 'both' ? `Wtd pipeline (${quarterLabels.current}+${quarterLabels.next})` : 'Weighted pipeline'}
-              value={formatCurrency(totalEv)}
-              sub={`${totalEv >= totalTarget ? '+' : ''}${formatCurrency(totalEv - totalTarget)} vs target`}
-              tone={totalEv >= totalTarget ? 'green' : 'red'}
-            />
-            <KpiCard
-              label="Forecast coverage"
-              value={totalTarget > 0 ? `${ratio.toFixed(2)}x` : '—'}
-              sub={ratio >= 0.6 ? 'At or above 0.6× bar' : 'Below 0.6× bar'}
-              tone={ratioT}
-            />
-            <KpiCard
-              label="At risk"
-              value={`${atRiskDeals.length}/${allOpenForFilter.length}`}
-              sub={`${formatCurrency(atRiskDeals.reduce((a, d) => a + (d.leadership_contribution ?? 0), 0))} exposure`}
-              tone={atRiskDeals.length > 0 ? 'red' : 'green'}
-            />
+          {/* Forecast strip */}
+          <div className="rounded-lg px-4 py-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${forecastColor}` }}>
+            <div className="flex items-start justify-between gap-6">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-3 mb-1">
+                  <span className="text-11 text-text-secondary">Forecast</span>
+                  <span className="text-22 font-medium tabular-nums" style={{ color: forecastColor }}>
+                    {forecast > 0 ? formatCurrency(forecast) : '—'}
+                  </span>
+                  {totalTarget > 0 && (
+                    <span className="text-12 tabular-nums" style={{ color: forecastColor }}>
+                      {forecastGap >= 0 ? '+' : ''}{formatCurrency(forecastGap)} vs {quarterScopeLabel} target {formatCurrency(totalTarget)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-11 text-text-tertiary mb-2">
+                  {formatCurrency(totalActual)} booked · {formatCurrency(totalCommitted)} committed (stages 5–6)
+                </div>
+                {totalTarget > 0 && (
+                  <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, (forecast / totalTarget) * 100)}%`, background: forecastColor }} />
+                  </div>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-11 text-text-secondary mb-1">Weighted pipeline</div>
+                <div className="text-13 font-medium tabular-nums text-text-primary">
+                  {totalEv > 0 ? formatCurrency(totalEv) : '—'}
+                </div>
+                <div className="text-11 mt-0.5" style={{ color: pipelineCoverage >= 1.5 ? 'var(--status-green)' : pipelineCoverage >= 0.8 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+                  {totalTarget > 0 ? `${pipelineCoverage.toFixed(1)}× target` : 'pending conversion'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4-column metric strip */}
+          <div className="grid grid-cols-4 gap-3">
+
+            {/* Booked */}
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: totalActual > 0 ? '2px solid var(--status-green)' : undefined }}>
+              <div className="text-11 text-text-secondary mb-1">Booked</div>
+              <div className="text-22 font-medium tabular-nums" style={{ color: totalActual > 0 ? 'var(--status-green)' : 'var(--text-primary)' }}>
+                {totalActual > 0 ? formatCurrency(totalActual) : '—'}
+              </div>
+              <div className="text-11 text-text-tertiary mt-1">won, {quarterScopeLabel} paced</div>
+            </div>
+
+            {/* Committed */}
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: totalCommitted > 0 ? '2px solid var(--accent)' : undefined }}>
+              <div className="text-11 text-text-secondary mb-1">Committed</div>
+              <div className="text-22 font-medium tabular-nums" style={{ color: totalCommitted > 0 ? 'var(--accent)' : 'var(--text-primary)' }}>
+                {totalCommitted > 0 ? formatCurrency(totalCommitted) : '—'}
+              </div>
+              <div className="text-11 text-text-tertiary mt-1">stages 5–6 · {lateCount} deal{lateCount !== 1 ? 's' : ''}</div>
+            </div>
+
+            {/* Weighted pipeline */}
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)' }}>
+              <div className="text-11 text-text-secondary mb-1">Weighted pipeline</div>
+              <div className="text-22 font-medium text-text-primary tabular-nums">
+                {totalEv > 0 ? formatCurrency(totalEv) : '—'}
+              </div>
+              <div className="text-11 mt-1" style={{ color: topFunnelPct > 0.5 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+                {topFunnelPct > 0.5 ? `${Math.round(topFunnelPct * 100)}% top-of-funnel` : 'prob-weighted, all stages'}
+              </div>
+            </div>
+
+            {/* Pipeline health */}
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: vpStaleCount > 0 ? '2px solid var(--status-amber)' : undefined }}>
+              <div className="text-11 text-text-secondary mb-2">Pipeline health</div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-12">
+                  <span className="text-text-tertiary">Stale in stage</span>
+                  <span className="font-medium tabular-nums" style={{ color: vpStaleCount > 0 ? 'var(--status-amber)' : 'var(--text-primary)' }}>{vpStaleCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-12">
+                  <span className="text-text-tertiary">No next steps</span>
+                  <span className="font-medium tabular-nums" style={{ color: vpNoNextCount > 0 ? 'var(--status-red)' : 'var(--text-primary)' }}>{vpNoNextCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-12">
+                  <span className="text-text-tertiary">Open deals</span>
+                  <span className="font-medium tabular-nums text-text-primary">{allOpenForFilter.length}</span>
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* Filters */}
