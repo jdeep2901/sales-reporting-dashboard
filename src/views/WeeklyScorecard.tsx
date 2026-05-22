@@ -1281,9 +1281,11 @@ export function WeeklyScorecard() {
   const overallTarget = seller === 'Overall'
     ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.current), 0)
     : getTarget(quarterTargets, seller, quarterLabels.current);
-  const coverage = overallTarget > 0 ? totalEv / overallTarget : 0;
-  const coverageTone = coverage >= 1.5 ? 'green' : coverage >= 0.8 ? 'amber' : 'red';
-  const coverageColor = `var(--status-${coverageTone})`;
+  const forecast = currentActuals + currentCommitted;
+  const forecastGap = forecast - overallTarget;
+  const forecastTone = overallTarget === 0 ? 'green' : forecast >= overallTarget ? 'green' : forecast >= overallTarget * 0.7 ? 'amber' : 'red';
+  const forecastColor = `var(--status-${forecastTone})`;
+  const pipelineCoverage = overallTarget > 0 ? totalEv / overallTarget : 0;
 
   const nextTarget = seller === 'Overall'
     ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.next), 0)
@@ -1333,32 +1335,46 @@ export function WeeklyScorecard() {
         </div>
       </div>
 
-      {/* Coverage header strip */}
-      <div className="rounded-lg px-4 py-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${coverageColor}` }}>
-        <div className="flex items-center justify-between gap-4 mb-2">
-          <div className="flex items-baseline gap-3">
-            {overallTarget > 0 && (
-              <span className="text-11 text-text-secondary">
-                {quarterLabels.current} target {formatCurrency(overallTarget)}
+      {/* Forecast strip */}
+      <div className="rounded-lg px-4 py-3" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${forecastColor}` }}>
+        <div className="flex items-start justify-between gap-6">
+
+          {/* Left: forecast vs target */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-3 mb-1">
+              <span className="text-11 text-text-secondary">Forecast</span>
+              <span className="text-22 font-medium tabular-nums" style={{ color: forecastColor }}>
+                {forecast > 0 ? formatCurrency(forecast) : '—'}
               </span>
-            )}
-            <span className="text-22 font-medium tabular-nums" style={{ color: overallTarget > 0 ? coverageColor : 'var(--text-primary)' }}>
-              {coverage > 0 ? `${coverage.toFixed(1)}x` : '—'}
-            </span>
+              {overallTarget > 0 && (
+                <span className="text-12 tabular-nums" style={{ color: forecastColor }}>
+                  {forecastGap >= 0 ? '+' : ''}{formatCurrency(forecastGap)} vs {quarterLabels.current} target {formatCurrency(overallTarget)}
+                </span>
+              )}
+            </div>
+            <div className="text-11 text-text-tertiary mb-2">
+              {formatCurrency(currentActuals)} booked · {formatCurrency(currentCommitted)} committed (stages 5–6)
+            </div>
             {overallTarget > 0 && (
-              <span className="text-12 tabular-nums" style={{ color: coverageColor }}>
-                {totalEv >= overallTarget ? '+' : ''}{formatCurrency(totalEv - overallTarget)} vs target
-              </span>
+              <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+                <div className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (forecast / overallTarget) * 100)}%`, background: forecastColor }} />
+              </div>
             )}
           </div>
-          <span className="text-11 text-text-tertiary">{totalActiveDeals} active deals</span>
+
+          {/* Right: pipeline coverage signal */}
+          <div className="text-right flex-shrink-0">
+            <div className="text-11 text-text-secondary mb-1">Weighted pipeline</div>
+            <div className="text-13 font-medium tabular-nums text-text-primary">
+              {totalEv > 0 ? formatCurrency(totalEv) : '—'}
+            </div>
+            <div className="text-11 mt-0.5" style={{ color: pipelineCoverage >= 1.5 ? 'var(--status-green)' : pipelineCoverage >= 0.8 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+              {overallTarget > 0 ? `${pipelineCoverage.toFixed(1)}× target` : 'pending conversion'}
+            </div>
+          </div>
+
         </div>
-        {overallTarget > 0 && (
-          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
-            <div className="h-full rounded-full transition-all"
-              style={{ width: `${Math.min(100, coverage * 100)}%`, background: coverageColor }} />
-          </div>
-        )}
       </div>
 
       {/* 4-column metric strip */}
