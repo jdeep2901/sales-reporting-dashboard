@@ -992,6 +992,12 @@ export function WeeklyScorecard() {
 
   const latestId = String(storeData?.latest_version_id ?? storeData?.active_version_id ?? '');
 
+  const allVersionsSortedAsc = useMemo(() => {
+    return [...versionsMeta].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }, [versionsMeta]);
+
+  const versionNumber = (id: string) => allVersionsSortedAsc.findIndex((v) => v.id === id) + 1;
+
   const sortedVersions = useMemo(() => {
     return [...versionsMeta]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -1103,9 +1109,9 @@ export function WeeklyScorecard() {
                 <option value="">Auto (previous)</option>
                 {sortedVersions.slice(0, 20).map((v) => {
                   const d = new Date(v.created_at);
-                  const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) +
-                    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                  return <option key={v.id} value={v.id}>{label}</option>;
+                  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                  return <option key={v.id} value={v.id}>v{versionNumber(v.id)} — {date} {time}</option>;
                 })}
               </select>
             </div>

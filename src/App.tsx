@@ -1,7 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Tabs, type TabItem } from '@/components/Tabs';
-import { AuthProvider } from '@/lib/auth';
+import { AuthProvider, useAuth } from '@/lib/auth';
 import { SellerProvider } from '@/lib/sellerContext';
 import mathcoLogo from '/assets/mathco-logo.svg';
 import { LoginGate } from '@/components/LoginGate';
@@ -44,7 +44,6 @@ const mainTabs: TabItem[] = [
 ];
 
 const appendixTabs: TabItem[] = [
-  { label: 'Admin', to: '/admin' },
   { label: 'Forecast (EV)', to: '/forecast' },
   { label: 'Forecast (actuals)', to: '/forecast-actuals' },
   { label: 'Partnerships', to: '/partnerships' },
@@ -60,6 +59,23 @@ const appendixTabs: TabItem[] = [
   { label: 'Assumptions', to: '/assumptions' },
 ];
 
+function ProfileButton() {
+  const { credentials } = useAuth();
+  const username = credentials?.username ?? '';
+  const initial = username[0]?.toUpperCase() ?? '?';
+  return (
+    <Link to="/admin" className="flex items-center gap-2" title="Admin panel">
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center text-11 font-medium shrink-0"
+        style={{ background: 'var(--accent)', color: '#fff' }}
+      >
+        {initial}
+      </div>
+      <span className="text-12 text-text-secondary">{username}</span>
+    </Link>
+  );
+}
+
 function Shell() {
   return (
     <LoginGate>
@@ -73,7 +89,10 @@ function Shell() {
             <img src={mathcoLogo} alt="MathCo" className="h-5 w-auto" />
             <span className="text-13 font-medium text-text-primary">Sales reporting</span>
           </div>
-          <span className="text-11 text-text-tertiary tabular-nums">{appVersion}</span>
+          <div className="flex items-center gap-4">
+            <span className="text-11 text-text-tertiary tabular-nums">{appVersion}</span>
+            <ProfileButton />
+          </div>
         </header>
 
         {/* Main nav */}

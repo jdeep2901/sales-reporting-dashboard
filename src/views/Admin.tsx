@@ -310,7 +310,7 @@ function SyncSection({ settings }: { settings: Record<string, unknown> | null })
     setSyncing(true);
     setSyncMsg('');
     try {
-      const url = `${SUPABASE_FUNCTIONS_URL}/functions/v1/sync-monday-board`;
+      const url = `${SUPABASE_FUNCTIONS_URL}/sync-monday-board`;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
       const res = await fetch(url, {
         method: 'POST',
@@ -382,9 +382,14 @@ export function Admin() {
     const dataset = storeData?.dataset as Record<string, unknown> | null;
     const asOfDate = (dataset?.scorecard as Record<string, unknown> | null)?.as_of_date as string | null ?? null;
     const { current, next } = buildQuarterLabels(asOfDate);
+    const qSortKey = (q: string) => {
+      const m = q.match(/^Q(\d)'(\d{2})$/);
+      return m ? (2000 + parseInt(m[2])) * 10 + parseInt(m[1]) : 0;
+    };
+    const currentKey = qSortKey(current);
     const existingQs = Array.from(new Set(
       Object.values(targets).map((t) => t.quarter?.trim().toUpperCase()).filter(Boolean)
-    )).sort();
+    )).filter((q) => qSortKey(q) >= currentKey).sort();
     const all = Array.from(new Set([...existingQs, current, next])).sort();
     return all.length ? all : [current, next];
   }, [targets, storeData]);

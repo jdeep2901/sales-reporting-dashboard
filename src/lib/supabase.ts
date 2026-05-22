@@ -28,4 +28,4 @@ export async function rpc<T = unknown>(
   return (Array.isArray(data) ? data[0] ?? null : data) as T;
 }
 
-export const SUPABASE_FUNCTIONS_URL = `${supabaseUrl.replace('supabase.co', 'functions.supabase.co')}`;
+export const SUPABASE_FUNCTIONS_URL = `${supabaseUrl}/functions/v1`;
