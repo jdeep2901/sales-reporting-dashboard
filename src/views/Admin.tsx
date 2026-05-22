@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useSaveSharedStore } from '@/lib/queries';
 import { rpc, SUPABASE_FUNCTIONS_URL } from '@/lib/supabase';
@@ -298,37 +299,34 @@ function UsersSection({ users, currentUsername, onRefresh }: {
   );
 }
 
-function SyncSection({ settings }: { settings: Record<string, unknown> | null }) {
+type SyncResult = { ok: true; board_name: string; item_count: number; version_id: string } | { ok: false; error: string };
+
+function SyncSection({ settings, username }: { settings: Record<string, unknown> | null; username: string }) {
   const { credentials } = useAuth();
+  const qc = useQueryClient();
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState('');
+  const [result, setResult] = useState<SyncResult | null>(null);
 
   const lastSync = settings?.last_sync_at ? fmtTs(String(settings.last_sync_at)) : '—';
   const boardUrl = String(settings?.monday_board_url ?? settings?.monday_board_id ?? 'https://themathcocrmtrial.monday.com/boards/6218900009');
 
   const triggerSync = async () => {
     setSyncing(true);
-    setSyncMsg('');
+    setResult(null);
     try {
       const url = `${SUPABASE_FUNCTIONS_URL}/sync-monday-board`;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({
-          username: credentials!.username,
-          password: credentials!.password,
-          board_url: boardUrl,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}` },
+        body: JSON.stringify({ username: credentials!.username, password: credentials!.password, board_url: boardUrl }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
-      setSyncMsg(`Sync triggered. ${json?.message ?? ''}`);
+      setResult({ ok: true, board_name: json.board_name ?? boardUrl.split('/').pop() ?? '', item_count: json.item_count ?? 0, version_id: json.version_id ?? '' });
+      qc.invalidateQueries({ queryKey: ['sharedStore', username] });
     } catch (e) {
-      setSyncMsg((e as Error).message ?? 'Sync failed.');
+      setResult({ ok: false, error: (e as Error).message ?? 'Sync failed.' });
     } finally {
       setSyncing(false);
     }
@@ -352,10 +350,21 @@ function SyncSection({ settings }: { settings: Record<string, unknown> | null })
           className="px-3 py-1.5 text-12 rounded-md font-medium"
           style={{ background: 'var(--accent)', color: '#fff' }}
         >
-          {syncing ? 'Syncing...' : 'Trigger sync'}
+          {syncing ? 'Syncing…' : 'Trigger sync'}
         </button>
-        {syncMsg && <span className="text-12 text-text-secondary">{syncMsg}</span>}
       </div>
+      {result && (
+        <div className="mt-3 px-3 py-2 rounded-md text-12 font-medium"
+          style={{
+            background: result.ok ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
+            color: result.ok ? 'var(--status-green-text)' : 'var(--status-red-text)',
+            border: `0.5px solid ${result.ok ? 'var(--status-green)' : 'var(--status-red)'}`,
+          }}>
+          {result.ok
+            ? `✓ Sync complete — ${result.item_count} items synced from "${result.board_name}"`
+            : `✗ Sync failed: ${result.error}`}
+        </div>
+      )}
     </div>
   );
 }
@@ -441,7 +450,7 @@ export function Admin() {
       {/* Admin-only sections */}
       {isAdmin && (
         <>
-          <SyncSection settings={settings} />
+          <SyncSection settings={settings} username={username ?? ''} />
           <UsersSection users={users} currentUsername={username ?? ''} onRefresh={handleRefreshUsers} />
         </>
       )}

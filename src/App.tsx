@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Tabs, type TabItem } from '@/components/Tabs';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { SellerProvider } from '@/lib/sellerContext';
+import { useSharedStore } from '@/lib/queries';
 import mathcoLogo from '/assets/mathco-logo.svg';
 import { LoginGate } from '@/components/LoginGate';
 import { WeeklyScorecard } from '@/views/WeeklyScorecard';
@@ -32,8 +33,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const appVersion = import.meta.env.VITE_APP_VERSION ?? 'dev';
-
 const mainTabs: TabItem[] = [
   { label: 'Vertical performance', to: '/vertical-performance' },
   { label: 'Weekly scorecard', to: '/' },
@@ -58,6 +57,45 @@ const appendixTabs: TabItem[] = [
   { label: 'Cycle time', to: '/cycle-time' },
   { label: 'Assumptions', to: '/assumptions' },
 ];
+
+interface VersionMeta {
+  id: string;
+  created_at: string;
+  created_by?: string;
+  notes?: string;
+  item_count?: number;
+  board_name?: string;
+}
+
+function VersionChip() {
+  const { credentials } = useAuth();
+  const storeQuery = useSharedStore(credentials?.username ?? null, credentials?.password ?? null);
+  const storeData = storeQuery.data as Record<string, unknown> | null;
+  if (!storeData) return null;
+
+  const raw = storeData.versions_meta ?? storeData.versions;
+  const versions: VersionMeta[] = Array.isArray(raw) ? raw as VersionMeta[] : [];
+  const latestId = String(storeData.latest_version_id ?? storeData.active_version_id ?? '');
+
+  const allSortedAsc = [...versions].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const latest = allSortedAsc.find((v) => v.id === latestId) ?? allSortedAsc[allSortedAsc.length - 1];
+  if (!latest) return null;
+
+  const vNum = allSortedAsc.indexOf(latest) + 1;
+  const d = new Date(latest.created_at);
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="flex items-center gap-1.5 text-11 text-text-tertiary tabular-nums">
+      <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>v{vNum}</span>
+      <span>·</span>
+      <span>{date} {time}</span>
+      {latest.created_by && <><span>·</span><span>by {latest.created_by}</span></>}
+      {latest.item_count != null && <><span>·</span><span>{latest.item_count} items</span></>}
+    </div>
+  );
+}
 
 function ProfileButton() {
   const { credentials } = useAuth();
@@ -90,7 +128,7 @@ function Shell() {
             <span className="text-13 font-medium text-text-primary">Sales reporting</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-11 text-text-tertiary tabular-nums">{appVersion}</span>
+            <VersionChip />
             <ProfileButton />
           </div>
         </header>
