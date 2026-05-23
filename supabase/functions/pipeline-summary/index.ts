@@ -12,8 +12,6 @@ const ACTIVE_SELLERS = [
   "Suvom Mitro",
 ] as const;
 
-type SellerName = (typeof ACTIVE_SELLERS)[number];
-
 const MATTER_STAGE_ORDER = [
   "1. Intro",
   "2. Qualification",
@@ -89,12 +87,6 @@ interface DealRow {
   intro_date?: string | null;
   duration_months?: number | string | null;
   next_meeting_date?: string | null;
-  last_connect_date?: string | null;
-  last_meeting_date?: string | null;
-  last_call_date?: string | null;
-  last_activity_date?: string | null;
-  last_touch_date?: string | null;
-  last_connected_date?: string | null;
   owner?: string | null;
   seller?: string | null;
   deal_owner?: string | null;
@@ -119,6 +111,8 @@ interface QuarterSummary {
   ev: number;
   flooredEv: number;
 }
+
+interface StalenessInfo { item_id: string; days_stale: number; current_stage_num: number }
 
 function parseIsoDate(s: string | null | undefined): Date | null {
   if (!s) return null;
@@ -280,25 +274,19 @@ function buildRows(
   data: Record<string, unknown>,
   targets: QuarterTargets,
   quarterLabels: { current: string; next: string },
-): { summary: QuarterSummary[]; deals: DealRow[] } {
+): { summary: QuarterSummary[] } {
   const rows: DealRow[] = Array.isArray(data.all_deals_rows) ? (data.all_deals_rows as DealRow[]) : [];
-  const quarters = (
-    [
-      { key: "current" as const, label: quarterLabels.current },
-      { key: "next" as const, label: quarterLabels.next },
-    ]
-  ).filter((q) => !!normalizeQuarterLabel(q.label));
+  const quarters = [
+    { key: "current" as const, label: quarterLabels.current },
+    { key: "next" as const, label: quarterLabels.next },
+  ].filter((q) => !!normalizeQuarterLabel(q.label));
 
   const summary: QuarterSummary[] = [];
-  const openDeals: DealRow[] = [];
 
   for (const seller of ACTIVE_SELLERS) {
     for (const quarter of quarters) {
       const target = getTarget(targets, seller, quarter.label);
-      let booked = 0;
-      let committed = 0;
-      let ev = 0;
-      let flooredEv = 0;
+      let booked = 0, committed = 0, ev = 0, flooredEv = 0;
 
       for (const r of rows) {
         if (!rowMatchesSeller(r, seller)) continue;
@@ -311,11 +299,8 @@ function buildRows(
         const rawSize = dealSizeValue(r.deal_size);
         const displaySize = leadershipDealSize(r);
         const contrib = quarterPacedAmount(r, quarter.label, displaySize);
-        if (contrib > 0) {
-          if (quarter.key === "current") openDeals.push(r);
-          if (n != null && n >= 5) {
-            committed += quarterPacedAmount(r, quarter.label, rawSize);
-          }
+        if (contrib > 0 && n != null && n >= 5) {
+          committed += quarterPacedAmount(r, quarter.label, rawSize);
         }
         const evContrib = empiricalEv(r, quarter.label);
         ev += evContrib;
@@ -326,10 +311,10 @@ function buildRows(
     }
   }
 
-  return { summary, deals: openDeals };
+  return { summary };
 }
 
-// ─── deal-level helpers for the email ─────────────────────────────────────────
+// ─── deal-level helpers ────────────────────────────────────────────────────────
 
 function dealKey(row: DealRow): string {
   return `${String(row.deal ?? row.account ?? "").trim().toLowerCase()}||${String(row.intro_date ?? "").trim()}`;
@@ -341,12 +326,6 @@ function dealLabel(row: DealRow): string {
   return `${acct} / ${deal}`;
 }
 
-function fmt(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
-  return `$${Math.round(n)}`;
-}
-
 // ─── per-seller deal-level summary ────────────────────────────────────────────
 
 function buildSellerDealSummary(
@@ -354,48 +333,63 @@ function buildSellerDealSummary(
   seller: string,
   quarterLabels: { current: string; next: string },
   today: Date,
+  stalenessMap: Map<string, StalenessInfo>,
 ) {
   const sellerRows = rows.filter((r) => rowMatchesSeller(r, seller));
-
-  // Active pipeline
   const active = sellerRows.filter((r) => closureActiveStage(r));
   const won = sellerRows.filter((r) => isWonStage(r.stage ?? r.deal_stage ?? r.dealStage));
 
-  // Deduplicated won (WS-style) — for FY won count
   const wonDeduped = new Map<string, DealRow>();
   won.forEach((r) => { const k = dealKey(r); if (!wonDeduped.has(k)) wonDeduped.set(k, r); });
 
-  // Committed deals (S5+S6) with NMD check
   const committed = active.filter((r) => {
     const n = stageNumber(r.stage ?? r.deal_stage ?? r.dealStage);
     return n != null && n >= 5;
   });
 
-  // No next steps: NMD null or in the past
   const noNmd = (r: DealRow) => {
     if (!r.next_meeting_date) return true;
     const nmd = parseIsoDate(r.next_meeting_date);
     return !nmd || nmd < today;
   };
 
-  // Stale: stage-dependent threshold
-  const isStale = (r: DealRow, daysSinceStageChange: number | null) => {
-    if (daysSinceStageChange == null) return false;
+  const getDaysStale = (r: DealRow): number | null =>
+    stalenessMap.get(r.item_id ?? "")?.days_stale ?? null;
+
+  const isStale = (r: DealRow) => {
+    const days = getDaysStale(r);
+    if (days == null) return false;
     const n = stageNumber(r.stage ?? r.deal_stage ?? r.dealStage);
     if (n == null || !STALENESS_THRESHOLD[n]) return false;
-    return daysSinceStageChange >= STALENESS_THRESHOLD[n];
+    return days >= STALENESS_THRESHOLD[n];
   };
+
+  const staleActive = active.filter(isStale);
 
   return {
     active_count: active.length,
+    stale_count: staleActive.length,
+    // Stale active deals (all stages, sorted worst first)
+    stale_deals: staleActive
+      .map((r) => ({
+        deal: dealLabel(r),
+        stage: r.stage,
+        days_stale: getDaysStale(r),
+        no_nmd: noNmd(r),
+        nmd: r.next_meeting_date ?? null,
+      }))
+      .sort((a, b) => (b.days_stale ?? 0) - (a.days_stale ?? 0)),
+    // Committed (S5+S6) deals with full risk flags
     committed_deals: committed.map((r) => ({
       deal: dealLabel(r),
       stage: r.stage,
       size: dealSizeValue(r.deal_size),
-      ev_cur: empiricalEv(r, quarterLabels.current),
-      ev_nxt: empiricalEv(r, quarterLabels.next),
+      ev_cur: Math.round(empiricalEv(r, quarterLabels.current)),
+      ev_nxt: Math.round(empiricalEv(r, quarterLabels.next)),
       nmd: r.next_meeting_date ?? null,
       no_nmd: noNmd(r),
+      is_stale: isStale(r),
+      days_stale: getDaysStale(r),
       intro_date: r.intro_date ?? null,
     })),
     fy_won_count: wonDeduped.size,
@@ -404,7 +398,7 @@ function buildSellerDealSummary(
   };
 }
 
-// ─── CORS + response helpers ──────────────────────────────────────────────────
+// ─── CORS + response ──────────────────────────────────────────────────────────
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -451,19 +445,25 @@ Deno.serve(async (req) => {
 
     const targets = (stateRow.quarter_targets ?? {}) as QuarterTargets;
 
-    // 3. Run the exact same computation as the dashboard
+    // 3. Staleness — same RPC the VP view uses
+    const { data: stalenessRows } = await supabase.rpc("get_deal_staleness");
+    const stalenessMap = new Map<string, StalenessInfo>(
+      ((stalenessRows ?? []) as StalenessInfo[]).map((r) => [r.item_id, r]),
+    );
+
+    // 4. Run the exact same computation as the dashboard
     const today = new Date();
     today.setHours(12, 0, 0, 0);
     const asOf = (versionData?.scorecard_summary as Record<string, unknown> | undefined)?.as_of_date
       ?? (versionData?.scorecard as Record<string, unknown> | undefined)?.as_of_date;
     const quarterLabels = buildQuarterLabels(asOf as string | undefined);
-    const { summary, deals: openDeals } = buildRows(versionData, targets, quarterLabels);
+    const { summary } = buildRows(versionData, targets, quarterLabels);
 
-    // 4. Per-seller aggregates (mirrors aggregateSellers logic)
     const allRows: DealRow[] = Array.isArray(versionData.all_deals_rows)
       ? (versionData.all_deals_rows as DealRow[])
       : [];
 
+    // 5. Per-seller aggregates
     const sellers = ACTIVE_SELLERS.map((seller) => {
       const sellerSummary = summary.filter((s) => s.seller === seller);
       const curQ = sellerSummary.find((s) => s.quarter.key === "current");
@@ -471,25 +471,21 @@ Deno.serve(async (req) => {
 
       const target_cur = curQ?.target ?? 0;
       const target_nxt = nxtQ?.target ?? 0;
-      const booked_cur = curQ?.booked ?? 0;
-      const booked_nxt = nxtQ?.booked ?? 0;
-      const committed_cur = curQ?.committed ?? 0;
-      const committed_nxt = nxtQ?.committed ?? 0;
       const ev_cur = curQ?.ev ?? 0;
       const ev_nxt = nxtQ?.ev ?? 0;
       const ev_both = ev_cur + ev_nxt;
 
-      const dealDetail = buildSellerDealSummary(allRows, seller, quarterLabels, today);
+      const dealDetail = buildSellerDealSummary(allRows, seller, quarterLabels, today, stalenessMap);
 
       return {
         seller,
         target_cur,
         target_nxt,
         target_both: target_cur + target_nxt,
-        booked_cur,
-        booked_nxt,
-        committed_cur,
-        committed_nxt,
+        booked_cur: Math.round(curQ?.booked ?? 0),
+        booked_nxt: Math.round(nxtQ?.booked ?? 0),
+        committed_cur: Math.round(curQ?.committed ?? 0),
+        committed_nxt: Math.round(nxtQ?.committed ?? 0),
         ev_cur: Math.round(ev_cur),
         ev_nxt: Math.round(ev_nxt),
         ev_both: Math.round(ev_both),
@@ -501,7 +497,7 @@ Deno.serve(async (req) => {
       };
     });
 
-    // 5. Team totals
+    // 6. Team totals
     const team = sellers.reduce(
       (acc, s) => ({
         target_cur: acc.target_cur + s.target_cur,
@@ -510,12 +506,11 @@ Deno.serve(async (req) => {
         committed_cur: acc.committed_cur + s.committed_cur,
         ev_cur: acc.ev_cur + s.ev_cur,
         ev_both: acc.ev_both + s.ev_both,
-        fy_won_count: acc.fy_won_count + s.fy_won_count,
-        fy_won_size: acc.fy_won_size + s.fy_won_size,
         active_count: acc.active_count + s.active_count,
+        stale_count: acc.stale_count + s.stale_count,
         no_nmd_committed: acc.no_nmd_committed + s.no_nmd_committed,
       }),
-      { target_cur: 0, target_both: 0, booked_cur: 0, committed_cur: 0, ev_cur: 0, ev_both: 0, fy_won_count: 0, fy_won_size: 0, active_count: 0, no_nmd_committed: 0 },
+      { target_cur: 0, target_both: 0, booked_cur: 0, committed_cur: 0, ev_cur: 0, ev_both: 0, active_count: 0, stale_count: 0, no_nmd_committed: 0 },
     );
 
     return j({
