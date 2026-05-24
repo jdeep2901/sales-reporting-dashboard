@@ -14,6 +14,15 @@ import { formatCurrency } from '@/lib/formatters';
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const FY27_Q = { current: "Q1'27", next: "Q2'27" };
+
+const SELLER_VERTICAL: Record<string, string> = {
+  'Akshay Iyer': 'Pharma',
+  'Somya':       'CPG',
+  'Suvom Mitro': 'Retail',
+  'Vitor Quirino': 'EU',
+  'Maruti Peri': 'Engineering',
+  'Sahana':      'RoW',
+};
 const FY_START = new Date(2026, 3, 1, 0, 0, 0); // Apr 1 2026
 
 // Recharts stroke colors — must be hardcoded here (not in CSS vars)
@@ -176,7 +185,7 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
               <tr key={seller} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
                 className="hover:bg-bg-hover">
                 <td className="py-2 px-3 text-text-secondary" style={{ background: 'var(--bg-card)' }}>
-                  {seller}
+                  {SELLER_VERTICAL[seller] ?? seller}
                 </td>
                 {visible.map((p) => {
                   const row = p.metrics?.sellers.find((s) => s.seller === seller);
