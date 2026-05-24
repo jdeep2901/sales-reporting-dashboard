@@ -140,6 +140,8 @@ export interface SellerAction {
   due_date: string | null;
   status: 'open' | 'done' | 'carry';
   auto_verified: boolean;
+  deal_stage_at_creation: number | null;
+  deal_nmd_at_creation: string | null;
   created_at: string;
   updated_at: string;
 }

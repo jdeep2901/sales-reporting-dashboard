@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import {
   useSharedStore, useVersionData, useDealStaleness,
@@ -324,7 +324,7 @@ function ActionsList({
 }: {
   sellerName: string;
   actions: SellerAction[];
-  dealOptions: { id: string; name: string }[];
+  dealOptions: { id: string; name: string; stage: number | null; nmd: string | null }[];
 }) {
   const create = useCreateAction();
   const update = useUpdateAction();
@@ -350,6 +350,8 @@ function ActionsList({
       text: trimmed,
       due_date: nextMonday(),
       status: 'open',
+      deal_stage_at_creation: deal?.stage ?? null,
+      deal_nmd_at_creation: deal?.nmd ?? null,
     });
     setText('');
     setDealId('');
@@ -392,6 +394,9 @@ function ActionsList({
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             {action.deal_name && (
               <span className="text-11 text-text-tertiary">↳ {action.deal_name}</span>
+            )}
+            {action.auto_verified && (
+              <span className="text-11" style={{ color: 'var(--status-green)' }}>auto-verified</span>
             )}
             {action.due_date && action.status !== 'done' && (
               <span className="text-11" style={{ color: overdue ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
@@ -536,11 +541,16 @@ function SellerRowV2({
 
   const hasRisk = focus != null;
 
-  // Deal options for action tagging — S3–S6 active deals for this seller
+  // Deal options for action tagging — S3–S6 active deals, with stage+NMD snapshot for auto-verify
   const dealOptions = useMemo(() =>
     sellerDeals
       .filter((d) => { const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage); return n != null && n >= 3; })
-      .map((d) => ({ id: d.item_id ?? dealDisplay(d), name: dealDisplay(d) })),
+      .map((d) => ({
+        id: d.item_id ?? dealDisplay(d),
+        name: dealDisplay(d),
+        stage: stageNumber(d.stage ?? d.deal_stage ?? d.dealStage) ?? null,
+        nmd: d.next_meeting_date ? String(d.next_meeting_date).slice(0, 10) : null,
+      })),
     [sellerDeals],
   );
 
@@ -877,6 +887,32 @@ export function VerticalPerformanceV2() {
   const sellerNames = useMemo(() => aggregates.map((r) => r.seller), [aggregates]);
   const actionsQuery = useAllSellerActions(sellerNames);
   const actionsMap = actionsQuery.data ?? new Map<string, SellerAction[]>();
+
+  // Auto-verify: close actions whose deal has advanced stage or gained a new future NMD
+  const autoVerifyUpdate = useUpdateAction();
+  const autoVerifiedIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!actionsMap.size || !allOpenForFilter.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const dealById = new Map(allOpenForFilter.filter((d) => d.item_id).map((d) => [d.item_id!, d]));
+    for (const actions of actionsMap.values()) {
+      for (const action of actions) {
+        if (action.status === 'done' || action.auto_verified) continue;
+        if (!action.deal_id || !action.deal_stage_at_creation) continue;
+        if (autoVerifiedIds.current.has(action.id)) continue;
+        const deal = dealById.get(action.deal_id);
+        if (!deal) continue;
+        const currentStage = stageNumber(deal.stage ?? deal.deal_stage ?? deal.dealStage) ?? 0;
+        const stageAdvanced = currentStage > action.deal_stage_at_creation;
+        const currentNmd = deal.next_meeting_date ? String(deal.next_meeting_date).slice(0, 10) : null;
+        const hasNewFutureNmd = !!currentNmd && currentNmd >= today && currentNmd !== action.deal_nmd_at_creation;
+        if (stageAdvanced || hasNewFutureNmd) {
+          autoVerifiedIds.current.add(action.id);
+          autoVerifyUpdate.mutate({ id: action.id, status: 'done', auto_verified: true });
+        }
+      }
+    }
+  }, [actionsMap, allOpenForFilter]);
 
   const totalTarget = aggregates.reduce((a, r) => a + r.target, 0);
   const totalEv = aggregates.reduce((a, r) => a + r.ev, 0);
