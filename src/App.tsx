@@ -9,6 +9,7 @@ import mathcoLogo from '/assets/mathco-logo.svg';
 import { LoginGate } from '@/components/LoginGate';
 import { WeeklyScorecard } from '@/views/WeeklyScorecard';
 import { VerticalPerformance } from '@/views/VerticalPerformance';
+import { VerticalPerformanceV2 } from '@/views/VerticalPerformanceV2';
 import { IntroTrend } from '@/views/IntroTrend';
 import { OperatingMetrics } from '@/views/OperatingMetrics';
 import { LtTrends } from '@/views/LtTrends';
@@ -57,6 +58,7 @@ const appendixTabs: TabItem[] = [
   { label: 'Momentum', to: '/momentum' },
   { label: 'Cycle time', to: '/cycle-time' },
   { label: 'Assumptions', to: '/assumptions' },
+  { label: 'VP v2', to: '/vertical-performance-v2' },
 ];
 
 interface VersionMeta {
@@ -186,6 +188,7 @@ function Shell() {
             <Route path="/momentum" element={<Momentum />} />
             <Route path="/cycle-time" element={<CycleTime />} />
             <Route path="/assumptions" element={<Assumptions />} />
+            <Route path="/vertical-performance-v2" element={<VerticalPerformanceV2 />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
