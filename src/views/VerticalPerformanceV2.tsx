@@ -76,35 +76,18 @@ function isDealStale(d: RichDealRow, staleness: Map<string, DealStaleness>): boo
   return days >= threshold;
 }
 
-// ── stage mix bar — deal count based, all open deals regardless of quarter pacing ──
-function StageMixBar({ deals }: { deals: RichDealRow[] }) {
-  let early = 0, mid = 0, late = 0;
-  for (const d of deals) {
-    const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
-    if (n == null) continue;
-    if (n <= 2) early++;
-    else if (n <= 4) mid++;
-    else late++;
-  }
-  const total = early + mid + late;
-  if (total === 0) return <span className="text-11 text-text-tertiary">—</span>;
-
-  const ePct = (early / total) * 100;
-  const mPct = (mid / total) * 100;
-  const lPct = (late / total) * 100;
-
+// ── top-of-funnel % — earlyEv/ev, same definition as VP and LT Trends ────
+function TopOfFunnelCell({ earlyEv, ev }: { earlyEv: number; ev: number }) {
+  if (ev === 0) return <span className="text-11 text-text-tertiary">—</span>;
+  const pct = earlyEv / ev;
+  const color = pct > 0.5 ? 'var(--status-red)' : pct > 0.35 ? 'var(--status-amber)' : 'var(--status-green)';
+  const s3pct = Math.round((1 - pct) * 100);
   return (
-    <div className="flex flex-col gap-1" style={{ minWidth: 100 }}>
-      <div className="flex w-full rounded-full overflow-hidden" style={{ height: 6, gap: 1 }}>
-        {early > 0 && <div style={{ width: `${ePct}%`, background: 'var(--text-tertiary)', opacity: 0.45 }} />}
-        {mid > 0 && <div style={{ width: `${mPct}%`, background: 'var(--accent)', opacity: 0.7 }} />}
-        {late > 0 && <div style={{ width: `${lPct}%`, background: 'var(--status-green)' }} />}
-      </div>
-      <div className="flex text-11 gap-1 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-        {early > 0 && <span style={{ color: ePct > 50 ? 'var(--status-amber)' : undefined }}>{early} S1/S2</span>}
-        {mid > 0 && <><span>·</span><span style={{ color: 'var(--accent)' }}>{mid} S3/S4</span></>}
-        {late > 0 && <><span>·</span><span style={{ color: 'var(--status-green)' }}>{late} S5/S6</span></>}
-      </div>
+    <div className="flex flex-col gap-0.5">
+      <span className="text-13 font-medium tabular-nums" style={{ color }}>
+        {Math.round(pct * 100)}% top-of-funnel
+      </span>
+      <span className="text-11 tabular-nums text-text-tertiary">{s3pct}% from S3+</span>
     </div>
   );
 }
@@ -365,9 +348,9 @@ function SellerRowV2({
           <ForecastCell booked={row.booked} committed={row.committed} target={row.target} />
         </td>
 
-        {/* Stage mix — all open deals for seller, unfiltered by quarter */}
+        {/* Top-of-funnel % — earlyEv/ev, same as VP and LT Trends */}
         <td className="py-2.5 px-3">
-          <StageMixBar deals={allDeals.filter(d => d.leadership_seller === row.seller)} />
+          <TopOfFunnelCell earlyEv={row.earlyEv} ev={row.ev} />
         </td>
 
         {/* Booked */}
@@ -735,7 +718,7 @@ export function VerticalPerformanceV2() {
                 <tr className="text-11 text-text-tertiary" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                   <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
                   <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 130 }}>Forecast vs target</th>
-                  <th className="text-left py-2 px-3 font-normal">Stage mix (all open)</th>
+                  <th className="text-left py-2 px-3 font-normal">Top-of-funnel</th>
                   <th className="text-right py-2 px-3 font-normal">Booked</th>
                   <th className="text-right py-2 px-3 font-normal">Committed</th>
                   <th className="text-right py-2 px-3 font-normal">Wtd pipeline</th>
