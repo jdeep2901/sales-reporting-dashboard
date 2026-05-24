@@ -76,55 +76,56 @@ function isDealStale(d: RichDealRow, staleness: Map<string, DealStaleness>): boo
   return days >= threshold;
 }
 
-// ── stage mix bar ─────────────────────────────────────────────────────────
-function StageMixBar({ deals, quarterFocus }: {
-  deals: RichDealRow[];
-  quarterFocus: 'both' | 'current' | 'next';
-}) {
+// ── stage mix bar — deal count based, all open deals regardless of quarter pacing ──
+function StageMixBar({ deals }: { deals: RichDealRow[] }) {
   let early = 0, mid = 0, late = 0;
   for (const d of deals) {
-    if (quarterFocus !== 'both' && d.leadership_quarter.key !== quarterFocus) continue;
     const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
-    const ev = d.leadership_contribution ?? 0;
     if (n == null) continue;
-    if (n <= 2) early += ev;
-    else if (n <= 4) mid += ev;
-    else late += ev;
+    if (n <= 2) early++;
+    else if (n <= 4) mid++;
+    else late++;
   }
   const total = early + mid + late;
   if (total === 0) return <span className="text-11 text-text-tertiary">—</span>;
 
-  const ePct = Math.round((early / total) * 100);
-  const mPct = Math.round((mid / total) * 100);
-  const lPct = 100 - ePct - mPct;
+  const ePct = (early / total) * 100;
+  const mPct = (mid / total) * 100;
+  const lPct = (late / total) * 100;
 
   return (
-    <div className="flex flex-col gap-1" style={{ minWidth: 88 }}>
+    <div className="flex flex-col gap-1" style={{ minWidth: 100 }}>
       <div className="flex w-full rounded-full overflow-hidden" style={{ height: 6, gap: 1 }}>
-        {ePct > 0 && <div style={{ width: `${ePct}%`, background: 'var(--text-tertiary)', opacity: 0.5 }} />}
-        {mPct > 0 && <div style={{ width: `${mPct}%`, background: 'var(--accent)', opacity: 0.7 }} />}
-        {lPct > 0 && <div style={{ width: `${lPct}%`, background: 'var(--status-green)' }} />}
+        {early > 0 && <div style={{ width: `${ePct}%`, background: 'var(--text-tertiary)', opacity: 0.45 }} />}
+        {mid > 0 && <div style={{ width: `${mPct}%`, background: 'var(--accent)', opacity: 0.7 }} />}
+        {late > 0 && <div style={{ width: `${lPct}%`, background: 'var(--status-green)' }} />}
       </div>
       <div className="flex text-11 gap-1 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-        {ePct > 0 && <span style={{ color: ePct > 50 ? 'var(--status-amber)' : undefined }}>{ePct}%</span>}
-        {mPct > 0 && <><span>·</span><span style={{ color: 'var(--accent)', opacity: 0.9 }}>{mPct}%</span></>}
-        {lPct > 0 && <><span>·</span><span style={{ color: 'var(--status-green)' }}>{lPct}%</span></>}
+        {early > 0 && <span style={{ color: ePct > 50 ? 'var(--status-amber)' : undefined }}>{early} S1/S2</span>}
+        {mid > 0 && <><span>·</span><span style={{ color: 'var(--accent)' }}>{mid} S3/S4</span></>}
+        {late > 0 && <><span>·</span><span style={{ color: 'var(--status-green)' }}>{late} S5/S6</span></>}
       </div>
     </div>
   );
 }
 
-// ── coverage bar ─────────────────────────────────────────────────────────
-function CoverageBar({ ratio, tone }: { ratio: number; tone: Tone }) {
-  const pct = Math.min(100, ratio * 100);
+// ── forecast vs target cell ───────────────────────────────────────────────
+function ForecastCell({ booked, committed, target }: { booked: number; committed: number; target: number }) {
+  const forecast = booked + committed;
+  const pct = target > 0 ? forecast / target : null;
+  const tone: Tone = pct == null ? 'gray' : pct >= 0.8 ? 'green' : pct >= 0.5 ? 'amber' : 'red';
+  const gap = target > 0 ? forecast - target : null;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-0.5">
       <span className="text-13 font-medium tabular-nums" style={{ color: toneColor[tone] }}>
-        {ratio.toFixed(2)}×
+        {forecast > 0 ? formatCurrency(forecast) : '—'}
       </span>
-      <div className="w-full rounded-full overflow-hidden" style={{ height: 4, background: 'var(--bg-surface)', minWidth: 80 }}>
-        <div style={{ width: `${pct}%`, background: toneColor[tone], height: '100%', transition: 'width 300ms' }} />
-      </div>
+      {target > 0 && gap != null && (
+        <span className="text-11 tabular-nums text-text-tertiary">
+          {gap >= 0 ? '+' : ''}{formatCurrency(gap)} vs {formatCurrency(target)}
+        </span>
+      )}
+      {target === 0 && <span className="text-11 text-text-tertiary">No target</span>}
     </div>
   );
 }
@@ -319,7 +320,6 @@ function SellerRowV2({
     try { return localStorage.getItem(PLAN_KEY(row.seller)) ?? ''; } catch { return ''; }
   });
 
-  const tone = ratioTone(row.ratio);
   const focus = sellerFocusLabel(row, allDeals, staleness, quarterFocus);
 
   const sellerDeals = allDeals.filter(
@@ -360,17 +360,14 @@ function SellerRowV2({
           </div>
         </td>
 
-        {/* Coverage — lead column */}
-        <td className="py-2.5 px-3" style={{ minWidth: 110 }}>
-          {row.target > 0
-            ? <CoverageBar ratio={row.ratio} tone={tone} />
-            : <span className="text-11 text-text-tertiary">No target</span>
-          }
+        {/* Forecast vs target */}
+        <td className="py-2.5 px-3" style={{ minWidth: 130 }}>
+          <ForecastCell booked={row.booked} committed={row.committed} target={row.target} />
         </td>
 
-        {/* Stage mix */}
+        {/* Stage mix — all open deals for seller, unfiltered by quarter */}
         <td className="py-2.5 px-3">
-          <StageMixBar deals={row.deals} quarterFocus={quarterFocus} />
+          <StageMixBar deals={allDeals.filter(d => d.leadership_seller === row.seller)} />
         </td>
 
         {/* Booked */}
@@ -737,8 +734,8 @@ export function VerticalPerformanceV2() {
               <thead>
                 <tr className="text-11 text-text-tertiary" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                   <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
-                  <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 110 }}>Coverage</th>
-                  <th className="text-left py-2 px-3 font-normal">Stage mix</th>
+                  <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 130 }}>Forecast vs target</th>
+                  <th className="text-left py-2 px-3 font-normal">Stage mix (all open)</th>
                   <th className="text-right py-2 px-3 font-normal">Booked</th>
                   <th className="text-right py-2 px-3 font-normal">Committed</th>
                   <th className="text-right py-2 px-3 font-normal">Wtd pipeline</th>
