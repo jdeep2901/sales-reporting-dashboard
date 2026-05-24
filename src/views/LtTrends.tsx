@@ -41,6 +41,7 @@ interface WeekPoint {
 }
 
 type MetricKey = 'ev' | 'booked' | 'committed' | 'forecast';
+type QuarterScope = 'current' | 'both';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,12 +76,13 @@ function buildWeeklyAnchors(metas: VersionMeta[]): { label: string; meta: Versio
 function computeMetrics(
   dataset: Record<string, unknown> | null,
   targets: QuarterTargets,
+  scope: QuarterScope,
 ): TeamMetrics {
   const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, sellers: [] };
   if (!dataset) return empty;
   const { summary } = buildRows(dataset, targets, FY27_Q);
-  const curQ = summary.filter((s) => s.quarter.key === 'current');
-  const team = curQ.reduce(
+  const rows = scope === 'both' ? summary : summary.filter((s) => s.quarter.key === 'current');
+  const team = rows.reduce(
     (acc, s) => ({
       ev: acc.ev + s.ev,
       booked: acc.booked + s.booked,
@@ -90,8 +92,14 @@ function computeMetrics(
     { ev: 0, booked: 0, committed: 0, target: 0 },
   );
   const sellers = [...ACTIVE_SELLERS].map((seller) => {
-    const row = curQ.find((s) => s.seller === seller);
-    return { seller, ev: row?.ev ?? 0, booked: row?.booked ?? 0, committed: row?.committed ?? 0, target: row?.target ?? 0 };
+    const sellerRows = rows.filter((s) => s.seller === seller);
+    return {
+      seller,
+      ev: sellerRows.reduce((a, s) => a + s.ev, 0),
+      booked: sellerRows.reduce((a, s) => a + s.booked, 0),
+      committed: sellerRows.reduce((a, s) => a + s.committed, 0),
+      target: sellerRows.reduce((a, s) => a + s.target, 0),
+    };
   });
   return { ...team, forecast: team.booked + team.committed, sellers };
 }
@@ -121,11 +129,12 @@ function ChartTooltip({ active, payload, label }: {
 
 // ── per-seller table ──────────────────────────────────────────────────────────
 
-function SellerTable({ points, metric }: { points: WeekPoint[]; metric: MetricKey }) {
+function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
   const visible = points.slice(-8);
+  const q = scope === 'both' ? 'Q1+Q2' : 'Q1';
   const metricLabel: Record<MetricKey, string> = {
-    ev: 'Expected value (Q1)', booked: 'Booked (Q1)',
-    committed: 'Committed S5/S6 (Q1)', forecast: 'Forecast (Q1)',
+    ev: `Expected value (${q})`, booked: `Booked (${q})`,
+    committed: `Committed S5/S6 (${q})`, forecast: `Forecast (${q})`,
   };
   const teamTotals = visible.map((p) => {
     const m = p.metrics;
@@ -209,6 +218,9 @@ export function LtTrends() {
   const currentDataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
   const latestVersionId = String(storeData?.latest_version_id ?? storeData?.active_version_id ?? '');
 
+  const [tableMetric, setTableMetric] = useState<MetricKey>('ev');
+  const [scope, setScope] = useState<QuarterScope>('current');
+
   // Weekly anchors (one per ISO week since Apr 1, latest snapshot wins)
   const anchors = useMemo(() => buildWeeklyAnchors(versionsMeta), [versionsMeta]);
 
@@ -225,10 +237,10 @@ export function LtTrends() {
     return anchors.map((a) => {
       const id = a.meta.id;
       const dataset = id === latestVersionId ? currentDataset : (batchMap[id] ?? null);
-      const metrics = dataset ? computeMetrics(dataset, targets) : null;
+      const metrics = dataset ? computeMetrics(dataset, targets, scope) : null;
       return { label: a.label, versionId: id, dataset, metrics };
     }).filter((p) => p.metrics != null);
-  }, [anchors, batchMap, currentDataset, latestVersionId, targets]);
+  }, [anchors, batchMap, currentDataset, latestVersionId, targets, scope]);
 
   // Current (latest) metrics
   const current = points[points.length - 1]?.metrics;
@@ -243,8 +255,6 @@ export function LtTrends() {
   })), [points]);
 
   const teamTarget = current?.target ?? 0;
-
-  const [tableMetric, setTableMetric] = useState<MetricKey>('ev');
 
   const metricTabs: { key: MetricKey; label: string }[] = [
     { key: 'ev', label: 'EV' },
@@ -293,9 +303,11 @@ export function LtTrends() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-18 font-medium text-text-primary">LT pipeline trends — FY27 Q1</h2>
+          <h2 className="text-18 font-medium text-text-primary">
+            LT pipeline trends — {scope === 'both' ? "FY27 Q1 + Q2" : "FY27 Q1"}
+          </h2>
           <p className="text-12 text-text-tertiary mt-0.5">
             {points.length} weekly snapshot{points.length !== 1 ? 's' : ''} &middot; Apr 1 to {points[points.length - 1]?.label}
             {batchQuery.isLoading && (
@@ -303,28 +315,42 @@ export function LtTrends() {
             )}
           </p>
         </div>
-        <span className="text-12 text-text-tertiary tabular-nums">
-          Target {formatCurrency(teamTarget)}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {(['current', 'both'] as QuarterScope[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className="px-3 py-1 text-12 rounded-md transition-colors"
+              style={{
+                background: scope === s ? 'var(--bg-surface)' : 'transparent',
+                border: '0.5px solid ' + (scope === s ? 'var(--border-emphasis)' : 'var(--border-hairline)'),
+                color: scope === s ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                fontWeight: scope === s ? 500 : 400,
+              }}
+            >
+              {s === 'current' ? 'Q1 only' : 'Q1 + Q2'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* KPI strip */}
       {current && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <KpiCard
-            label="Expected value (Q1)"
+            label={`Expected value (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.ev)}
             sub={evRatio != null ? `${(evRatio * 100).toFixed(0)}% of target` : undefined}
             subColor={evRatioColor}
           />
           <KpiCard
-            label="Booked (Q1)"
+            label={`Booked (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.booked)}
             sub={teamTarget > 0 ? `${((current.booked / teamTarget) * 100).toFixed(0)}% of target` : undefined}
             subColor={current.booked / teamTarget >= 0.5 ? 'green' : current.booked / teamTarget >= 0.3 ? 'amber' : 'muted'}
           />
           <KpiCard
-            label="Committed S5/S6 (Q1)"
+            label={`Committed S5/S6 (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.committed)}
             sub={`${formatCurrency(current.booked + current.committed)} forecast`}
             subColor="muted"
@@ -404,7 +430,7 @@ export function LtTrends() {
             </button>
           ))}
         </div>
-        {points.length > 0 && <SellerTable points={points} metric={tableMetric} />}
+        {points.length > 0 && <SellerTable points={points} metric={tableMetric} scope={scope} />}
       </div>
     </div>
   );
