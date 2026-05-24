@@ -1,216 +1,185 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ReferenceLine, ResponsiveContainer, Legend,
+} from 'recharts';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData } from '@/lib/queries';
-import { ACTIVE_SELLERS, empiricalEv, stageNumber } from '@/lib/vpCompute';
+import {
+  ACTIVE_SELLERS, buildRows, type QuarterTargets,
+} from '@/lib/vpCompute';
+import { KpiCard } from '@/components/KpiCard';
 import { formatCurrency } from '@/lib/formatters';
-import type { DealRow } from '@/lib/vpCompute';
 
-interface VersionMeta {
-  id: string;
-  created_at: string;
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const FY27_Q = { current: "Q1'27", next: "Q2'27" };
+const FY_START = new Date(2026, 3, 1, 0, 0, 0); // Apr 1 2026
+
+// Recharts stroke colors — must be hardcoded here (not in CSS vars)
+const COLOR_EV        = '#635BFF'; // --accent
+const COLOR_BOOKED    = '#16A34A'; // --status-green
+const COLOR_COMMITTED = '#D97706'; // --status-amber
+const COLOR_TARGET    = '#9CA3AF'; // --text-tertiary
+const COLOR_FORECAST  = '#0EA5E9'; // sky-500
+
+// ── types ─────────────────────────────────────────────────────────────────────
+
+interface VersionMeta { id: string; created_at: string }
+
+interface TeamMetrics {
+  ev: number; booked: number; committed: number;
+  target: number; forecast: number;
+  sellers: { seller: string; ev: number; booked: number; committed: number; target: number }[];
 }
 
-interface AnchorPoint {
-  date: Date;
+interface WeekPoint {
   label: string;
-  versionId: string | null;
+  versionId: string;
   dataset: Record<string, unknown> | null;
+  metrics: TeamMetrics | null;
 }
 
-function parseDate(raw: string | undefined | null): Date | null {
-  if (!raw) return null;
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d;
+type MetricKey = 'ev' | 'booked' | 'committed' | 'forecast';
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function isoWeekKey(d: Date): string {
+  const dt = new Date(d.getTime());
+  dt.setHours(12, 0, 0, 0);
+  dt.setDate(dt.getDate() + 4 - (dt.getDay() || 7));
+  const ys = new Date(dt.getFullYear(), 0, 1);
+  const w = Math.ceil(((dt.getTime() - ys.getTime()) / 86400000 + 1) / 7);
+  return `${dt.getFullYear()}-W${String(w).padStart(2, '0')}`;
 }
 
-function dateOnly(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+function weekLabel(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function ltDateLabel(d: Date, override?: string): string {
-  if (override) return override;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-}
-
-function fiscalQLabel(d: Date): string {
-  const m = d.getMonth() + 1;
-  const fiscalMonth = ((m - 4 + 12) % 12) + 1;
-  const quarter = Math.floor((fiscalMonth - 1) / 3) + 1;
-  const fiscalYear = m >= 4 ? d.getFullYear() + 1 : d.getFullYear();
-  return `Q${quarter}'${String(fiscalYear).slice(-2)}`;
-}
-
-function buildAnchors(versionsMeta: VersionMeta[]): { date: Date; label: string }[] {
-  const versions = versionsMeta
-    .map((v) => ({ meta: v, createdAt: parseDate(v.created_at) }))
-    .filter((v) => v.createdAt != null)
-    .sort((a, b) => a.createdAt!.getTime() - b.createdAt!.getTime());
-  if (!versions.length) return [];
-  const first = dateOnly(versions[0].createdAt!);
-  const latest = dateOnly(versions[versions.length - 1].createdAt!);
-  const anchors: { date: Date; label: string }[] = [];
-  const cursor = new Date(first.getFullYear(), first.getMonth(), first.getDate() <= 15 ? 1 : 15, 12);
-  if (first.getDate() > 15) cursor.setMonth(cursor.getMonth() + 1);
-  while (cursor.getTime() <= latest.getTime()) {
-    anchors.push({ date: new Date(cursor), label: ltDateLabel(cursor) });
-    if (cursor.getDate() === 1) cursor.setDate(15);
-    else { cursor.setMonth(cursor.getMonth() + 1); cursor.setDate(1); }
+// Returns the latest-per-ISO-week snapshots since FY start, sorted ascending
+function buildWeeklyAnchors(metas: VersionMeta[]): { label: string; meta: VersionMeta }[] {
+  const weekMap = new Map<string, { date: Date; meta: VersionMeta }>();
+  for (const v of metas) {
+    const d = new Date(v.created_at);
+    if (isNaN(d.getTime()) || d < FY_START) continue;
+    const wk = isoWeekKey(d);
+    const ex = weekMap.get(wk);
+    if (!ex || d > ex.date) weekMap.set(wk, { date: d, meta: v });
   }
-  const last = anchors[anchors.length - 1];
-  if (!last || latest.getTime() > last.date.getTime()) {
-    anchors.push({ date: latest, label: ltDateLabel(latest, 'Latest') });
-  }
-  return anchors;
+  return Array.from(weekMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, { date, meta }]) => ({ label: weekLabel(date), meta }));
 }
 
-function versionForAnchor(anchorDate: Date, versionsMeta: VersionMeta[]): VersionMeta | null {
-  const anchorEnd = new Date(anchorDate.getTime());
-  anchorEnd.setHours(23, 59, 59, 999);
-  let best: { meta: VersionMeta; createdAt: Date } | null = null;
-  versionsMeta.forEach((v) => {
-    const ca = parseDate(v.created_at);
-    if (!ca || ca.getTime() > anchorEnd.getTime()) return;
-    if (!best || ca.getTime() > best.createdAt.getTime()) best = { meta: v, createdAt: ca };
-  });
-  return (best as { meta: VersionMeta; createdAt: Date } | null)?.meta ?? null;
-}
-
-function isWon(stage: string | undefined | null): boolean {
-  const s = String(stage ?? '').toLowerCase();
-  return s.includes('7. win') || s === 'won' || s === 'win';
-}
-
-function isClosureActive(stage: string | undefined | null): boolean {
-  const s = String(stage ?? '').toLowerCase();
-  if (!s) return false;
-  if (s.includes('won') || s.includes('win') || s.includes('loss') || s.includes('lost')) return false;
-  if (s.includes('disqualified') || s.includes('no show') || s.includes('reschedule') || s.includes('latent')) return false;
-  const n = stageNumber(stage);
-  return n != null && n >= 1 && n <= 6;
-}
-
-function quarterPaced(row: DealRow, qLabel: string): number {
-  const start = row.start_date ? new Date(row.start_date + 'T00:00:00') : null;
-  const total = Number(row.deal_size ?? 0);
-  if (!start || !isFinite(total) || total <= 0) return 0;
-  const dur = Math.round(Number(row.duration_months ?? 1)) || 1;
-  let out = 0;
-  for (let i = 0; i < dur; i++) {
-    const d = new Date(start);
-    d.setMonth(d.getMonth() + i);
-    if (fiscalQLabel(d) === qLabel) out += total / dur;
-  }
-  return out;
-}
-
-function getRows(dataset: Record<string, unknown> | null): DealRow[] {
-  return Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [];
-}
-
-function rowMatchesSeller(row: DealRow, seller: string): boolean {
-  const label = seller.trim().toLowerCase();
-  const matched: string[] = Array.isArray(row.matched_sellers) ? row.matched_sellers as string[] : [];
-  if (matched.some((s) => String(s).trim().toLowerCase() === label)) return true;
-  const raw = String(row.owner ?? row.seller ?? row.deal_owner ?? '').toLowerCase();
-  return raw.includes(label);
-}
-
-function rowsForSeller(rows: DealRow[], seller: string): DealRow[] {
-  if (!seller || seller === 'Overall') {
-    const seen = new Set<string>();
-    return rows.filter((r) => {
-      if (!ACTIVE_SELLERS.some((s) => rowMatchesSeller(r, s))) return false;
-      const key = `${r.deal}||${r.intro_date}||${r.stage}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-  return rows.filter((r) => rowMatchesSeller(r, seller));
-}
-
-function computeActuals(dataset: Record<string, unknown> | null, seller: string, date: Date): number {
-  const qLabel = fiscalQLabel(date);
-  return rowsForSeller(getRows(dataset), seller)
-    .filter((r) => isWon(r.stage ?? r.deal_stage))
-    .reduce((acc, r) => acc + quarterPaced(r, qLabel), 0);
-}
-
-function computePipelineEv(dataset: Record<string, unknown> | null, seller: string, date: Date): number {
-  const qLabel = fiscalQLabel(date);
-  return rowsForSeller(getRows(dataset), seller)
-    .filter((r) => isClosureActive(r.stage ?? r.deal_stage))
-    .reduce((acc, r) => acc + empiricalEv(r, qLabel), 0);
-}
-
-function computeNewDeals(
+function computeMetrics(
   dataset: Record<string, unknown> | null,
-  seller: string,
-  prevDataset: Record<string, unknown> | null,
-): number | null {
-  if (!prevDataset) return null;
-  const activeKey = (r: DealRow) => `${r.deal}||${r.intro_date}`;
-  const currKeys = new Set(rowsForSeller(getRows(dataset), seller).filter((r) => isClosureActive(r.stage ?? r.deal_stage)).map(activeKey));
-  const prevKeys = new Set(rowsForSeller(getRows(prevDataset), seller).filter((r) => isClosureActive(r.stage ?? r.deal_stage)).map(activeKey));
-  let count = 0;
-  currKeys.forEach((k) => { if (!prevKeys.has(k)) count++; });
-  return count;
+  targets: QuarterTargets,
+): TeamMetrics {
+  const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, sellers: [] };
+  if (!dataset) return empty;
+  const { summary } = buildRows(dataset, targets, FY27_Q);
+  const curQ = summary.filter((s) => s.quarter.key === 'current');
+  const team = curQ.reduce(
+    (acc, s) => ({
+      ev: acc.ev + s.ev,
+      booked: acc.booked + s.booked,
+      committed: acc.committed + s.committed,
+      target: acc.target + s.target,
+    }),
+    { ev: 0, booked: 0, committed: 0, target: 0 },
+  );
+  const sellers = [...ACTIVE_SELLERS].map((seller) => {
+    const row = curQ.find((s) => s.seller === seller);
+    return { seller, ev: row?.ev ?? 0, booked: row?.booked ?? 0, committed: row?.committed ?? 0, target: row?.target ?? 0 };
+  });
+  return { ...team, forecast: team.booked + team.committed, sellers };
 }
 
-type MetricFn = (p: AnchorPoint, seller: string, prev: AnchorPoint | null) => number | null;
+// ── chart tooltip ─────────────────────────────────────────────────────────────
 
-function MetricTable({ title, points, getValue, format }: {
-  title: string;
-  points: AnchorPoint[];
-  getValue: MetricFn;
-  format: 'money' | 'count';
+function ChartTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: { name: string; value: number; color: string }[];
+  label?: string;
 }) {
-  const sellers = ['Overall', ...ACTIVE_SELLERS];
-  const fmt = (v: number | null) => {
-    if (v == null || v === 0) return '—';
-    return format === 'money' ? formatCurrency(v) : String(v);
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-md text-12 shadow-sm px-3 py-2"
+      style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-emphasis)' }}>
+      <div className="text-text-secondary mb-1.5 font-medium">{label}</div>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2 tabular-nums">
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.color }} />
+          <span className="text-text-secondary capitalize">{p.name}</span>
+          <span className="ml-auto pl-4 text-text-primary font-medium">{formatCurrency(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── per-seller table ──────────────────────────────────────────────────────────
+
+function SellerTable({ points, metric }: { points: WeekPoint[]; metric: MetricKey }) {
+  const visible = points.slice(-8);
+  const metricLabel: Record<MetricKey, string> = {
+    ev: 'Expected value (Q1)', booked: 'Booked (Q1)',
+    committed: 'Committed S5/S6 (Q1)', forecast: 'Forecast (Q1)',
   };
+  const teamTotals = visible.map((p) => {
+    const m = p.metrics;
+    if (!m) return null;
+    return metric === 'forecast' ? m.booked + m.committed : m[metric];
+  });
 
   return (
     <div className="rounded-lg overflow-hidden" style={{ border: '0.5px solid var(--border-hairline)' }}>
-      <div className="px-4 py-2.5" style={{ background: 'var(--bg-surface)', borderBottom: '0.5px solid var(--border-hairline)' }}>
-        <span className="text-13 font-medium text-text-primary">{title}</span>
+      <div className="px-4 py-2.5 flex items-center justify-between"
+        style={{ background: 'var(--bg-surface)', borderBottom: '0.5px solid var(--border-hairline)' }}>
+        <span className="text-13 font-medium text-text-primary">{metricLabel[metric]}</span>
+        <span className="text-11 text-text-tertiary">weekly snapshots since Apr 1</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-12">
           <thead>
             <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-              <th className="text-left py-2 px-3 text-text-secondary font-medium bg-bg-card" style={{ minWidth: 120 }}>Seller</th>
-              {points.map((p) => (
-                <th key={p.label} className="text-right py-2 px-3 text-text-secondary font-medium whitespace-nowrap">
+              <th className="text-left py-2 px-3 text-text-secondary font-medium"
+                style={{ minWidth: 130, background: 'var(--bg-card)' }}>Seller</th>
+              {visible.map((p) => (
+                <th key={p.versionId} className="text-right py-2 px-3 text-text-secondary font-medium whitespace-nowrap">
                   {p.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {sellers.map((s) => {
-              const isOverall = s === 'Overall';
-              return (
-                <tr key={s} style={{ borderBottom: '0.5px solid var(--border-hairline)' }} className="hover:bg-bg-hover">
-                  <td className="py-2 px-3 font-medium bg-bg-card"
-                    style={{ color: isOverall ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                    {s}
-                  </td>
-                  {points.map((p, i) => {
-                    const prev = i > 0 ? points[i - 1] : null;
-                    const val = isOverall
-                      ? ACTIVE_SELLERS.reduce((acc, sel) => acc + (getValue(p, sel, prev) ?? 0), 0)
-                      : getValue(p, s, prev);
-                    return (
-                      <td key={p.label} className="py-2 px-3 text-right tabular-nums text-text-secondary">
-                        {fmt(val)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
+            {/* Team row */}
+            <tr style={{ borderBottom: '0.5px solid var(--border-hairline)', background: 'var(--bg-surface)' }}>
+              <td className="py-2 px-3 font-medium text-text-primary">Team</td>
+              {teamTotals.map((val, i) => (
+                <td key={i} className="py-2 px-3 text-right tabular-nums font-medium text-text-primary">
+                  {val != null && val > 0 ? formatCurrency(val) : '—'}
+                </td>
+              ))}
+            </tr>
+            {[...ACTIVE_SELLERS].map((seller) => (
+              <tr key={seller} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
+                className="hover:bg-bg-hover">
+                <td className="py-2 px-3 text-text-secondary" style={{ background: 'var(--bg-card)' }}>
+                  {seller}
+                </td>
+                {visible.map((p) => {
+                  const row = p.metrics?.sellers.find((s) => s.seller === seller);
+                  const val = row ? (metric === 'forecast' ? row.booked + row.committed : row[metric]) : null;
+                  return (
+                    <td key={p.versionId} className="py-2 px-3 text-right tabular-nums text-text-secondary">
+                      {val != null && val > 0 ? formatCurrency(val) : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -218,95 +187,225 @@ function MetricTable({ title, points, getValue, format }: {
   );
 }
 
+// ── main view ─────────────────────────────────────────────────────────────────
+
 export function LtTrends() {
   const { credentials } = useAuth();
   const { username, password } = credentials ?? {};
+
   const storeQuery = useSharedStore(username ?? null, password ?? null);
   const storeData = (storeQuery.data as Record<string, unknown> | null) ?? null;
 
+  const targets = useMemo(
+    () => ((storeData?.quarter_targets ?? {}) as QuarterTargets),
+    [storeData],
+  );
+
   const versionsMeta: VersionMeta[] = useMemo(() => {
     const v = storeData?.versions_meta ?? storeData?.versions;
-    return Array.isArray(v) ? v as VersionMeta[] : [];
+    return Array.isArray(v) ? (v as VersionMeta[]) : [];
   }, [storeData]);
 
   const currentDataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
   const latestVersionId = String(storeData?.latest_version_id ?? storeData?.active_version_id ?? '');
 
-  const anchors = useMemo(() => buildAnchors(versionsMeta), [versionsMeta]);
+  // Weekly anchors (one per ISO week since Apr 1, latest snapshot wins)
+  const anchors = useMemo(() => buildWeeklyAnchors(versionsMeta), [versionsMeta]);
 
-  const anchorVersionIds = useMemo(() => {
-    return anchors
-      .map((a) => versionForAnchor(a.date, versionsMeta)?.id)
-      .filter((id): id is string => !!id && id !== latestVersionId);
-  }, [anchors, versionsMeta, latestVersionId]);
-
-  const batchQuery = useBatchVersionData(username ?? null, password ?? null, anchorVersionIds);
+  // Batch-load all historical snapshots (excluding the latest, which we already have)
+  const historicalIds = useMemo(
+    () => anchors.map((a) => a.meta.id).filter((id) => id !== latestVersionId),
+    [anchors, latestVersionId],
+  );
+  const batchQuery = useBatchVersionData(username ?? null, password ?? null, historicalIds);
   const batchMap = (batchQuery.data as Record<string, Record<string, unknown> | null> | null) ?? {};
 
-  const points = useMemo((): AnchorPoint[] => {
+  // Assemble final week points with computed metrics
+  const points = useMemo((): WeekPoint[] => {
     return anchors.map((a) => {
-      const meta = versionForAnchor(a.date, versionsMeta);
-      const id = meta?.id ?? null;
-      const dataset = !id ? currentDataset : (id === latestVersionId ? currentDataset : (batchMap[id] ?? null));
-      return { ...a, versionId: id, dataset };
-    }).filter((p) => p.dataset != null);
-  }, [anchors, versionsMeta, batchMap, currentDataset, latestVersionId]);
+      const id = a.meta.id;
+      const dataset = id === latestVersionId ? currentDataset : (batchMap[id] ?? null);
+      const metrics = dataset ? computeMetrics(dataset, targets) : null;
+      return { label: a.label, versionId: id, dataset, metrics };
+    }).filter((p) => p.metrics != null);
+  }, [anchors, batchMap, currentDataset, latestVersionId, targets]);
 
-  if (storeQuery.isLoading) return <div className="p-6 text-13 text-text-secondary">Loading LT trends...</div>;
-  if (storeQuery.isError) return <div className="p-6 text-13 text-status-red">Failed to load data.</div>;
+  // Current (latest) metrics
+  const current = points[points.length - 1]?.metrics;
 
-  if (!anchors.length) {
+  // Chart data
+  const chartData = useMemo(() => points.map((p) => ({
+    name: p.label,
+    EV: Math.round(p.metrics?.ev ?? 0),
+    Booked: Math.round(p.metrics?.booked ?? 0),
+    Committed: Math.round(p.metrics?.committed ?? 0),
+    Forecast: Math.round((p.metrics?.booked ?? 0) + (p.metrics?.committed ?? 0)),
+  })), [points]);
+
+  const teamTarget = current?.target ?? 0;
+
+  const [tableMetric, setTableMetric] = useState<MetricKey>('ev');
+
+  const metricTabs: { key: MetricKey; label: string }[] = [
+    { key: 'ev', label: 'EV' },
+    { key: 'booked', label: 'Booked' },
+    { key: 'committed', label: 'Committed' },
+    { key: 'forecast', label: 'Forecast' },
+  ];
+
+  // ── loading / error states ────────────────────────────────────────────────
+
+  if (storeQuery.isLoading) {
     return (
-      <div className="p-6 text-13 text-text-secondary">
-        No historical snapshots available yet. Data will appear after multiple Monday syncs have been captured.
+      <div className="space-y-4 animate-pulse">
+        <div className="grid grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-20 rounded-md" style={{ background: 'var(--bg-surface)' }} />
+          ))}
+        </div>
+        <div className="h-64 rounded-lg" style={{ background: 'var(--bg-surface)' }} />
       </div>
     );
   }
 
-  const shownPoints = points.slice(-16);
+  if (storeQuery.isError) {
+    return (
+      <div className="p-4 text-13 text-status-red rounded-lg"
+        style={{ background: 'var(--bg-surface)', border: '0.5px solid var(--border-hairline)' }}>
+        Failed to load — <button className="underline" onClick={() => storeQuery.refetch()}>retry</button>
+      </div>
+    );
+  }
+
+  if (!points.length && !batchQuery.isLoading) {
+    return (
+      <div className="p-4 text-13 text-text-secondary rounded-lg"
+        style={{ background: 'var(--bg-surface)', border: '0.5px solid var(--border-hairline)' }}>
+        No snapshots found since Apr 1. Data will appear after the next Monday sync.
+      </div>
+    );
+  }
+
+  const evRatio = teamTarget > 0 && current ? current.ev / teamTarget : null;
+  const evRatioColor = evRatio == null ? 'muted' : evRatio >= 1.5 ? 'green' : evRatio >= 1.0 ? 'amber' : 'red';
+  const forecastRatio = teamTarget > 0 && current ? (current.booked + current.committed) / teamTarget : null;
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-18 font-medium text-text-primary">LT biweekly trends</h2>
-        <p className="text-12 text-text-tertiary mt-0.5">
-          {points.length} semi-monthly snapshot(s) from {points[0]?.label} to {points[points.length - 1]?.label}
-          {batchQuery.isLoading && <span className="text-status-amber"> — loading historical snapshots...</span>}
-        </p>
+      {/* Header */}
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h2 className="text-18 font-medium text-text-primary">LT pipeline trends — FY27 Q1</h2>
+          <p className="text-12 text-text-tertiary mt-0.5">
+            {points.length} weekly snapshot{points.length !== 1 ? 's' : ''} &middot; Apr 1 to {points[points.length - 1]?.label}
+            {batchQuery.isLoading && (
+              <span className="text-status-amber"> &middot; loading history...</span>
+            )}
+          </p>
+        </div>
+        <span className="text-12 text-text-tertiary tabular-nums">
+          Target {formatCurrency(teamTarget)}
+        </span>
       </div>
 
-      {points.length === 0 ? (
-        <div className="p-4 rounded-lg text-13 text-text-secondary" style={{ background: 'var(--bg-surface)', border: '0.5px solid var(--border-hairline)' }}>
-          {batchQuery.isLoading ? 'Loading historical snapshots...' : 'No snapshot data could be loaded.'}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <MetricTable
-            title="Booked — won revenue (quarter-paced)"
-            points={shownPoints}
-            getValue={(p, s) => computeActuals(p.dataset, s, p.date)}
-            format="money"
+      {/* KPI strip */}
+      {current && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard
+            label="Expected value (Q1)"
+            value={formatCurrency(current.ev)}
+            sub={evRatio != null ? `${(evRatio * 100).toFixed(0)}% of target` : undefined}
+            subColor={evRatioColor}
           />
-          <MetricTable
-            title="Weighted pipeline (empirical stage probability)"
-            points={shownPoints}
-            getValue={(p, s) => computePipelineEv(p.dataset, s, p.date)}
-            format="money"
+          <KpiCard
+            label="Booked (Q1)"
+            value={formatCurrency(current.booked)}
+            sub={teamTarget > 0 ? `${((current.booked / teamTarget) * 100).toFixed(0)}% of target` : undefined}
+            subColor={current.booked / teamTarget >= 0.5 ? 'green' : current.booked / teamTarget >= 0.3 ? 'amber' : 'muted'}
           />
-          <MetricTable
-            title="Projected outcome (booked + weighted pipeline)"
-            points={shownPoints}
-            getValue={(p, s) => computeActuals(p.dataset, s, p.date) + computePipelineEv(p.dataset, s, p.date)}
-            format="money"
+          <KpiCard
+            label="Committed S5/S6 (Q1)"
+            value={formatCurrency(current.committed)}
+            sub={`${formatCurrency(current.booked + current.committed)} forecast`}
+            subColor="muted"
           />
-          <MetricTable
-            title="New active deals since previous snapshot"
-            points={shownPoints}
-            getValue={(p, s, prev) => computeNewDeals(p.dataset, s, prev?.dataset ?? null)}
-            format="count"
+          <KpiCard
+            label="Forecast vs target"
+            value={forecastRatio != null ? `${(forecastRatio * 100).toFixed(0)}%` : '—'}
+            sub={forecastRatio != null ? (forecastRatio >= 1 ? 'on track' : `${formatCurrency(teamTarget - current.booked - current.committed)} gap`) : undefined}
+            subColor={forecastRatio != null ? (forecastRatio >= 1 ? 'green' : forecastRatio >= 0.7 ? 'amber' : 'red') : 'muted'}
           />
         </div>
       )}
+
+      {/* Trend chart */}
+      <div className="rounded-lg px-4 pt-4 pb-2"
+        style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-hairline)' }}>
+        <div className="text-13 font-medium text-text-primary mb-4">Team pipeline — week over week</div>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              tickFormatter={(v) => formatCurrency(v)}
+              tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+              tickLine={false}
+              axisLine={false}
+              width={64}
+            />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend
+              iconType="plainline"
+              iconSize={16}
+              wrapperStyle={{ fontSize: 11, paddingTop: 8, color: 'var(--text-secondary)' }}
+            />
+            {teamTarget > 0 && (
+              <ReferenceLine
+                y={teamTarget}
+                stroke={COLOR_TARGET}
+                strokeDasharray="4 3"
+                label={{ value: 'Target', position: 'insideTopRight', fontSize: 10, fill: COLOR_TARGET }}
+              />
+            )}
+            <Line type="monotone" dataKey="EV" stroke={COLOR_EV} strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 0, fill: COLOR_EV }} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="Booked" stroke={COLOR_BOOKED} strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 0, fill: COLOR_BOOKED }} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="Committed" stroke={COLOR_COMMITTED} strokeWidth={2}
+              dot={{ r: 3, strokeWidth: 0, fill: COLOR_COMMITTED }} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="Forecast" stroke={COLOR_FORECAST} strokeWidth={1.5}
+              strokeDasharray="4 2"
+              dot={{ r: 3, strokeWidth: 0, fill: COLOR_FORECAST }} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Per-seller breakdown */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1">
+          {metricTabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTableMetric(t.key)}
+              className="px-3 py-1 text-12 rounded-md transition-colors"
+              style={{
+                background: tableMetric === t.key ? 'var(--bg-surface)' : 'transparent',
+                border: '0.5px solid ' + (tableMetric === t.key ? 'var(--border-emphasis)' : 'transparent'),
+                color: tableMetric === t.key ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                fontWeight: tableMetric === t.key ? 500 : 400,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {points.length > 0 && <SellerTable points={points} metric={tableMetric} />}
+      </div>
     </div>
   );
 }
