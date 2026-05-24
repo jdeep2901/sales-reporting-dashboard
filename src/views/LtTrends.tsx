@@ -6,7 +6,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData } from '@/lib/queries';
 import {
-  ACTIVE_SELLERS, buildRows, empiricalEv, stageNumber, type QuarterTargets,
+  ACTIVE_SELLERS, buildRows, empiricalEv, stageNumber, type QuarterTargets, type DealRow,
 } from '@/lib/vpCompute';
 import { KpiCard } from '@/components/KpiCard';
 import { formatCurrency } from '@/lib/formatters';
@@ -82,6 +82,29 @@ function buildWeeklyAnchors(metas: VersionMeta[]): { label: string; meta: Versio
     .map(([, { date, meta }]) => ({ label: weekLabel(date), meta }));
 }
 
+// Compute S3+ EV from raw deal rows using same empiricalEv path as buildRows uses for the
+// total EV denominator. Using quarterDeals (pacing filter) caused the denominator to include
+// deals that were excluded from the numerator when start_date was outside the quarter.
+function s3PlusEv(
+  allDealsRows: DealRow[],
+  qLabels: string[],
+  ownerFilter?: string,
+): number {
+  return allDealsRows.reduce((acc, row) => {
+    const stage = (row.stage ?? (row as Record<string, unknown>).deal_stage ?? '') as string;
+    const s = stage.toLowerCase();
+    if (s.includes('won') || s.includes('win') || s.includes('los')) return acc;
+    if (ownerFilter) {
+      const owner = ((row as Record<string, unknown>).owner ?? '') as string;
+      const firstName = ownerFilter.split(' ')[0].toLowerCase();
+      if (!owner.toLowerCase().includes(firstName)) return acc;
+    }
+    const n = stageNumber(stage);
+    if (n == null || n < 3) return acc;
+    return acc + qLabels.reduce((sum, ql) => sum + empiricalEv(row, ql), 0);
+  }, 0);
+}
+
 function computeMetrics(
   dataset: Record<string, unknown> | null,
   targets: QuarterTargets,
@@ -89,16 +112,12 @@ function computeMetrics(
 ): TeamMetrics {
   const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, evS3Plus: 0, sellers: [] };
   if (!dataset) return empty;
-  const { summary, deals } = buildRows(dataset, targets, FY27_Q);
+  const { summary } = buildRows(dataset, targets, FY27_Q);
   const quarterKeys = scope === 'both' ? ['current', 'next'] : ['current'];
+  const qLabels = quarterKeys.map((k) => k === 'current' ? FY27_Q.current : FY27_Q.next);
   const rows = summary.filter((s) => quarterKeys.includes(s.quarter.key));
 
-  // S3+ EV: re-sum EV for deals at stage 3+ in the relevant quarters
-  const quarterDeals = deals.filter((d) => quarterKeys.includes(d.leadership_quarter.key));
-  const s3PlusEvByDeal = (d: typeof quarterDeals[number]) => {
-    const n = stageNumber(d.stage ?? d.deal_stage ?? (d as Record<string, unknown>).dealStage as string ?? null);
-    return n != null && n >= 3 ? empiricalEv(d, d.leadership_quarter.label) : 0;
-  };
+  const allDealsRows = ((dataset.all_deals_rows ?? []) as DealRow[]);
 
   const team = rows.reduce(
     (acc, s) => ({
@@ -109,22 +128,25 @@ function computeMetrics(
     }),
     { ev: 0, booked: 0, committed: 0, target: 0 },
   );
-  const teamEvS3Plus = quarterDeals.reduce((acc, d) => acc + s3PlusEvByDeal(d), 0);
 
   const sellers = [...ACTIVE_SELLERS].map((seller) => {
     const sellerRows = rows.filter((s) => s.seller === seller);
-    const sellerDeals = quarterDeals.filter((d) => d.leadership_seller === seller);
     return {
       seller,
       ev: sellerRows.reduce((a, s) => a + s.ev, 0),
       booked: sellerRows.reduce((a, s) => a + s.booked, 0),
       committed: sellerRows.reduce((a, s) => a + s.committed, 0),
       target: sellerRows.reduce((a, s) => a + s.target, 0),
-      evS3Plus: sellerDeals.reduce((acc, d) => acc + s3PlusEvByDeal(d), 0),
+      evS3Plus: s3PlusEv(allDealsRows, qLabels, seller),
     };
   });
 
-  return { ...team, forecast: team.booked + team.committed, evS3Plus: teamEvS3Plus, sellers };
+  return {
+    ...team,
+    forecast: team.booked + team.committed,
+    evS3Plus: s3PlusEv(allDealsRows, qLabels),
+    sellers,
+  };
 }
 
 // ── chart tooltip ─────────────────────────────────────────────────────────────
