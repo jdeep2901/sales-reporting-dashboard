@@ -245,8 +245,8 @@ function SellerRow({
         {/* Weighted pipeline */}
         <td className="py-2 px-3 text-13 text-text-primary tabular-nums text-right">
           {formatCurrency(row.ev)}
-          {row.earlyEv > 0 && row.ev > 0 && row.earlyEv / row.ev > 0.4 && (
-            <p className="text-11" style={{ color: 'var(--status-amber)' }}>
+          {row.earlyEv > 0 && row.ev > 0 && row.earlyEv / row.ev > 0.35 && (
+            <p className="text-11" style={{ color: row.earlyEv / row.ev > 0.5 ? 'var(--status-red)' : 'var(--status-amber)' }}>
               {Math.round(row.earlyEv / row.ev * 100)}% top-of-funnel
             </p>
           )}
@@ -742,8 +742,8 @@ export function VerticalPerformance() {
               <div className="text-22 font-medium text-text-primary tabular-nums">
                 {totalEv > 0 ? formatCurrency(totalEv) : '—'}
               </div>
-              <div className="text-11 mt-1" style={{ color: topFunnelPct > 0.5 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
-                {topFunnelPct > 0.5 ? `${Math.round(topFunnelPct * 100)}% top-of-funnel` : 'prob-weighted, all stages'}
+              <div className="text-11 mt-1" style={{ color: topFunnelPct > 0.5 ? 'var(--status-red)' : topFunnelPct > 0.35 ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+                {topFunnelPct > 0.35 ? `${Math.round(topFunnelPct * 100)}% top-of-funnel` : 'prob-weighted, all stages'}
               </div>
             </div>
 

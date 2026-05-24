@@ -157,6 +157,13 @@ function pct(num: number, den: number): number | null {
   return den > 0 ? Math.round((num / den) * 100) : null;
 }
 
+function s3PctColor(val: number | null): string | undefined {
+  if (val == null) return undefined;
+  if (val >= 65) return 'var(--status-green)';
+  if (val >= 50) return 'var(--status-amber)';
+  return 'var(--status-red)';
+}
+
 function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
   const visible = points.slice(-8);
   const q = scope === 'both' ? 'Q1+Q2' : 'Q1';
@@ -208,7 +215,8 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
             <tr style={{ borderBottom: '0.5px solid var(--border-hairline)', background: 'var(--bg-surface)' }}>
               <td className="py-2 px-3 font-medium text-text-primary">New sales</td>
               {teamTotals.map((val, i) => (
-                <td key={i} className="py-2 px-3 text-right tabular-nums font-medium text-text-primary">
+                <td key={i} className="py-2 px-3 text-right tabular-nums font-medium"
+                  style={{ color: isPercent ? s3PctColor(val) : 'var(--text-primary)' }}>
                   {fmt(val)}
                 </td>
               ))}
@@ -223,7 +231,8 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
                   const row = p.metrics?.sellers.find((s) => s.seller === seller);
                   const val = row ? getSellerVal(row) : null;
                   return (
-                    <td key={p.versionId} className="py-2 px-3 text-right tabular-nums text-text-secondary">
+                    <td key={p.versionId} className="py-2 px-3 text-right tabular-nums"
+                      style={{ color: isPercent ? (s3PctColor(val) ?? 'var(--text-tertiary)') : 'var(--text-secondary)' }}>
                       {fmt(val)}
                     </td>
                   );
@@ -399,7 +408,7 @@ export function LtTrends() {
             label={`Weighted pipeline (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.ev)}
             sub={current.ev > 0 ? `${Math.round((current.evS3Plus / current.ev) * 100)}% from S3+` : undefined}
-            subColor={current.ev > 0 ? (current.evS3Plus / current.ev >= 0.5 ? 'green' : current.evS3Plus / current.ev >= 0.3 ? 'amber' : 'red') : 'muted'}
+            subColor={current.ev > 0 ? (current.evS3Plus / current.ev >= 0.65 ? 'green' : current.evS3Plus / current.ev >= 0.5 ? 'amber' : 'red') : 'muted'}
           />
         </div>
       )}
