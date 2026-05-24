@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Tabs, type TabItem } from '@/components/Tabs';
@@ -115,6 +116,7 @@ function ProfileButton() {
 }
 
 function Shell() {
+  const [appendixOpen, setAppendixOpen] = useState(false);
   return (
     <LoginGate>
       <div className="min-h-screen bg-bg-page">
@@ -143,11 +145,15 @@ function Shell() {
         {/* Appendix nav */}
         <div className="bg-bg-page" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
           <div className="max-w-[1500px] mx-auto px-5 flex items-stretch">
-            <span className="text-11 text-text-tertiary font-medium shrink-0 pr-3 flex items-center"
-              style={{ borderRight: '0.5px solid var(--border-hairline)' }}>
+            <button
+              onClick={() => setAppendixOpen((o) => !o)}
+              className="text-11 text-text-tertiary font-medium shrink-0 pr-3 flex items-center gap-1 hover:text-text-secondary transition-colors"
+              style={{ borderRight: appendixOpen ? '0.5px solid var(--border-hairline)' : 'none' }}
+            >
+              <span>{appendixOpen ? '▾' : '▸'}</span>
               Appendix
-            </span>
-            <Tabs tabs={appendixTabs} className="text-text-tertiary" />
+            </button>
+            {appendixOpen && <Tabs tabs={appendixTabs} className="text-text-tertiary" />}
           </div>
         </div>
 
