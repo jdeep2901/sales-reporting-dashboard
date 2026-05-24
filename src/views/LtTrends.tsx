@@ -174,7 +174,7 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
           <tbody>
             {/* Team row */}
             <tr style={{ borderBottom: '0.5px solid var(--border-hairline)', background: 'var(--bg-surface)' }}>
-              <td className="py-2 px-3 font-medium text-text-primary">Team</td>
+              <td className="py-2 px-3 font-medium text-text-primary">New sales</td>
               {teamTotals.map((val, i) => (
                 <td key={i} className="py-2 px-3 text-right tabular-nums font-medium text-text-primary">
                   {val != null && val > 0 ? formatCurrency(val) : '—'}

@@ -142,7 +142,11 @@ function Shell() {
 
         {/* Appendix nav */}
         <div className="bg-bg-page" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-          <div className="max-w-[1500px] mx-auto px-5">
+          <div className="max-w-[1500px] mx-auto px-5 flex items-stretch">
+            <span className="text-11 text-text-tertiary font-medium shrink-0 pr-3 flex items-center"
+              style={{ borderRight: '0.5px solid var(--border-hairline)' }}>
+              Appendix
+            </span>
             <Tabs tabs={appendixTabs} className="text-text-tertiary" />
           </div>
         </div>
