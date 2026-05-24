@@ -142,8 +142,8 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
   const visible = points.slice(-8);
   const q = scope === 'both' ? 'Q1+Q2' : 'Q1';
   const metricLabel: Record<MetricKey, string> = {
-    ev: `Expected value (${q})`, booked: `Booked (${q})`,
-    committed: `Committed S5/S6 (${q})`, forecast: `Forecast (${q})`,
+    forecast: `Forecast (${q})`, booked: `Booked (${q})`,
+    committed: `Committed S5/S6 (${q})`, ev: `Weighted pipeline (${q})`,
   };
   const teamTotals = visible.map((p) => {
     const m = p.metrics;
@@ -257,7 +257,7 @@ export function LtTrends() {
   // Chart data
   const chartData = useMemo(() => points.map((p) => ({
     name: p.label,
-    EV: Math.round(p.metrics?.ev ?? 0),
+    'Wtd pipeline': Math.round(p.metrics?.ev ?? 0),
     Booked: Math.round(p.metrics?.booked ?? 0),
     Committed: Math.round(p.metrics?.committed ?? 0),
     Forecast: Math.round((p.metrics?.booked ?? 0) + (p.metrics?.committed ?? 0)),
@@ -266,10 +266,10 @@ export function LtTrends() {
   const teamTarget = current?.target ?? 0;
 
   const metricTabs: { key: MetricKey; label: string }[] = [
-    { key: 'ev', label: 'EV' },
+    { key: 'forecast', label: 'Forecast' },
     { key: 'booked', label: 'Booked' },
     { key: 'committed', label: 'Committed' },
-    { key: 'forecast', label: 'Forecast' },
+    { key: 'ev', label: 'Wtd pipeline' },
   ];
 
   // ── loading / error states ────────────────────────────────────────────────
@@ -343,14 +343,14 @@ export function LtTrends() {
         </div>
       </div>
 
-      {/* KPI strip */}
+      {/* KPI strip — order mirrors VP: Forecast → Booked → Committed → Wtd pipeline */}
       {current && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <KpiCard
-            label={`Expected value (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
-            value={formatCurrency(current.ev)}
-            sub={evRatio != null ? `${(evRatio * 100).toFixed(0)}% of target` : undefined}
-            subColor={evRatioColor}
+            label={`Forecast (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            value={formatCurrency(current.booked + current.committed)}
+            sub={forecastRatio != null ? (forecastRatio >= 1 ? 'on track' : `${formatCurrency(teamTarget - current.booked - current.committed)} gap`) : undefined}
+            subColor={forecastRatio != null ? (forecastRatio >= 1 ? 'green' : forecastRatio >= 0.7 ? 'amber' : 'red') : 'muted'}
           />
           <KpiCard
             label={`Booked (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
@@ -361,14 +361,14 @@ export function LtTrends() {
           <KpiCard
             label={`Committed S5/S6 (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.committed)}
-            sub={`${formatCurrency(current.booked + current.committed)} forecast`}
+            sub={teamTarget > 0 ? `${((current.committed / teamTarget) * 100).toFixed(0)}% of target` : undefined}
             subColor="muted"
           />
           <KpiCard
-            label="Forecast vs target"
-            value={forecastRatio != null ? `${(forecastRatio * 100).toFixed(0)}%` : '—'}
-            sub={forecastRatio != null ? (forecastRatio >= 1 ? 'on track' : `${formatCurrency(teamTarget - current.booked - current.committed)} gap`) : undefined}
-            subColor={forecastRatio != null ? (forecastRatio >= 1 ? 'green' : forecastRatio >= 0.7 ? 'amber' : 'red') : 'muted'}
+            label={`Weighted pipeline (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            value={formatCurrency(current.ev)}
+            sub={evRatio != null ? `${evRatio.toFixed(1)}× target` : undefined}
+            subColor={evRatioColor}
           />
         </div>
       )}
@@ -407,7 +407,7 @@ export function LtTrends() {
                 label={{ value: 'Target', position: 'insideTopRight', fontSize: 10, fill: COLOR_TARGET }}
               />
             )}
-            <Line type="monotone" dataKey="EV" stroke={COLOR_EV} strokeWidth={2}
+            <Line type="monotone" dataKey="Wtd pipeline" stroke={COLOR_EV} strokeWidth={2}
               dot={{ r: 3, strokeWidth: 0, fill: COLOR_EV }} activeDot={{ r: 4 }} />
             <Line type="monotone" dataKey="Booked" stroke={COLOR_BOOKED} strokeWidth={2}
               dot={{ r: 3, strokeWidth: 0, fill: COLOR_BOOKED }} activeDot={{ r: 4 }} />
