@@ -131,6 +131,7 @@ export interface QuarterSummary {
   bookedCommitted: number;
   ev: number;
   flooredEv: number;
+  earlyEv: number; // S1+S2 only — complement of S3+ (earlyEv/ev + s3PlusPct = 1)
 }
 
 export interface SellerAggregate {
@@ -141,6 +142,7 @@ export interface SellerAggregate {
   bookedCommitted: number;
   ev: number;
   flooredEv: number;
+  earlyEv: number;
   open: number;
   atRisk: number;
   riskExposure: number;
@@ -451,6 +453,7 @@ export function buildRows(
       let committed = 0;
       let ev = 0;
       let flooredEv = 0;
+      let earlyEv = 0;
 
       for (const r of rows) {
         if (!rowMatchesSeller(r, seller)) continue;
@@ -483,11 +486,11 @@ export function buildRows(
         }
         const evContrib = empiricalEv(r, quarter.label);
         ev += evContrib;
-        // all stage 1-4 EV uses the $100K floor — track as floored
         if (n != null && n <= 4) flooredEv += evContrib;
+        if (n != null && n <= 2) earlyEv += evContrib;
       }
 
-      summary.push({ seller, quarter, target, booked, committed, bookedCommitted: booked + committed, ev, flooredEv });
+      summary.push({ seller, quarter, target, booked, committed, bookedCommitted: booked + committed, ev, flooredEv, earlyEv });
     }
   }
 
@@ -513,7 +516,7 @@ export function aggregateSellers(
     if (!map.has(r.seller)) {
       map.set(r.seller, {
         seller: r.seller,
-        target: 0, booked: 0, committed: 0, bookedCommitted: 0, ev: 0, flooredEv: 0,
+        target: 0, booked: 0, committed: 0, bookedCommitted: 0, ev: 0, flooredEv: 0, earlyEv: 0,
         open: 0, atRisk: 0, riskExposure: 0, ratio: 0, gap: 0,
         quarters: [], deals: [],
       });
@@ -525,6 +528,7 @@ export function aggregateSellers(
     s.bookedCommitted += r.bookedCommitted;
     s.ev += r.ev;
     s.flooredEv += r.flooredEv;
+    s.earlyEv += r.earlyEv;
     s.quarters.push(r);
   }
 

@@ -6,7 +6,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData } from '@/lib/queries';
 import {
-  ACTIVE_SELLERS, buildRows, empiricalEv, stageNumber, type QuarterTargets, type DealRow,
+  ACTIVE_SELLERS, buildRows, type QuarterTargets,
 } from '@/lib/vpCompute';
 import { KpiCard } from '@/components/KpiCard';
 import { formatCurrency } from '@/lib/formatters';
@@ -82,29 +82,6 @@ function buildWeeklyAnchors(metas: VersionMeta[]): { label: string; meta: Versio
     .map(([, { date, meta }]) => ({ label: weekLabel(date), meta }));
 }
 
-// Compute S3+ EV from raw deal rows using same empiricalEv path as buildRows uses for the
-// total EV denominator. Using quarterDeals (pacing filter) caused the denominator to include
-// deals that were excluded from the numerator when start_date was outside the quarter.
-function s3PlusEv(
-  allDealsRows: DealRow[],
-  qLabels: string[],
-  ownerFilter?: string,
-): number {
-  return allDealsRows.reduce((acc, row) => {
-    const stage = (row.stage ?? (row as Record<string, unknown>).deal_stage ?? '') as string;
-    const s = stage.toLowerCase();
-    if (s.includes('won') || s.includes('win') || s.includes('los')) return acc;
-    if (ownerFilter) {
-      const owner = ((row as Record<string, unknown>).owner ?? '') as string;
-      const firstName = ownerFilter.split(' ')[0].toLowerCase();
-      if (!owner.toLowerCase().includes(firstName)) return acc;
-    }
-    const n = stageNumber(stage);
-    if (n == null || n < 3) return acc;
-    return acc + qLabels.reduce((sum, ql) => sum + empiricalEv(row, ql), 0);
-  }, 0);
-}
-
 function computeMetrics(
   dataset: Record<string, unknown> | null,
   targets: QuarterTargets,
@@ -114,37 +91,39 @@ function computeMetrics(
   if (!dataset) return empty;
   const { summary } = buildRows(dataset, targets, FY27_Q);
   const quarterKeys = scope === 'both' ? ['current', 'next'] : ['current'];
-  const qLabels = quarterKeys.map((k) => k === 'current' ? FY27_Q.current : FY27_Q.next);
   const rows = summary.filter((s) => quarterKeys.includes(s.quarter.key));
 
-  const allDealsRows = ((dataset.all_deals_rows ?? []) as DealRow[]);
-
+  // S3+ EV = total EV - earlyEv (S1+S2). Both come from the same empiricalEv path in buildRows,
+  // so this is guaranteed consistent with the VP top-of-funnel % (earlyEv/ev).
   const team = rows.reduce(
     (acc, s) => ({
       ev: acc.ev + s.ev,
       booked: acc.booked + s.booked,
       committed: acc.committed + s.committed,
       target: acc.target + s.target,
+      earlyEv: acc.earlyEv + s.earlyEv,
     }),
-    { ev: 0, booked: 0, committed: 0, target: 0 },
+    { ev: 0, booked: 0, committed: 0, target: 0, earlyEv: 0 },
   );
 
   const sellers = [...ACTIVE_SELLERS].map((seller) => {
     const sellerRows = rows.filter((s) => s.seller === seller);
+    const sellerEv = sellerRows.reduce((a, s) => a + s.ev, 0);
+    const sellerEarlyEv = sellerRows.reduce((a, s) => a + s.earlyEv, 0);
     return {
       seller,
-      ev: sellerRows.reduce((a, s) => a + s.ev, 0),
+      ev: sellerEv,
       booked: sellerRows.reduce((a, s) => a + s.booked, 0),
       committed: sellerRows.reduce((a, s) => a + s.committed, 0),
       target: sellerRows.reduce((a, s) => a + s.target, 0),
-      evS3Plus: s3PlusEv(allDealsRows, qLabels, seller),
+      evS3Plus: sellerEv - sellerEarlyEv,
     };
   });
 
   return {
     ...team,
     forecast: team.booked + team.committed,
-    evS3Plus: s3PlusEv(allDealsRows, qLabels),
+    evS3Plus: team.ev - team.earlyEv,
     sellers,
   };
 }

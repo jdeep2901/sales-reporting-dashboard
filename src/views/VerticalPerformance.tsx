@@ -245,9 +245,9 @@ function SellerRow({
         {/* Weighted pipeline */}
         <td className="py-2 px-3 text-13 text-text-primary tabular-nums text-right">
           {formatCurrency(row.ev)}
-          {row.flooredEv > 0 && row.ev > 0 && row.flooredEv / row.ev > 0.4 && (
+          {row.earlyEv > 0 && row.ev > 0 && row.earlyEv / row.ev > 0.4 && (
             <p className="text-11" style={{ color: 'var(--status-amber)' }}>
-              {Math.round(row.flooredEv / row.ev * 100)}% top-of-funnel
+              {Math.round(row.earlyEv / row.ev * 100)}% top-of-funnel
             </p>
           )}
         </td>
@@ -561,7 +561,7 @@ export function VerticalPerformance() {
   const totalActual = aggregates.reduce((a, r) => a + r.booked, 0);
   const totalCommitted = aggregates.reduce((a, r) => a + r.committed, 0);
   const totalActualEst = aggregates.reduce((a, r) => a + r.bookedCommitted, 0);
-  const totalFlooredEv = aggregates.reduce((a, r) => a + r.flooredEv, 0);
+  const totalEarlyEv = aggregates.reduce((a, r) => a + r.earlyEv, 0);
   const atRiskDeals = allOpenForFilter.filter((d) => d.leadership_risk.atRisk);
   const ratio = totalTarget > 0 ? totalEv / totalTarget : 0;
   const ratioT = ratioTone(ratio);
@@ -572,7 +572,7 @@ export function VerticalPerformance() {
   const forecastTone = totalTarget === 0 ? 'green' : forecast >= totalTarget ? 'green' : forecast >= totalTarget * 0.7 ? 'amber' : 'red';
   const forecastColor = `var(--status-${forecastTone})`;
   const pipelineCoverage = totalTarget > 0 ? totalEv / totalTarget : 0;
-  const topFunnelPct = totalEv > 0 ? totalFlooredEv / totalEv : 0;
+  const topFunnelPct = totalEv > 0 ? totalEarlyEv / totalEv : 0;
   const lateCount = allOpenForFilter.filter((d) => {
     const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
     return n != null && n >= 5;
