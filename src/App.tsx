@@ -137,25 +137,31 @@ function Shell() {
 
         {/* Main nav */}
         <div className="bg-bg-card" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-          <div className="max-w-[1500px] mx-auto px-5">
+          <div className="max-w-[1500px] mx-auto px-5 flex items-stretch">
             <Tabs tabs={mainTabs} />
+            <button
+              onClick={() => setAppendixOpen((o) => !o)}
+              className="px-4 py-3 text-13 whitespace-nowrap shrink-0 transition-colors"
+              style={{
+                color: appendixOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: appendixOpen ? 500 : 400,
+                borderBottom: appendixOpen ? '1.5px solid #0A0A0A' : 'none',
+                marginBottom: appendixOpen ? '-1px' : '0',
+              }}
+            >
+              Appendix
+            </button>
           </div>
         </div>
 
         {/* Appendix nav */}
-        <div className="bg-bg-page" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-          <div className="max-w-[1500px] mx-auto px-5 flex items-stretch">
-            <button
-              onClick={() => setAppendixOpen((o) => !o)}
-              className="text-11 text-text-tertiary font-medium shrink-0 pr-3 flex items-center gap-1 hover:text-text-secondary transition-colors"
-              style={{ borderRight: appendixOpen ? '0.5px solid var(--border-hairline)' : 'none' }}
-            >
-              <span>{appendixOpen ? '▾' : '▸'}</span>
-              Appendix
-            </button>
-            {appendixOpen && <Tabs tabs={appendixTabs} className="text-text-tertiary" />}
+        {appendixOpen && (
+          <div className="bg-bg-page" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
+            <div className="max-w-[1500px] mx-auto px-5">
+              <Tabs tabs={appendixTabs} className="text-text-tertiary" />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* View content */}
         <main className="max-w-[1500px] mx-auto px-5 py-5">
