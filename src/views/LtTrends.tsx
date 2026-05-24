@@ -6,7 +6,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData } from '@/lib/queries';
 import {
-  ACTIVE_SELLERS, buildRows, type QuarterTargets,
+  ACTIVE_SELLERS, buildRows, empiricalEv, stageNumber, type QuarterTargets,
 } from '@/lib/vpCompute';
 import { KpiCard } from '@/components/KpiCard';
 import { formatCurrency } from '@/lib/formatters';
@@ -38,8 +38,8 @@ interface VersionMeta { id: string; created_at: string }
 
 interface TeamMetrics {
   ev: number; booked: number; committed: number;
-  target: number; forecast: number;
-  sellers: { seller: string; ev: number; booked: number; committed: number; target: number }[];
+  target: number; forecast: number; evS3Plus: number;
+  sellers: { seller: string; ev: number; booked: number; committed: number; target: number; evS3Plus: number }[];
 }
 
 interface WeekPoint {
@@ -49,7 +49,7 @@ interface WeekPoint {
   metrics: TeamMetrics | null;
 }
 
-type MetricKey = 'ev' | 'booked' | 'committed' | 'forecast';
+type MetricKey = 'ev' | 'booked' | 'committed' | 'forecast' | 'evS3Pct';
 type QuarterScope = 'current' | 'both';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -87,10 +87,19 @@ function computeMetrics(
   targets: QuarterTargets,
   scope: QuarterScope,
 ): TeamMetrics {
-  const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, sellers: [] };
+  const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, evS3Plus: 0, sellers: [] };
   if (!dataset) return empty;
-  const { summary } = buildRows(dataset, targets, FY27_Q);
-  const rows = scope === 'both' ? summary : summary.filter((s) => s.quarter.key === 'current');
+  const { summary, deals } = buildRows(dataset, targets, FY27_Q);
+  const quarterKeys = scope === 'both' ? ['current', 'next'] : ['current'];
+  const rows = summary.filter((s) => quarterKeys.includes(s.quarter.key));
+
+  // S3+ EV: re-sum EV for deals at stage 3+ in the relevant quarters
+  const quarterDeals = deals.filter((d) => quarterKeys.includes(d.leadership_quarter.key));
+  const s3PlusEvByDeal = (d: typeof quarterDeals[number]) => {
+    const n = stageNumber(d.stage ?? d.deal_stage ?? (d as Record<string, unknown>).dealStage as string ?? null);
+    return n != null && n >= 3 ? empiricalEv(d, d.leadership_quarter.label) : 0;
+  };
+
   const team = rows.reduce(
     (acc, s) => ({
       ev: acc.ev + s.ev,
@@ -100,17 +109,22 @@ function computeMetrics(
     }),
     { ev: 0, booked: 0, committed: 0, target: 0 },
   );
+  const teamEvS3Plus = quarterDeals.reduce((acc, d) => acc + s3PlusEvByDeal(d), 0);
+
   const sellers = [...ACTIVE_SELLERS].map((seller) => {
     const sellerRows = rows.filter((s) => s.seller === seller);
+    const sellerDeals = quarterDeals.filter((d) => d.leadership_seller === seller);
     return {
       seller,
       ev: sellerRows.reduce((a, s) => a + s.ev, 0),
       booked: sellerRows.reduce((a, s) => a + s.booked, 0),
       committed: sellerRows.reduce((a, s) => a + s.committed, 0),
       target: sellerRows.reduce((a, s) => a + s.target, 0),
+      evS3Plus: sellerDeals.reduce((acc, d) => acc + s3PlusEvByDeal(d), 0),
     };
   });
-  return { ...team, forecast: team.booked + team.committed, sellers };
+
+  return { ...team, forecast: team.booked + team.committed, evS3Plus: teamEvS3Plus, sellers };
 }
 
 // ── chart tooltip ─────────────────────────────────────────────────────────────
@@ -138,18 +152,35 @@ function ChartTooltip({ active, payload, label }: {
 
 // ── per-seller table ──────────────────────────────────────────────────────────
 
+function pct(num: number, den: number): number | null {
+  return den > 0 ? Math.round((num / den) * 100) : null;
+}
+
 function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
   const visible = points.slice(-8);
   const q = scope === 'both' ? 'Q1+Q2' : 'Q1';
   const metricLabel: Record<MetricKey, string> = {
     forecast: `Forecast (${q})`, booked: `Booked (${q})`,
     committed: `Committed S5/S6 (${q})`, ev: `Weighted pipeline (${q})`,
+    evS3Pct: `% wtd pipeline from S3+ (${q})`,
   };
-  const teamTotals = visible.map((p) => {
-    const m = p.metrics;
-    if (!m) return null;
-    return metric === 'forecast' ? m.booked + m.committed : m[metric];
-  });
+
+  const isPercent = metric === 'evS3Pct';
+  const fmt = (val: number | null) =>
+    val == null ? '—' : isPercent ? `${val}%` : val > 0 ? formatCurrency(val) : '—';
+
+  function getTeamVal(m: TeamMetrics): number | null {
+    if (metric === 'forecast') return m.booked + m.committed;
+    if (metric === 'evS3Pct') return pct(m.evS3Plus, m.ev);
+    return m[metric];
+  }
+  function getSellerVal(row: TeamMetrics['sellers'][number]): number | null {
+    if (metric === 'forecast') return row.booked + row.committed;
+    if (metric === 'evS3Pct') return pct(row.evS3Plus, row.ev);
+    return row[metric];
+  }
+
+  const teamTotals = visible.map((p) => p.metrics ? getTeamVal(p.metrics) : null);
 
   return (
     <div className="rounded-lg overflow-hidden" style={{ border: '0.5px solid var(--border-hairline)' }}>
@@ -177,7 +208,7 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
               <td className="py-2 px-3 font-medium text-text-primary">New sales</td>
               {teamTotals.map((val, i) => (
                 <td key={i} className="py-2 px-3 text-right tabular-nums font-medium text-text-primary">
-                  {val != null && val > 0 ? formatCurrency(val) : '—'}
+                  {fmt(val)}
                 </td>
               ))}
             </tr>
@@ -189,10 +220,10 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
                 </td>
                 {visible.map((p) => {
                   const row = p.metrics?.sellers.find((s) => s.seller === seller);
-                  const val = row ? (metric === 'forecast' ? row.booked + row.committed : row[metric]) : null;
+                  const val = row ? getSellerVal(row) : null;
                   return (
                     <td key={p.versionId} className="py-2 px-3 text-right tabular-nums text-text-secondary">
-                      {val != null && val > 0 ? formatCurrency(val) : '—'}
+                      {fmt(val)}
                     </td>
                   );
                 })}
@@ -270,6 +301,7 @@ export function LtTrends() {
     { key: 'booked', label: 'Booked' },
     { key: 'committed', label: 'Committed' },
     { key: 'ev', label: 'Wtd pipeline' },
+    { key: 'evS3Pct', label: '% S3+' },
   ];
 
   // ── loading / error states ────────────────────────────────────────────────
@@ -305,8 +337,6 @@ export function LtTrends() {
     );
   }
 
-  const evRatio = teamTarget > 0 && current ? current.ev / teamTarget : null;
-  const evRatioColor = evRatio == null ? 'muted' : evRatio >= 1.5 ? 'green' : evRatio >= 1.0 ? 'amber' : 'red';
   const forecastRatio = teamTarget > 0 && current ? (current.booked + current.committed) / teamTarget : null;
 
   return (
@@ -367,8 +397,8 @@ export function LtTrends() {
           <KpiCard
             label={`Weighted pipeline (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
             value={formatCurrency(current.ev)}
-            sub={evRatio != null ? `${evRatio.toFixed(1)}× target` : undefined}
-            subColor={evRatioColor}
+            sub={current.ev > 0 ? `${Math.round((current.evS3Plus / current.ev) * 100)}% from S3+` : undefined}
+            subColor={current.ev > 0 ? (current.evS3Plus / current.ev >= 0.5 ? 'green' : current.evS3Plus / current.ev >= 0.3 ? 'amber' : 'red') : 'muted'}
           />
         </div>
       )}
