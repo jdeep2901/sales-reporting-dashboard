@@ -1,7 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
-import { useSharedStore, useVersionData, useDealStaleness } from '@/lib/queries';
-import type { DealStaleness } from '@/lib/queries';
+import {
+  useSharedStore, useVersionData, useDealStaleness,
+  useAllSellerActions, useCreateAction, useUpdateAction, useDeleteAction,
+} from '@/lib/queries';
+import type { DealStaleness, SellerAction } from '@/lib/queries';
 import { useSessionState } from '@/lib/hooks';
 import { formatCurrency } from '@/lib/formatters';
 import {
@@ -283,6 +286,216 @@ function FocusPanel({
   );
 }
 
+// ── actions ───────────────────────────────────────────────────────────────
+
+function nextMonday(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? 1 : 8 - day;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function isOverdue(action: SellerAction): boolean {
+  if (action.status === 'done') return false;
+  if (!action.due_date) return false;
+  return action.due_date < new Date().toISOString().slice(0, 10);
+}
+
+function ActionsBadge({ actions }: { actions: SellerAction[] }) {
+  const open = actions.filter((a) => a.status !== 'done');
+  if (open.length === 0) return null;
+  const hasOverdue = open.some(isOverdue);
+  const color = hasOverdue ? 'var(--status-amber)' : 'var(--accent)';
+  return (
+    <span
+      className="text-11 tabular-nums"
+      style={{ color, background: hasOverdue ? 'var(--status-amber-bg)' : '#EEF0FF', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}
+    >
+      {open.length} action{open.length !== 1 ? 's' : ''}
+    </span>
+  );
+}
+
+function ActionsList({
+  sellerName,
+  actions,
+  dealOptions,
+}: {
+  sellerName: string;
+  actions: SellerAction[];
+  dealOptions: { id: string; name: string }[];
+}) {
+  const create = useCreateAction();
+  const update = useUpdateAction();
+  const del = useDeleteAction();
+
+  const [text, setText] = useState('');
+  const [dealId, setDealId] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const open = actions.filter((a) => a.status !== 'done');
+  const done = actions.filter((a) => a.status === 'done');
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const deal = dealOptions.find((d) => d.id === dealId);
+    create.mutate({
+      seller_name: sellerName,
+      deal_id: deal?.id ?? null,
+      deal_name: deal?.name ?? null,
+      text: trimmed,
+      due_date: nextMonday(),
+      status: 'open',
+    });
+    setText('');
+    setDealId('');
+    inputRef.current?.focus();
+  }
+
+  function toggle(action: SellerAction) {
+    update.mutate({ id: action.id, status: action.status === 'done' ? 'open' : 'done' });
+  }
+
+  function markCarry(action: SellerAction) {
+    update.mutate({ id: action.id, status: 'carry' });
+  }
+
+  const renderAction = (action: SellerAction) => {
+    const overdue = isOverdue(action);
+    const carry = action.status === 'carry';
+    return (
+      <div
+        key={action.id}
+        className="flex items-start gap-2.5 py-1.5"
+        style={{ borderTop: '0.5px solid var(--border-hairline)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => toggle(action)}
+          className="mt-0.5 flex-shrink-0 w-4 h-4 rounded flex items-center justify-center transition-colors"
+          style={{
+            border: action.status === 'done' ? 'none' : '1.5px solid var(--border-emphasis)',
+            background: action.status === 'done' ? 'var(--status-green)' : 'var(--bg-card)',
+          }}
+          title={action.status === 'done' ? 'Mark open' : 'Mark done'}
+        >
+          {action.status === 'done' && <span className="text-white text-10 leading-none">✓</span>}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-13 text-text-primary" style={{ textDecoration: action.status === 'done' ? 'line-through' : undefined, color: action.status === 'done' ? 'var(--text-tertiary)' : undefined }}>
+            {action.text}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {action.deal_name && (
+              <span className="text-11 text-text-tertiary">↳ {action.deal_name}</span>
+            )}
+            {action.due_date && action.status !== 'done' && (
+              <span className="text-11" style={{ color: overdue ? 'var(--status-amber)' : 'var(--text-tertiary)' }}>
+                {overdue ? 'overdue · ' : ''}{action.due_date}
+              </span>
+            )}
+            {carry && <span className="text-11" style={{ color: 'var(--status-amber)' }}>carried over</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {overdue && action.status === 'open' && (
+            <button
+              onClick={() => markCarry(action)}
+              className="text-11 text-text-tertiary hover:text-text-secondary px-1.5 py-0.5 rounded"
+              style={{ border: '0.5px solid var(--border-hairline)' }}
+              title="Mark as carried to next week"
+            >
+              carry
+            </button>
+          )}
+          <button
+            onClick={() => del.mutate({ id: action.id, seller_name: sellerName })}
+            className="text-11 text-text-tertiary hover:text-text-primary px-1 leading-none"
+            title="Delete"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-2">
+        <p className="text-11 font-medium text-text-primary">Actions this week</p>
+        {open.length > 0 && (
+          <span className="text-11 text-text-tertiary">{open.length} open{done.length > 0 ? ` · ${done.length} done` : ''}</span>
+        )}
+      </div>
+
+      {/* Add new action */}
+      <form onSubmit={handleAdd} className="flex gap-2">
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add an action…"
+          className="flex-1 text-13 text-text-primary bg-bg-card px-2 py-1.5"
+          style={{ border: '0.5px solid var(--border-emphasis)', borderRadius: 'var(--radius-sm)', outline: 'none', minWidth: 0 }}
+          onClick={(e) => e.stopPropagation()}
+        />
+        {dealOptions.length > 0 && (
+          <select
+            value={dealId}
+            onChange={(e) => setDealId(e.target.value)}
+            style={{ ...selectStyle, maxWidth: 180, fontSize: 11 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <option value="">No deal tag</option>
+            {dealOptions.map((d) => (
+              <option key={d.id} value={d.id}>{d.name.length > 30 ? d.name.slice(0, 28) + '…' : d.name}</option>
+            ))}
+          </select>
+        )}
+        <button
+          type="submit"
+          disabled={!text.trim() || create.isPending}
+          className="text-12 px-3 py-1.5 font-medium"
+          style={{ background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius-sm)', opacity: !text.trim() ? 0.5 : 1 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          Add
+        </button>
+      </form>
+
+      {/* Open / carry actions */}
+      {open.length > 0 && (
+        <div className="flex flex-col gap-0">
+          {open.map(renderAction)}
+        </div>
+      )}
+
+      {/* Done — collapsed by default */}
+      {done.length > 0 && (
+        <details className="group">
+          <summary className="text-11 text-text-tertiary cursor-pointer list-none flex items-center gap-1 mt-1">
+            <span className="group-open:hidden">▶</span>
+            <span className="hidden group-open:inline">▼</span>
+            {done.length} completed
+          </summary>
+          <div className="flex flex-col gap-0 mt-1 opacity-60">
+            {done.map(renderAction)}
+          </div>
+        </details>
+      )}
+
+      {open.length === 0 && done.length === 0 && (
+        <p className="text-11 text-text-tertiary">No actions yet — add one above.</p>
+      )}
+    </div>
+  );
+}
+
 // ── expandable seller row (v2) ────────────────────────────────────────────
 const PLAN_KEY = (seller: string) => `vp2_closure_plan__${seller.replace(/\s+/g, '_').toLowerCase()}`;
 
@@ -291,11 +504,13 @@ function SellerRowV2({
   allDeals,
   quarterFocus,
   staleness,
+  actions,
 }: {
   row: SellerAggregate;
   allDeals: RichDealRow[];
   quarterFocus: 'both' | 'current' | 'next';
   staleness: Map<string, DealStaleness>;
+  actions: SellerAction[];
 }) {
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState(() => {
@@ -321,6 +536,14 @@ function SellerRowV2({
 
   const hasRisk = focus != null;
 
+  // Deal options for action tagging — S3–S6 active deals for this seller
+  const dealOptions = useMemo(() =>
+    sellerDeals
+      .filter((d) => { const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage); return n != null && n >= 3; })
+      .map((d) => ({ id: d.item_id ?? dealDisplay(d), name: dealDisplay(d) })),
+    [sellerDeals],
+  );
+
   return (
     <>
       <tr
@@ -335,9 +558,12 @@ function SellerRowV2({
               style={{ width: 24, height: 24, background: 'var(--bg-surface)', border: '0.5px solid var(--border-emphasis)', borderRadius: '50%', color: 'var(--text-secondary)' }}>
               {row.seller[0]}
             </span>
-            <div>
+            <div className="flex flex-col gap-0.5">
               <p className="text-13 font-medium text-text-primary">{row.seller}</p>
-              <p className="text-11 text-text-tertiary">{row.open} open</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-11 text-text-tertiary">{row.open} open</p>
+                <ActionsBadge actions={actions} />
+              </div>
             </div>
           </div>
         </td>
@@ -390,6 +616,15 @@ function SellerRowV2({
         <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
           <td colSpan={8} className="p-0">
             <div className="bg-bg-surface p-4 flex flex-col gap-4">
+
+              {/* Actions */}
+              <div className="bg-bg-card p-3" style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-md)' }}>
+                <ActionsList
+                  sellerName={row.seller}
+                  actions={actions}
+                  dealOptions={dealOptions}
+                />
+              </div>
 
               {/* Quarter breakdown */}
               {row.quarters.filter(q => quarterFocus === 'both' || q.quarter.key === quarterFocus).length > 0 && (
@@ -639,6 +874,10 @@ export function VerticalPerformanceV2() {
   const stalenessQuery = useDealStaleness();
   const staleness = stalenessQuery.data ?? new Map<string, DealStaleness>();
 
+  const sellerNames = useMemo(() => aggregates.map((r) => r.seller), [aggregates]);
+  const actionsQuery = useAllSellerActions(sellerNames);
+  const actionsMap = actionsQuery.data ?? new Map<string, SellerAction[]>();
+
   const totalTarget = aggregates.reduce((a, r) => a + r.target, 0);
   const totalEv = aggregates.reduce((a, r) => a + r.ev, 0);
   const totalBooked = aggregates.reduce((a, r) => a + r.booked, 0);
@@ -738,6 +977,7 @@ export function VerticalPerformanceV2() {
                       allDeals={allOpenForFilter}
                       quarterFocus={quarterFocus}
                       staleness={staleness}
+                      actions={actionsMap.get(r.seller) ?? []}
                     />
                   ))
                 )}

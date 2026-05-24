@@ -129,6 +129,112 @@ export function useDealStaleness() {
   });
 }
 
+// ── Seller actions ────────────────────────────────────────────────────────────
+
+export interface SellerAction {
+  id: string;
+  seller_name: string;
+  deal_id: string | null;
+  deal_name: string | null;
+  text: string;
+  due_date: string | null;
+  status: 'open' | 'done' | 'carry';
+  auto_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useSellerActions(sellerName: string | null) {
+  return useQuery({
+    queryKey: ['sellerActions', sellerName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('seller_actions')
+        .select('*')
+        .eq('seller_name', sellerName!)
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(`seller_actions fetch failed: ${error.message}`);
+      return (data ?? []) as SellerAction[];
+    },
+    enabled: !!sellerName,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useAllSellerActions(sellerNames: string[]) {
+  const sorted = [...sellerNames].sort();
+  return useQuery({
+    queryKey: ['allSellerActions', sorted],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('seller_actions')
+        .select('*')
+        .in('seller_name', sorted);
+      if (error) throw new Error(`seller_actions fetch failed: ${error.message}`);
+      const rows = (data ?? []) as SellerAction[];
+      const map = new Map<string, SellerAction[]>();
+      for (const row of rows) {
+        const list = map.get(row.seller_name) ?? [];
+        list.push(row);
+        map.set(row.seller_name, list);
+      }
+      return map;
+    },
+    enabled: sorted.length > 0,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useCreateAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Omit<SellerAction, 'id' | 'created_at' | 'updated_at' | 'auto_verified'>) => {
+      const { data, error } = await supabase.from('seller_actions').insert(payload).select().single();
+      if (error) throw new Error(error.message);
+      return data as SellerAction;
+    },
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['sellerActions', row.seller_name] });
+      qc.invalidateQueries({ queryKey: ['allSellerActions'] });
+    },
+  });
+}
+
+export function useUpdateAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...patch }: Partial<SellerAction> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('seller_actions')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return data as SellerAction;
+    },
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: ['sellerActions', row.seller_name] });
+      qc.invalidateQueries({ queryKey: ['allSellerActions'] });
+    },
+  });
+}
+
+export function useDeleteAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, seller_name }: { id: string; seller_name: string }) => {
+      const { error } = await supabase.from('seller_actions').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      return { id, seller_name };
+    },
+    onSuccess: ({ seller_name }) => {
+      qc.invalidateQueries({ queryKey: ['sellerActions', seller_name] });
+      qc.invalidateQueries({ queryKey: ['allSellerActions'] });
+    },
+  });
+}
+
 // Save shared state mutation
 export function useSaveSharedStore() {
   const qc = useQueryClient();
