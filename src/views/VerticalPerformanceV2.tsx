@@ -76,18 +76,17 @@ function isDealStale(d: RichDealRow, staleness: Map<string, DealStaleness>): boo
   return days >= threshold;
 }
 
-// ── top-of-funnel % — earlyEv/ev, same definition as VP and LT Trends ────
-function TopOfFunnelCell({ earlyEv, ev }: { earlyEv: number; ev: number }) {
+// ── S3+ % — (ev - earlyEv) / ev, same definition as LT Trends ────────────
+function S3PlusCell({ earlyEv, ev }: { earlyEv: number; ev: number }) {
   if (ev === 0) return <span className="text-11 text-text-tertiary">—</span>;
-  const pct = earlyEv / ev;
-  const color = pct > 0.5 ? 'var(--status-red)' : pct > 0.35 ? 'var(--status-amber)' : 'var(--status-green)';
-  const s3pct = Math.round((1 - pct) * 100);
+  const s3pct = (ev - earlyEv) / ev;
+  const color = s3pct >= 0.65 ? 'var(--status-green)' : s3pct >= 0.5 ? 'var(--status-amber)' : 'var(--status-red)';
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-13 font-medium tabular-nums" style={{ color }}>
-        {Math.round(pct * 100)}% top-of-funnel
+        {Math.round(s3pct * 100)}% from S3+
       </span>
-      <span className="text-11 tabular-nums text-text-tertiary">{s3pct}% from S3+</span>
+      <span className="text-11 tabular-nums text-text-tertiary">{Math.round((1 - s3pct) * 100)}% top-of-funnel</span>
     </div>
   );
 }
@@ -348,9 +347,9 @@ function SellerRowV2({
           <ForecastCell booked={row.booked} committed={row.committed} target={row.target} />
         </td>
 
-        {/* Top-of-funnel % — earlyEv/ev, same as VP and LT Trends */}
+        {/* S3+ % — same definition as LT Trends */}
         <td className="py-2.5 px-3">
-          <TopOfFunnelCell earlyEv={row.earlyEv} ev={row.ev} />
+          <S3PlusCell earlyEv={row.earlyEv} ev={row.ev} />
         </td>
 
         {/* Booked */}
@@ -718,7 +717,7 @@ export function VerticalPerformanceV2() {
                 <tr className="text-11 text-text-tertiary" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                   <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
                   <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 130 }}>Forecast vs target</th>
-                  <th className="text-left py-2 px-3 font-normal">Top-of-funnel</th>
+                  <th className="text-left py-2 px-3 font-normal">S3+</th>
                   <th className="text-right py-2 px-3 font-normal">Booked</th>
                   <th className="text-right py-2 px-3 font-normal">Committed</th>
                   <th className="text-right py-2 px-3 font-normal">Wtd pipeline</th>
