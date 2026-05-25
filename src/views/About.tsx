@@ -228,7 +228,7 @@ export function About() {
           </DefRow>
           <DefRow term="Forecast">
             Booked + Committed for the selected quarter scope. Used as the primary headline number
-            in both the Vertical performance KPI strip and the Weekly scorecard pipeline health
+            in both the Pipeline health KPI strip and the Deal movement pipeline health
             card.
           </DefRow>
           <DefRow term="Forecast gap">
@@ -250,7 +250,7 @@ export function About() {
           </DefRow>
           <DefRow
             term="Won (FY)"
-            note="Shown in the Weekly scorecard funnel section"
+            note="Shown in the Deal movement funnel section"
           >
             Count and total deal_size of all won deals whose start_date falls within the current
             fiscal year (April 1 of the prior calendar year through March 31). Compared to the
@@ -374,7 +374,7 @@ export function About() {
                 marginTop: 8,
               }}
             >
-              The closure outlook EV in the Weekly scorecard deal list does not apply this time
+              The closure outlook EV in the Deal movement deal list does not apply this time
               weight — it uses raw stage_probability × deal_size, since it is not attributed to a
               specific quarter.
             </p>
@@ -450,7 +450,7 @@ export function About() {
           </div>
 
           <DefRow term="Seller coaching text (VP)">
-            Each seller row in Vertical performance shows a coaching sub-line if the seller has ≥1
+            Each seller row in Pipeline health shows a coaching sub-line if the seller has ≥1
             stale deal or ≥1 deal with no next steps. Format: "X stale in stage · Y no next steps".
             Counts are computed from the current open deal set filtered to the active quarter scope.
           </DefRow>

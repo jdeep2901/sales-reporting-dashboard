@@ -99,32 +99,32 @@ export function UserGuide() {
 
       <Section title="Views">
         <ViewCard
-          title="Vertical performance"
+          title="Pipeline health"
           purpose="The primary team health screen. Shows weighted pipeline, booked, committed, S3+%, and stale count per vertical with a team total row. Click any row to expand deal-level detail and manage weekly action items — deals you tag get auto-verified when a stage advances or a new NMD is set."
           audienceNote="Use the action items panel (expand any row) to log deal-specific follow-ups. Items tagged to a deal are automatically marked done when the deal stage advances or NMD is updated."
           audience={['LT', 'Sellers', 'JD']}
           screenshot="vertical-performance.png"
         />
         <ViewCard
-          title="Weekly scorecard"
+          title="Deal movement"
           purpose="Tracks funnel shape and week-over-week movement — how many deals advanced, stalled, were added, or were lost vs the prior week. Use this to see whether pipeline is building or eroding, and to surface individual deal movements before the weekly review."
           audience={['JD', 'Sellers']}
           screenshot="weekly-scorecard.png"
         />
         <ViewCard
-          title="Call trends"
+          title="Intro activity"
           purpose="Tracks intro and connect meeting cadence over time, by seller and overall. Use this to monitor whether the team is generating enough top-of-funnel activity to sustain future pipeline. The dashed line is the weekly target — bars below it indicate a generation gap. Select a seller from the dropdown to drill into individual activity."
           audience={['LT', 'JD']}
           screenshot="call-trends.png"
         />
         <ViewCard
-          title="Weekly operating"
+          title="Operating metrics"
           purpose="A rolling 20-week view of operating metrics — weighted pipeline, new logos closed, late-stage deal count, intro-to-qual conversion rate, and days since last win. Use this to spot directional trends not visible in a single-week snapshot. The manual inputs section lets JD log key levers like co-founder intros and in-person connects."
           audience={['LT', 'JD']}
           screenshot="weekly-operating.png"
         />
         <ViewCard
-          title="LT biweekly trends"
+          title="Quarter trends"
           purpose="The leadership review view. KPI cards (forecast, booked, committed, weighted pipeline) plus a trend chart tracking all four metrics week over week since the quarter started. The table below breaks weighted pipeline by vertical across all weekly snapshots — useful for identifying which verticals are building and which are eroding."
           audience={['LT', 'JD']}
           screenshot="lt-trends.png"
