@@ -120,3 +120,22 @@ Snapshots grouped by ISO week since FY_START.
 Forecast → Booked → Committed → Weighted pipeline
 
 This is the order in VP and LT Trends. Do not deviate without explicit instruction.
+
+---
+
+## "Committed deals needing action" vs "At-risk deals" — not the same
+
+These two panels appear in Pipeline health and are often confused:
+
+**"Committed deals needing action this week"** (top-level widget, above the main table):
+- Fires before any row is expanded — team-wide proactive alert
+- Scope: S5/S6 only, across the whole team
+- Two buckets: no NMD at all, and stale-but-has-NMD
+- Intent: what does JD need to unblock before this week's review?
+
+**"At-risk deals"** (inside an expanded seller row):
+- Only visible when a specific vertical row is drilled into
+- Scope: S3–S6 — three tiers: committed no next step, committed stale, mid-funnel stuck (S3/S4)
+- Intent: per-seller diagnostic
+
+Committed-no-NMD deals appear in both — the top widget is the early warning, the expanded panel is the drill-down. The panel adds S3/S4 stale that the top widget deliberately omits (those are not committed revenue yet).
