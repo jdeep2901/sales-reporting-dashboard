@@ -1,6 +1,12 @@
 # Skill: pipeline-email
 
-Invoked when JD asks to draft the weekly LT email, seller email, or both.
+**Invoke when:** JD asks for anything email-related to Anuj or sellers. Trigger phrases: "draft the email", "write to Anuj", "LT update", "pipeline email", "seller email", "weekly email", "send to Anuj", "compose in Outlook", "hygiene email". Also invoke for any Friday pipeline summary or Monday seller hygiene task.
+
+---
+
+## Terminology note
+
+Use **"weighted pipeline"** everywhere — dashboard UI, emails to Anuj, emails to sellers. Never "EV", never "Expected value". This is a firm rule for consistency across all surfaces.
 
 ---
 
@@ -70,41 +76,81 @@ Sellers with no `target_cur` (target = 0) are ramping / unassigned — omit from
 
 ---
 
-## Email 1: LT update (Friday, to Anuj)
+## Email 1: LT update (Friday, to Anuj — anuj@mathco.com)
 
 **Subject:** `Pipeline update — [Day, Month DD]`
 
-**Format:**
-
+**Compose method:** Always write HTML to `/tmp/lt_email.html`, then load via AppleScript:
+```applescript
+set htmlBody to do shell script "cat /tmp/lt_email.html"
+tell application "Microsoft Outlook"
+  set ltMsg to make new outgoing message with properties {subject:"Pipeline update — [date]", content:htmlBody}
+  make new recipient at ltMsg with properties {email address:{address:"anuj@mathco.com", name:"Anuj"}}
+  open ltMsg
+end tell
 ```
-Anuj —
+Never inline HTML into AppleScript string concatenation — it breaks on long bodies.
 
-Quick pipeline snapshot as of [current_quarter], data pulled [version_date].
+---
 
-Team summary
-  Target:     $[target_cur]
-  EV (Q1):    $[ev_cur]  ([ev_ratio]× coverage)
-  Booked:     $[booked_cur]
-  Committed:  $[committed_cur]
-  Active deals: [active_count]  |  Stale: [stale_count] ([stale_pct]%)  |  No NMD on committed: [no_nmd_committed]
+**Email structure (top to bottom):**
 
-Seller view ([current_quarter])
+1. Greeting + one-line context
+2. Metric definitions table
+3. Team summary table
+4. Q1 seller view table (verticals)
+5. Q2 early view table (verticals)
+6. Pipeline health (prose, one paragraph per notable vertical)
+7. Actions I'm tracking (bullets)
 
-  Seller          Target    EV     Coverage  Booked  Committed  Stale
-  ─────────────────────────────────────────────────────────────────────
-  [per seller row, skip sellers with no target from coverage column]
+---
 
-Pipeline health
-  [2–3 bullets on what's actually notable — e.g., Somya stale count, Sahana booked vs EV mismatch,
-   Maruti no committed, specific at-risk committed deals with no NMD. Be specific, not generic.]
+**Metric definitions table** — always include at the top, in this order:
 
-Actions I'm tracking:
-  - [Specific seller-level follow-up items based on the data]
+| Term | Definition |
+|---|---|
+| Weighted pipeline | Stage probability × deal size × quarter weight. S1–S4 floored at $100K. |
+| Booked | Revenue from won deals, paced into the quarter by start date and duration. Recognized. |
+| Committed | S5/S6 deals pacing into the quarter at full deal size. High-confidence, not yet won. |
+| Forecast | Booked + Committed. Best-case floor for the quarter. |
+| S3+ % | Share of weighted pipeline from S3 (Capability) and above. ≥65% green, 50–65% amber, <50% red. |
+| Stale | No stage movement past threshold: S1 ≥45d, S2 ≥30d, S3/S4 ≥21d, S5/S6 ≥14d. |
+| No NMD on committed | S5/S6 deals with no next meeting date set or NMD already passed. Highest-risk committed deals. |
 
-[JD]
-```
+---
 
-**Tone:** Direct, data-first. No throat-clearing. Bullets only for action items, not for summary narrative. Sentence case throughout. Numbers in compact format ($442K not $442,098).
+**HTML formatting rules (locked):**
+
+- **Banded rows**: alternate `background:#fff` and `background:#f5f7fa` on data rows. Header and Total rows use `background:#e8edf2`. Total row gets `border-top:1px solid #bbb; font-weight:bold`.
+- **Mobile-safe**: wrap every data table in `<div style="overflow-x:auto;">`. Set `min-width` on wide tables (Q1 seller table: `min-width:520px`, Q2 table: `min-width:400px`). Every `<td>` and `<th>` gets `white-space:nowrap` so columns never word-wrap.
+- **Column alignment**: vertical/label columns left-aligned, all number columns right-aligned.
+- **S3+ color coding**: ≥65% → `color:#16a34a` (green), 50–65% → `color:#d97706` (amber) + &#9888; warning icon, <50% → `color:#dc2626` (red).
+- **Font**: `font-family:Calibri,sans-serif` for prose and definitions; `font-family:Consolas,monospace` for data tables.
+- **Max width**: outer div `max-width:680px`.
+
+---
+
+**Q1 seller view columns:** Vertical | Target | Booked | Committed | Wtd pipeline | S3+ | Stale
+
+**Q2 early view columns:** Vertical | Target | Booked | Committed | Wtd pipeline
+
+**Table rules (locked):**
+- Use vertical names (Pharma, CPG, Engineering, EU, RoW, Retail), not seller names
+- Always include a Total row at the bottom of each table
+- S3+% is the quality descriptor for weighted pipeline — never show wtd pipeline / target as a ratio
+- Weighted pipeline shown as "$X (Y% from S3+)" in team summary
+- Forecast = booked + committed
+- Compact currency throughout ($442K not $442,098)
+- Omit Target cell for ramping/unassigned verticals (Retail, RoW) — use &mdash;
+
+**Pipeline health rules:**
+- One paragraph per notable vertical, most urgent first
+- Always call out: S3+ <50% (red), S3+ 50–65% (amber), committed with no NMD (name the deals), stale >30% of active, zero booked for tenured sellers, Q2 wtd pipeline materially below target
+- Be specific — name deals, name stages, name days stale. Never generic.
+
+**Actions format:** `- Vertical (First name): specific deal-level action`
+
+**Tone:** Direct, data-first. No throat-clearing. Bullets only for action items. Sentence case throughout.
 
 ---
 
@@ -121,8 +167,8 @@ Send one email per seller. Do not aggregate or cross-reference other sellers' de
 
 Pipeline snapshot for [current_quarter]:
 
-  EV: $[ev_cur]  |  Target: $[target_cur]  |  Coverage: [ev_ratio]×
-  Booked: $[booked_cur]  |  Committed: $[committed_cur]
+  Weighted pipeline: $[ev_cur]  |  Target: $[target_cur]  |  Coverage: [ev_ratio]×
+  Booked: $[booked_cur]  |  Committed: $[committed_cur]  |  S3+: [s3_pct]%
 
 Stale deals ([stale_count] flagged):
   [List each stale deal: deal name, stage, days stale, NMD status]

@@ -1,5 +1,7 @@
 # Skill: add-view
 
+**Invoke when:** JD asks to add a view, build a new tab/page, or migrate a legacy view. Trigger phrases: "add a view", "new tab for", "migrate X view", "build the [name] page", "add [name] to the dashboard".
+
 Use this skill when adding a new view to the dashboard, or when migrating an existing legacy view from `legacy/index.html` into the new component-based app.
 
 ## Procedure

@@ -147,7 +147,14 @@ Never show `$442,098`. That's a CFO number, not a scan number. Apply tabular-num
 
 ## Skills available
 
-See `.claude/skills/` for codified procedures. Use them.
+Read the matching skill file **before** starting any task that fits the triggers below. The skill is the execution spec — do not rederive its procedure from scratch.
 
-- `add-view.md` — how to add a new view
-- (more to be added as patterns stabilize)
+| Skill file | Invoke when JD says... |
+|---|---|
+| `add-view.md` | "add a view", "migrate X view", "build the [name] page", "new tab for..." |
+| `metrics-reference.md` | touching any view that shows EV / weighted pipeline / booked / committed / S3+ / top-of-funnel; any metric mismatch question; any new pipeline KPI |
+| `pipeline-email.md` | "draft the email", "write to Anuj", "LT update", "seller email", "pipeline email", "weekly email", "send to Anuj" |
+| `supabase/SKILL.md` | any Supabase task — schema change, RLS, Edge Function, migration, auth, storage |
+| `supabase-postgres-best-practices/SKILL.md` | writing or reviewing SQL, query performance, schema design, index decisions |
+
+**At session start:** scan this list against what JD has asked. If the task matches a skill, read that file first before touching code or data.
