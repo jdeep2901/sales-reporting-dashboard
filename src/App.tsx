@@ -36,7 +36,7 @@ const queryClient = new QueryClient({
 });
 
 const mainTabs: TabItem[] = [
-  { label: 'Vertical performance', to: '/vertical-performance' },
+  { label: 'Vertical performance', to: '/vertical-performance-v2' },
   { label: 'Weekly scorecard', to: '/' },
   { label: 'Call trends', to: '/intro-trend' },
   { label: 'Weekly operating', to: '/operating' },
@@ -58,7 +58,7 @@ const appendixTabs: TabItem[] = [
   { label: 'Momentum', to: '/momentum' },
   { label: 'Cycle time', to: '/cycle-time' },
   { label: 'Assumptions', to: '/assumptions' },
-  { label: 'VP v2', to: '/vertical-performance-v2' },
+  { label: 'VP (legacy)', to: '/vertical-performance' },
 ];
 
 interface VersionMeta {
