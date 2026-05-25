@@ -37,11 +37,11 @@ const queryClient = new QueryClient({
 });
 
 const mainTabs: TabItem[] = [
-  { label: 'Vertical performance', to: '/vertical-performance-v2' },
-  { label: 'Weekly scorecard', to: '/' },
-  { label: 'Call trends', to: '/intro-trend' },
-  { label: 'Weekly operating', to: '/operating' },
-  { label: 'LT biweekly trends', to: '/lt-trends' },
+  { label: 'Pipeline health', to: '/pipeline-health' },
+  { label: 'Deal movement', to: '/deal-movement' },
+  { label: 'Intro activity', to: '/intro-activity' },
+  { label: 'Operating metrics', to: '/operating-metrics' },
+  { label: 'Quarter trends', to: '/quarter-trends' },
   { label: 'About', to: '/about' },
   { label: 'User guide', to: '/user-guide' },
 ];
@@ -170,13 +170,14 @@ function Shell() {
         {/* View content */}
         <main className="max-w-[1500px] mx-auto px-5 py-5">
           <Routes>
-            <Route path="/" element={<WeeklyScorecard />} />
-            <Route path="/vertical-performance" element={<VerticalPerformance />} />
-            <Route path="/intro-trend" element={<IntroTrend />} />
-            <Route path="/operating" element={<OperatingMetrics />} />
-            <Route path="/lt-trends" element={<LtTrends />} />
+            <Route path="/pipeline-health" element={<VerticalPerformanceV2 />} />
+            <Route path="/deal-movement" element={<WeeklyScorecard />} />
+            <Route path="/intro-activity" element={<IntroTrend />} />
+            <Route path="/operating-metrics" element={<OperatingMetrics />} />
+            <Route path="/quarter-trends" element={<LtTrends />} />
             <Route path="/about" element={<About />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/user-guide" element={<UserGuide />} />
             <Route path="/forecast" element={<Forecast />} />
             <Route path="/forecast-actuals" element={<ForecastActuals />} />
             <Route path="/partnerships" element={<Partnerships />} />
@@ -190,9 +191,14 @@ function Shell() {
             <Route path="/momentum" element={<Momentum />} />
             <Route path="/cycle-time" element={<CycleTime />} />
             <Route path="/assumptions" element={<Assumptions />} />
-            <Route path="/user-guide" element={<UserGuide />} />
-            <Route path="/vertical-performance-v2" element={<VerticalPerformanceV2 />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/vertical-performance" element={<VerticalPerformance />} />
+            {/* Legacy redirects */}
+            <Route path="/" element={<Navigate to="/pipeline-health" replace />} />
+            <Route path="/vertical-performance-v2" element={<Navigate to="/pipeline-health" replace />} />
+            <Route path="/intro-trend" element={<Navigate to="/intro-activity" replace />} />
+            <Route path="/operating" element={<Navigate to="/operating-metrics" replace />} />
+            <Route path="/lt-trends" element={<Navigate to="/quarter-trends" replace />} />
+            <Route path="*" element={<Navigate to="/pipeline-health" replace />} />
           </Routes>
         </main>
       </div>
