@@ -372,7 +372,7 @@ export function OperatingMetrics() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-18 font-medium text-text-primary">Weekly operating metrics</h2>
+          <h2 className="text-18 font-medium text-text-primary">What are our operating trends?</h2>
           <p className="text-12 text-text-tertiary mt-0.5">
             {visibleWeeks.length} weeks shown{batchQuery.isLoading && <span className="text-status-amber"> — loading snapshots...</span>}
           </p>

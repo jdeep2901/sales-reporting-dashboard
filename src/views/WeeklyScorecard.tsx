@@ -1356,7 +1356,7 @@ export function WeeklyScorecard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-18 font-medium text-text-primary">Weekly scorecard</h2>
+          <h2 className="text-18 font-medium text-text-primary">How is our pipeline moving week to week?</h2>
           {asOfDate && <p className="text-12 text-text-tertiary mt-0.5">As of {asOfDate}</p>}
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">

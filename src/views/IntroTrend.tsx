@@ -125,7 +125,7 @@ export function IntroTrend() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-18 font-medium text-text-primary">Call trends (intro calls)</h2>
+        <h2 className="text-18 font-medium text-text-primary">Are we building enough top-of-funnel activity?</h2>
         <div className="flex items-center gap-3">
           <select
             value={scope}

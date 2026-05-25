@@ -355,7 +355,7 @@ export function LtTrends() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-18 font-medium text-text-primary">
-            LT pipeline trends — {scope === 'both' ? "FY27 Q1 + Q2" : "FY27 Q1"}
+            How are we tracking against quarter targets?
           </h2>
           <p className="text-12 text-text-tertiary mt-0.5">
             {points.length} weekly snapshot{points.length !== 1 ? 's' : ''} &middot; Apr 1 to {points[points.length - 1]?.label}

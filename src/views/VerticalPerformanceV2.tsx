@@ -943,7 +943,7 @@ export function VerticalPerformanceV2() {
       {/* Header + summary line */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-18 font-medium text-text-primary">Vertical performance</h1>
+          <h1 className="text-18 font-medium text-text-primary">Is our pipeline on track?</h1>
           <div className="flex items-center gap-2 mt-1 text-13 text-text-secondary flex-wrap">
             <span className="font-medium text-text-primary">{quarterScopeLabel}</span>
             <span className="text-text-tertiary">·</span>
