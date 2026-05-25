@@ -28,6 +28,7 @@ import { VersionCompare } from '@/views/VersionCompare';
 import { Momentum } from '@/views/Momentum';
 import { CycleTime } from '@/views/CycleTime';
 import { Assumptions } from '@/views/Assumptions';
+import { UserGuide } from '@/views/UserGuide';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ const mainTabs: TabItem[] = [
   { label: 'Weekly operating', to: '/operating' },
   { label: 'LT biweekly trends', to: '/lt-trends' },
   { label: 'About', to: '/about' },
+  { label: 'User guide', to: '/user-guide' },
 ];
 
 const appendixTabs: TabItem[] = [
@@ -188,6 +190,7 @@ function Shell() {
             <Route path="/momentum" element={<Momentum />} />
             <Route path="/cycle-time" element={<CycleTime />} />
             <Route path="/assumptions" element={<Assumptions />} />
+            <Route path="/user-guide" element={<UserGuide />} />
             <Route path="/vertical-performance-v2" element={<VerticalPerformanceV2 />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
