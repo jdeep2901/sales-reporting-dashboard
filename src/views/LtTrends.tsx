@@ -93,12 +93,19 @@ function computeMetrics(
   const quarterKeys = scope === 'both' ? ['current', 'next'] : ['current'];
   const rows = summary.filter((s) => quarterKeys.includes(s.quarter.key));
 
+  // Booked is independent of quarter filter — it's a historical fact, not quarter-scoped.
+  const allBooked = summary.reduce((acc, s) => acc + s.booked, 0);
+  const sellerBookedMap = new Map<string, number>();
+  for (const s of summary) {
+    sellerBookedMap.set(s.seller, (sellerBookedMap.get(s.seller) ?? 0) + s.booked);
+  }
+
   // S3+ EV = total EV - earlyEv (S1+S2). Both come from the same empiricalEv path in buildRows,
   // so this is guaranteed consistent with the VP top-of-funnel % (earlyEv/ev).
   const team = rows.reduce(
     (acc, s) => ({
       ev: acc.ev + s.ev,
-      booked: acc.booked + s.booked,
+      booked: allBooked,
       committed: acc.committed + s.committed,
       target: acc.target + s.target,
       earlyEv: acc.earlyEv + s.earlyEv,
@@ -113,7 +120,7 @@ function computeMetrics(
     return {
       seller,
       ev: sellerEv,
-      booked: sellerRows.reduce((a, s) => a + s.booked, 0),
+      booked: sellerBookedMap.get(seller) ?? 0,
       committed: sellerRows.reduce((a, s) => a + s.committed, 0),
       target: sellerRows.reduce((a, s) => a + s.target, 0),
       evS3Plus: sellerEv - sellerEarlyEv,
