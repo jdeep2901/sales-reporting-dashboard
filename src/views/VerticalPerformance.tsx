@@ -551,21 +551,9 @@ export function VerticalPerformance() {
     .filter((d) => sellerFilter === 'Overall' || d.leadership_seller === sellerFilter)
     .filter((d) => quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus);
 
-  // Booked is independent of quarter filter — compute from all summary, not filtered by quarter.
-  const bookedBySellerMap = new Map<string, number>();
-  const sellerFilteredSummary = summary.filter(
-    (r) => sellerFilter === 'Overall' || r.seller === sellerFilter,
-  );
-  for (const s of sellerFilteredSummary) {
-    bookedBySellerMap.set(s.seller, (bookedBySellerMap.get(s.seller) ?? 0) + s.booked);
-  }
-
   const aggregates = useMemo(
-    () => {
-      const agg = aggregateSellers(filteredSummary, allOpenForFilter);
-      return agg.map(a => ({ ...a, booked: bookedBySellerMap.get(a.seller) ?? 0 }));
-    },
-    [filteredSummary, allOpenForFilter, bookedBySellerMap],
+    () => aggregateSellers(filteredSummary, allOpenForFilter),
+    [filteredSummary, allOpenForFilter],
   );
 
   const totalTarget = aggregates.reduce((a, r) => a + r.target, 0);

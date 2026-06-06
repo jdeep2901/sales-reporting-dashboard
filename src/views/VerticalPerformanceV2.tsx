@@ -876,18 +876,9 @@ export function VerticalPerformanceV2() {
     (d) => quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus,
   );
 
-  // Booked is independent of quarter filter — compute from all summary, not filtered.
-  const bookedBySellerMap = new Map<string, number>();
-  for (const s of summary) {
-    bookedBySellerMap.set(s.seller, (bookedBySellerMap.get(s.seller) ?? 0) + s.booked);
-  }
-
   const aggregates = useMemo(
-    () => {
-      const agg = aggregateSellers(filteredSummary, allOpenForFilter);
-      return agg.map(a => ({ ...a, booked: bookedBySellerMap.get(a.seller) ?? 0 }));
-    },
-    [filteredSummary, allOpenForFilter, bookedBySellerMap],
+    () => aggregateSellers(filteredSummary, allOpenForFilter),
+    [filteredSummary, allOpenForFilter],
   );
 
   const stalenessQuery = useDealStaleness();

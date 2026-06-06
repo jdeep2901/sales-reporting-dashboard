@@ -50,7 +50,7 @@ interface WeekPoint {
 }
 
 type MetricKey = 'ev' | 'booked' | 'committed' | 'forecast' | 'evS3Pct';
-type QuarterScope = 'current' | 'both';
+type QuarterScope = 'current' | 'next';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,22 +90,17 @@ function computeMetrics(
   const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, evS3Plus: 0, sellers: [] };
   if (!dataset) return empty;
   const { summary } = buildRows(dataset, targets, FY27_Q);
-  const quarterKeys = scope === 'both' ? ['current', 'next'] : ['current'];
-  const rows = summary.filter((s) => quarterKeys.includes(s.quarter.key));
-
-  // Booked is independent of quarter filter — it's a historical fact, not quarter-scoped.
-  const allBooked = summary.reduce((acc, s) => acc + s.booked, 0);
-  const sellerBookedMap = new Map<string, number>();
-  for (const s of summary) {
-    sellerBookedMap.set(s.seller, (sellerBookedMap.get(s.seller) ?? 0) + s.booked);
-  }
+  // Single-quarter scope — each view (Q1 or Q2) shows that quarter's paced metrics
+  // against that quarter's target. No cross-quarter blending.
+  const quarterKey = scope === 'next' ? 'next' : 'current';
+  const rows = summary.filter((s) => s.quarter.key === quarterKey);
 
   // S3+ EV = total EV - earlyEv (S1+S2). Both come from the same empiricalEv path in buildRows,
   // so this is guaranteed consistent with the VP top-of-funnel % (earlyEv/ev).
   const team = rows.reduce(
     (acc, s) => ({
       ev: acc.ev + s.ev,
-      booked: allBooked,
+      booked: acc.booked + s.booked,
       committed: acc.committed + s.committed,
       target: acc.target + s.target,
       earlyEv: acc.earlyEv + s.earlyEv,
@@ -120,7 +115,7 @@ function computeMetrics(
     return {
       seller,
       ev: sellerEv,
-      booked: sellerBookedMap.get(seller) ?? 0,
+      booked: sellerRows.reduce((a, s) => a + s.booked, 0),
       committed: sellerRows.reduce((a, s) => a + s.committed, 0),
       target: sellerRows.reduce((a, s) => a + s.target, 0),
       evS3Plus: sellerEv - sellerEarlyEv,
@@ -173,7 +168,7 @@ function s3PctColor(val: number | null): string | undefined {
 
 function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
   const visible = points.slice(-8);
-  const q = scope === 'both' ? 'Q1+Q2' : 'Q1';
+  const q = scope === 'next' ? 'Q2' : 'Q1';
   const metricLabel: Record<MetricKey, string> = {
     forecast: `Forecast (${q})`, booked: `Booked (${q})`,
     committed: `Committed S5/S6 (${q})`, ev: `Weighted pipeline (${q})`,
@@ -372,7 +367,7 @@ export function LtTrends() {
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {(['current', 'both'] as QuarterScope[]).map((s) => (
+          {(['current', 'next'] as QuarterScope[]).map((s) => (
             <button
               key={s}
               onClick={() => setScope(s)}
@@ -384,7 +379,7 @@ export function LtTrends() {
                 fontWeight: scope === s ? 500 : 400,
               }}
             >
-              {s === 'current' ? 'Q1 only' : 'Q1 + Q2'}
+              {s === 'current' ? 'Q1' : 'Q2'}
             </button>
           ))}
         </div>
@@ -394,25 +389,25 @@ export function LtTrends() {
       {current && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <KpiCard
-            label={`Forecast (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            label={`Forecast (${scope === 'next' ? 'Q2' : 'Q1'})`}
             value={formatCurrency(current.booked + current.committed)}
             sub={forecastRatio != null ? (forecastRatio >= 1 ? 'on track' : `${formatCurrency(teamTarget - current.booked - current.committed)} gap`) : undefined}
             subColor={forecastRatio != null ? (forecastRatio >= 1 ? 'green' : forecastRatio >= 0.7 ? 'amber' : 'red') : 'muted'}
           />
           <KpiCard
-            label={`Booked (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            label={`Booked (${scope === 'next' ? 'Q2' : 'Q1'})`}
             value={formatCurrency(current.booked)}
             sub={teamTarget > 0 ? `${((current.booked / teamTarget) * 100).toFixed(0)}% of target` : undefined}
             subColor={current.booked / teamTarget >= 0.5 ? 'green' : current.booked / teamTarget >= 0.3 ? 'amber' : 'muted'}
           />
           <KpiCard
-            label={`Committed S5/S6 (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            label={`Committed S5/S6 (${scope === 'next' ? 'Q2' : 'Q1'})`}
             value={formatCurrency(current.committed)}
             sub={teamTarget > 0 ? `${((current.committed / teamTarget) * 100).toFixed(0)}% of target` : undefined}
             subColor="muted"
           />
           <KpiCard
-            label={`Weighted pipeline (${scope === 'both' ? 'Q1+Q2' : 'Q1'})`}
+            label={`Weighted pipeline (${scope === 'next' ? 'Q2' : 'Q1'})`}
             value={formatCurrency(current.ev)}
             sub={current.ev > 0 ? `${Math.round((current.evS3Plus / current.ev) * 100)}% from S3+` : undefined}
             subColor={current.ev > 0 ? (current.evS3Plus / current.ev >= 0.65 ? 'green' : current.evS3Plus / current.ev >= 0.5 ? 'amber' : 'red') : 'muted'}
