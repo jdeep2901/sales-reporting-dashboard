@@ -80,16 +80,24 @@ Sellers with no `target_cur` (target = 0) are ramping / unassigned — omit from
 
 **Subject:** `Pipeline update — [Day, Month DD]`
 
-**Compose method:** Always write HTML to `/tmp/lt_email.html`, then load via AppleScript:
+**Compose method:** Always write HTML to `/tmp/lt_email.html`, then load via AppleScript and set it as the message `content`.
+
+**Critical — wrap the body in a full HTML document.** The content string MUST start with `<html><body ...>` and end with `</body></html>`. Without the document root, Outlook composes the draft as **plain text** and the recipient sees raw markup (`<div style=...`) instead of a formatted email. A bare leading `<div>` is NOT enough — this is the single most common failure and it looks like "html code" in the draft.
+
 ```applescript
 set htmlBody to do shell script "cat /tmp/lt_email.html"
 tell application "Microsoft Outlook"
   set ltMsg to make new outgoing message with properties {subject:"Pipeline update — [date]", content:htmlBody}
   make new recipient at ltMsg with properties {email address:{address:"anuj@mathco.com", name:"Anuj"}}
   open ltMsg
+  activate
 end tell
 ```
-Never inline HTML into AppleScript string concatenation — it breaks on long bodies.
+where `/tmp/lt_email.html` begins with `<html><body style="font-family:Calibri,sans-serif;">` and ends with `</body></html>`.
+
+**Dead ends — do not use:**
+- Never inline HTML into AppleScript string concatenation — it breaks on long bodies.
+- Never fall back to System Events / clipboard paste (`pbcopy -Prefer rtf` + `keystroke "v"`). System Events UI enumeration times out on this machine (AppleEvent -1712), and screen capture / accessibility keystrokes are not reliably permitted. The wrapped-`content` object-model path above needs no permissions and is the only reliable method.
 
 ---
 
