@@ -29,6 +29,7 @@ import { Momentum } from '@/views/Momentum';
 import { CycleTime } from '@/views/CycleTime';
 import { Assumptions } from '@/views/Assumptions';
 import { UserGuide } from '@/views/UserGuide';
+import { Engagement } from '@/views/Engagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,6 +48,7 @@ const mainTabs: TabItem[] = [
 ];
 
 const appendixTabs: TabItem[] = [
+  { label: 'Engagement', to: '/engagement' },
   { label: 'Forecast (EV)', to: '/forecast' },
   { label: 'Forecast (actuals)', to: '/forecast-actuals' },
   { label: 'Partnerships', to: '/partnerships' },
@@ -178,6 +180,7 @@ function Shell() {
             <Route path="/about" element={<About />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/user-guide" element={<UserGuide />} />
+            <Route path="/engagement" element={<Engagement />} />
             <Route path="/forecast" element={<Forecast />} />
             <Route path="/forecast-actuals" element={<ForecastActuals />} />
             <Route path="/partnerships" element={<Partnerships />} />

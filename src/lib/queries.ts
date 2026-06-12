@@ -129,6 +129,39 @@ export function useDealStaleness() {
   });
 }
 
+// ── Deal email engagement (v0 signal layer) ──────────────────────────────────
+
+export interface DealEngagement {
+  id: string;
+  monday_deal: string;
+  account: string;
+  seller: string;
+  quarter: string;
+  deal_size: number | null;
+  state: 'two_way_active' | 'chasing' | 'gone_quiet' | 'won_execution' | 'no_signal';
+  last_inbound: string | null;
+  last_outbound: string | null;
+  prospect_contact: string | null;
+  followups_30d: number;
+  thread_subject: string | null;
+  note: string | null;
+  reconciliation: string | null;
+  confirmed: boolean;
+  updated_at: string;
+}
+
+export function useDealEngagement() {
+  return useQuery({
+    queryKey: ['dealEngagement'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_deal_engagement');
+      if (error) throw new Error(`get_deal_engagement failed: ${error.message}`);
+      return (data ?? []) as DealEngagement[];
+    },
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
 // ── Seller actions ────────────────────────────────────────────────────────────
 
 export interface SellerAction {
