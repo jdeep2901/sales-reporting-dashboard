@@ -19,7 +19,7 @@ const SELLER_VERTICAL: Record<string, string> = {
   'Akshay Iyer': 'Pharma',
   'Somya':       'CPG',
   'Suvom Mitro': 'Retail',
-  'Vitor Quirino': 'EU',
+  'Andy Shankar': 'EU',
   'Maruti Peri': 'Engineering',
   'Sahana':      'RoW',
 };

@@ -210,7 +210,8 @@ Action needed:
 2. **Committed with no NMD** — these are highest-risk closes. Always surface by name in LT email.
 3. **Maruti / Suvom booked = $0** — both ramping, so expected. Do not frame as a gap unless JD asks.
 4. **Sahana committed > EV** — unusual pattern (booked from prior wins). Note if it persists.
-5. **ev_ratio_cur < 1.0** for a tenured seller (Akshay, Somya, Vitor) → flag explicitly to Anuj.
+5. **ev_ratio_cur < 1.0** for a tenured seller (Akshay, Somya, Maruti) → flag explicitly to Anuj.
+6. **Andy Shankar (EU)** — took over Vitor Quirino's EU territory + target (Jun 2026). Ramping into the book; deals are being re-tagged from Vitor in Monday, so his count may climb week to week. Vitor was let go and removed from the roster.
 
 ---
 

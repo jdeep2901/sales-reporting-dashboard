@@ -5,7 +5,7 @@ export const ACTIVE_SELLERS = [
   'Akshay Iyer',
   'Somya',
   'Maruti Peri',
-  'Vitor Quirino',
+  'Andy Shankar',
   'Sahana',
   'Suvom Mitro',
 ] as const;
@@ -60,7 +60,7 @@ const SELLER_ALIASES: Record<string, string[]> = {
   'Akshay Iyer': ['akshay iyer', 'akshay'],
   Somya: ['somya'],
   'Maruti Peri': ['maruti peri', 'peri'],
-  'Vitor Quirino': ['vitor quirino', 'vitor'],
+  'Andy Shankar': ['andy shankar', 'andy'],
   Sahana: ['sahana'],
   'Suvom Mitro': ['suvom mitro', 'suvom'],
 };

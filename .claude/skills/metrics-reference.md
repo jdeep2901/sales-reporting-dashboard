@@ -101,7 +101,7 @@ const s3Pct = ev > 0 ? (evS3Plus / ev) * 100 : null;
 | Akshay Iyer | Pharma |
 | Somya | CPG |
 | Suvom Mitro | Retail |
-| Vitor Quirino | EU |
+| Andy Shankar | EU |
 | Maruti Peri | Engineering |
 | Sahana | RoW |
 

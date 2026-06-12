@@ -43,7 +43,7 @@ const SELLERS: Array<[string, string]> = [
   ["somya", "Somya"],
   ["akshay iyer", "Akshay Iyer"],
   ["maruti peri", "Maruti Peri"],
-  ["vitor quirino", "Vitor Quirino"],
+  ["andy shankar", "Andy Shankar"],
   ["sahana", "Sahana"],
   ["suvom", "Suvom Mitro"],
 ];

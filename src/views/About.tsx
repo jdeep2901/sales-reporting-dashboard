@@ -492,7 +492,7 @@ export function About() {
             matched_sellers check takes priority.
           </DefRow>
           <DefRow term="Active sellers">
-            Akshay Iyer, Somya, Maruti Peri, Vitor Quirino, Sahana, Suvom Mitro. Defined in{' '}
+            Akshay Iyer, Somya, Maruti Peri, Andy Shankar, Sahana, Suvom Mitro. Defined in{' '}
             <code style={{ fontSize: 12 }}>ACTIVE_SELLERS</code> in{' '}
             <code style={{ fontSize: 12 }}>src/lib/vpCompute.ts</code>. The "Overall" selector
             aggregates across all six sellers.
