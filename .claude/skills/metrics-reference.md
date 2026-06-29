@@ -20,6 +20,10 @@ import { buildRows } from '@/lib/vpCompute';
 const { summary } = buildRows(dataset, targets, FY27_Q);
 ```
 
+### New-sales exclusion (Prologis + Gilead)
+
+`buildRows` skips any deal whose account is **Prologis** or **Gilead** (`isExcludedFromNewSales()` — matches `deal`/`logo`/`account`). These are ongoing delivery/extension, not new sales, per JD's agreed definition: *new sales = all deals except Prologis and Gilead.* So all `summary` metrics (booked, committed, weighted pipeline) are already on the new-sales basis. Q1 booked reads **$649K**, not the $764K all-in (the $115K difference is Gilead $47.5K + Prologis-Sahana $67.5K). To change the excluded set, edit `NEW_SALES_EXCLUDED_ACCOUNTS` in `vpCompute.ts`. Note: `WeeklyScorecard.tsx` (deal movement) computes won/closure revenue independently and does **not** yet apply this exclusion.
+
 To aggregate across sellers or quarters, filter `summary` and reduce:
 ```typescript
 const rows = summary.filter(s => s.quarter.key === 'current');

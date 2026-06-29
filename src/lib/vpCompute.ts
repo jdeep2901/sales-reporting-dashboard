@@ -428,6 +428,16 @@ export function getTarget(targets: QuarterTargets, seller: string, quarter: stri
   return isFinite(Number(x?.revenue)) ? Number(x.revenue) : 0;
 }
 
+// Accounts that count as ongoing delivery/extension, not new sales. Excluded from all
+// new-sales metrics (booked, committed, weighted pipeline) so the dashboard matches the
+// agreed definition: new sales = all deals except Prologis and Gilead.
+const NEW_SALES_EXCLUDED_ACCOUNTS = ['prologis', 'gilead'];
+
+export function isExcludedFromNewSales(row: DealRow): boolean {
+  const hay = `${row.deal ?? ''} ${row.logo ?? ''} ${row.account ?? ''}`.toLowerCase();
+  return NEW_SALES_EXCLUDED_ACCOUNTS.some((a) => hay.includes(a));
+}
+
 // ─── main data transform ──────────────────────────────────────────────────────
 
 export function buildRows(
@@ -457,6 +467,7 @@ export function buildRows(
 
       for (const r of rows) {
         if (!rowMatchesSeller(r, seller)) continue;
+        if (isExcludedFromNewSales(r)) continue; // Prologis/Gilead = delivery, not new sales
         if (isWonStage(r.stage ?? r.deal_stage ?? r.dealStage)) {
           booked += quarterPacedAmount(r, quarter.label, dealSizeValue(r.deal_size));
           continue;
