@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { useSharedStore } from '@/lib/queries';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { useSessionState } from '@/lib/hooks';
-import { ACTIVE_SELLERS, stageNumber } from '@/lib/vpCompute';
+import { ACTIVE_SELLERS, stageNumber, isExcludedFromNewSales } from '@/lib/vpCompute';
 import { formatCurrency } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
 
@@ -212,7 +212,8 @@ export function Partnerships() {
   const storeQuery = useSharedStore(username ?? null, password ?? null);
   const storeData = (storeQuery.data as Record<string, unknown> | null) ?? null;
   const dataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
-  const allRows: DealRow[] = Array.isArray(dataset?.all_deals_rows) ? (dataset!.all_deals_rows as DealRow[]) : [];
+  const allRows: DealRow[] = (Array.isArray(dataset?.all_deals_rows) ? (dataset!.all_deals_rows as DealRow[]) : [])
+    .filter((r) => !isExcludedFromNewSales(r)); // Prologis/Gilead = delivery, not new sales
 
   const { seller, setSeller } = useSeller();
 

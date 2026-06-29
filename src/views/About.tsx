@@ -216,6 +216,8 @@ export function About() {
             <code style={{ fontSize: 12 }}>duration_months</code>, then summed into the fiscal
             quarter. Deduplicated by <code style={{ fontSize: 12 }}>dealKey</code> so a single deal
             appearing across multiple sellers is not double-counted within one seller's view.
+            New-sales basis: Prologis and Gilead are ongoing delivery, not new sales, and are
+            excluded from all revenue metrics across every screen.
           </DefRow>
           <DefRow term="Committed">
             Face-value revenue from deals in stages 5 (Commercial proposal) and 6 (Contracting),

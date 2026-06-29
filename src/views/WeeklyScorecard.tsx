@@ -13,6 +13,7 @@ import {
   dealRisk,
   buildQuarterLabels,
   getTarget,
+  isExcludedFromNewSales,
 } from '@/lib/vpCompute';
 import { formatCurrency, formatDelta, formatPercent } from '@/lib/formatters';
 import type { DealRow, QuarterTargets } from '@/lib/vpCompute';
@@ -1200,7 +1201,8 @@ export function WeeklyScorecard() {
   const storeData = (storeQuery.data as Record<string, unknown> | null) ?? null;
 
   const dataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
-  const allRows: DealRow[] = Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [];
+  const allRows: DealRow[] = (Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [])
+    .filter((r) => !isExcludedFromNewSales(r)); // Prologis/Gilead = delivery, not new sales
   const asOfDate = String(
     (dataset?.scorecard as Record<string, unknown> | null)?.as_of_date ??
     (dataset?.scorecard_summary as Record<string, unknown> | null)?.as_of_date ?? ''
@@ -1235,7 +1237,7 @@ export function WeeklyScorecard() {
 
   const prevQuery = useVersionData(username ?? null, password ?? null, effectiveCompareId);
   const prevRow = prevQuery.data as { dataset?: { all_deals_rows?: DealRow[] } } | null;
-  const prevRows: DealRow[] = prevRow?.dataset?.all_deals_rows ?? [];
+  const prevRows: DealRow[] = (prevRow?.dataset?.all_deals_rows ?? []).filter((r) => !isExcludedFromNewSales(r));
 
   const { seller, setSeller } = useSeller();
   const [stageFilter, setStageFilter] = useSessionState<string | null>('ws_stage_filter', null);

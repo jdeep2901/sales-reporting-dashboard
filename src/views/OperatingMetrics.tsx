@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData, useSaveSharedStore } from '@/lib/queries';
-import { ACTIVE_SELLERS, stageNumber, empiricalEv } from '@/lib/vpCompute';
+import { ACTIVE_SELLERS, stageNumber, empiricalEv, isExcludedFromNewSales } from '@/lib/vpCompute';
 import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
 import { formatCurrency, formatPercent } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
@@ -106,7 +106,8 @@ function rowMatchesSeller(row: DealRow, seller: string): boolean {
 }
 
 function getRows(dataset: Record<string, unknown> | null): DealRow[] {
-  return Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [];
+  return (Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [])
+    .filter((r) => !isExcludedFromNewSales(r)); // Prologis/Gilead = delivery, not new sales
 }
 
 function scopedRows(dataset: Record<string, unknown> | null, seller: string): DealRow[] {
