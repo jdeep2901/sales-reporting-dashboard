@@ -76,6 +76,7 @@ const STAGE_SHORT: Record<string, string> = {
   '4. Problem Scoping': 'Prob. scoping',
   '6. Commercial Proposal': 'Commercial proposal',
   '5. Contracting': 'Contracting',
+  '7. Win': 'Won',
 };
 
 function normStage(raw: string | null | undefined): string {
@@ -133,6 +134,7 @@ function resolveSize(row: DealRow): number {
 function closureEv(row: DealRow): number {
   const stageNorm = STAGE_NORM[String(row.stage ?? row.deal_stage ?? '').trim()] ?? String(row.stage ?? row.deal_stage ?? '').trim();
   const n = stageNumber(stageNorm);
+  if (n === 7) return resolveSize(row); // Won — certain, count at full value
   const cfg = n != null ? EMPIRICAL_STAGE[n] : undefined;
   if (!cfg) return 0;
   const size = n != null && n <= 4 ? 100_000 : resolveSize(row);
@@ -374,7 +376,8 @@ function buildRankedDeals(
 function buildClosureDeals(rows: DealRow[], seller: string, qLabel: string): RankedDeal[] {
   const active = rows.filter((r) => {
     if (!matchSeller(r, seller)) return false;
-    if (!isActiveStage(r.stage ?? r.deal_stage)) return false;
+    const isWon = normStage(r.stage ?? r.deal_stage) === '7. Win';
+    if (!isWon && !isActiveStage(r.stage ?? r.deal_stage)) return false;
     return fiscalQForDate(r.start_date as string | null) === qLabel;
   });
   const deduped = new Map<string, DealRow>();
@@ -968,7 +971,7 @@ function ClosureSection({ qLabel, deals, target, collapsed }: { qLabel: string; 
                 const startDate = d.row.start_date ? String(d.row.start_date).slice(0, 10) : null;
                 return (
                   <tr key={i}
-                    style={{ borderBottom: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${risk.atRisk ? 'var(--status-amber)' : 'transparent'}` }}
+                    style={{ borderBottom: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${risk.atRisk && d.stageN !== 7 ? 'var(--status-amber)' : 'transparent'}` }}
                     className="hover:bg-bg-hover">
                     <td className="py-2 px-4">
                       <div className="text-text-primary font-medium">{d.dealLabel}</div>
