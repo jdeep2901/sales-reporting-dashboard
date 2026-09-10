@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData, useSaveSharedStore } from '@/lib/queries';
-import { ACTIVE_SELLERS, stageNumber, empiricalEv, isExcludedFromNewSales } from '@/lib/vpCompute';
-import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { INDUSTRIES, rowMatchesIndustry, stageNumber, empiricalEv, isExcludedFromNewSales } from '@/lib/vpCompute';
+import { useIndustry, INDUSTRY_OPTIONS } from '@/lib/industryContext';
 import { formatCurrency, formatPercent } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
 
@@ -98,31 +98,20 @@ function isActive(stage: string | undefined | null): boolean {
   return n != null && n >= 1 && n <= 6;
 }
 
-function rowMatchesSeller(row: DealRow, seller: string): boolean {
-  const label = seller.trim().toLowerCase();
-  const matched: string[] = Array.isArray(row.matched_sellers) ? row.matched_sellers as string[] : [];
-  if (matched.some((s) => String(s).trim().toLowerCase() === label)) return true;
-  return String(row.owner ?? row.seller ?? row.deal_owner ?? '').toLowerCase().includes(label);
-}
-
 function getRows(dataset: Record<string, unknown> | null): DealRow[] {
   return (Array.isArray(dataset?.all_deals_rows) ? dataset!.all_deals_rows as DealRow[] : [])
     .filter((r) => !isExcludedFromNewSales(r)); // Prologis/Gilead = delivery, not new sales
 }
 
-function scopedRows(dataset: Record<string, unknown> | null, seller: string): DealRow[] {
-  const rows = getRows(dataset);
-  if (!seller || seller === 'Overall') {
-    const seen = new Set<string>();
-    return rows.filter((r) => {
-      if (!ACTIVE_SELLERS.some((s) => rowMatchesSeller(r, s))) return false;
-      const key = `${r.deal}||${r.intro_date}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-  return rows.filter((r) => rowMatchesSeller(r, seller));
+function scopedRows(dataset: Record<string, unknown> | null, industry: string): DealRow[] {
+  const seen = new Set<string>();
+  return getRows(dataset).filter((r) => {
+    if (!rowMatchesIndustry(r, industry)) return false;
+    const key = `${r.deal}||${r.intro_date}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function quarterPaced(row: DealRow, qLabel: string): number {
@@ -141,20 +130,20 @@ function quarterPaced(row: DealRow, qLabel: string): number {
 
 // ─── computed metric functions ────────────────────────────────────────────────
 
-function metric_newLogos(dataset: Record<string, unknown> | null, seller: string, we: Date): number {
+function metric_newLogos(dataset: Record<string, unknown> | null, industry: string, we: Date): number {
   const qLabel = fiscalQLabel(we);
-  return scopedRows(dataset, seller).filter((r) => isWon(r.stage ?? r.deal_stage) && quarterPaced(r, qLabel) > 0).length;
+  return scopedRows(dataset, industry).filter((r) => isWon(r.stage ?? r.deal_stage) && quarterPaced(r, qLabel) > 0).length;
 }
 
-function metric_lateStage(dataset: Record<string, unknown> | null, seller: string): number {
-  return scopedRows(dataset, seller).filter((r) => {
+function metric_lateStage(dataset: Record<string, unknown> | null, industry: string): number {
+  return scopedRows(dataset, industry).filter((r) => {
     const n = stageNumber(r.stage ?? r.deal_stage);
     return n != null && n >= 5 && n <= 6;
   }).length;
 }
 
-function metric_introToQual(dataset: Record<string, unknown> | null, seller: string): number | null {
-  const rows = scopedRows(dataset, seller);
+function metric_introToQual(dataset: Record<string, unknown> | null, industry: string): number | null {
+  const rows = scopedRows(dataset, industry);
   const intros = rows.filter((r) => {
     const n = stageNumber(r.stage ?? r.deal_stage);
     return n != null && n >= 1;
@@ -167,8 +156,8 @@ function metric_introToQual(dataset: Record<string, unknown> | null, seller: str
   return qualified / intros;
 }
 
-function metric_daysSinceLastWin(dataset: Record<string, unknown> | null, seller: string): number | null {
-  const wonDates = scopedRows(dataset, seller)
+function metric_daysSinceLastWin(dataset: Record<string, unknown> | null, industry: string): number | null {
+  const wonDates = scopedRows(dataset, industry)
     .filter((r) => isWon(r.stage ?? r.deal_stage))
     .map((r) => parseIsoDate(r.start_date as string | null))
     .filter(Boolean) as Date[];
@@ -178,8 +167,8 @@ function metric_daysSinceLastWin(dataset: Record<string, unknown> | null, seller
   return Math.round((today.getTime() - latest.getTime()) / 86_400_000);
 }
 
-function metric_pipelineEv4Q(dataset: Record<string, unknown> | null, seller: string, we: Date): number {
-  const rows = scopedRows(dataset, seller).filter((r) => isActive(r.stage ?? r.deal_stage));
+function metric_pipelineEv4Q(dataset: Record<string, unknown> | null, industry: string, we: Date): number {
+  const rows = scopedRows(dataset, industry).filter((r) => isActive(r.stage ?? r.deal_stage));
   const quarters = [0, 1, 2, 3].map((offset) => {
     const d = new Date(we);
     d.setMonth(d.getMonth() + offset * 3);
@@ -196,21 +185,21 @@ type LikelihoodState = Record<string, unknown>;
 
 function getManualValue(
   likelihood: LikelihoodState,
-  seller: string,
+  industry: string,
   weekStart: Date,
   metricKey: string,
 ): number | null {
   const ns = likelihood[MANUAL_NS] as Record<string, unknown> | undefined;
   if (!ns) return null;
-  const sellerBucket = ns[seller] as Record<string, unknown> | undefined;
-  const weekBucket = sellerBucket?.[weekKey(weekStart)] as Record<string, unknown> | undefined;
+  const industryBucket = ns[industry] as Record<string, unknown> | undefined;
+  const weekBucket = industryBucket?.[weekKey(weekStart)] as Record<string, unknown> | undefined;
   const v = Number(weekBucket?.[metricKey]);
   return isFinite(v) && v >= 0 ? v : null;
 }
 
 function setManualValue(
   likelihood: LikelihoodState,
-  seller: string,
+  industry: string,
   weekStart: Date,
   metricKey: string,
   rawValue: string,
@@ -218,14 +207,14 @@ function setManualValue(
   const next = JSON.parse(JSON.stringify(likelihood)) as LikelihoodState;
   if (!next[MANUAL_NS] || typeof next[MANUAL_NS] !== 'object') next[MANUAL_NS] = {};
   const ns = next[MANUAL_NS] as Record<string, Record<string, Record<string, unknown>>>;
-  if (!ns[seller]) ns[seller] = {};
+  if (!ns[industry]) ns[industry] = {};
   const wk = weekKey(weekStart);
-  if (!ns[seller][wk]) ns[seller][wk] = {};
+  if (!ns[industry][wk]) ns[industry][wk] = {};
   const n = Number(rawValue);
   if (rawValue.trim() === '' || !isFinite(n) || n < 0) {
-    delete ns[seller][wk][metricKey];
+    delete ns[industry][wk][metricKey];
   } else {
-    ns[seller][wk][metricKey] = Math.round(n);
+    ns[industry][wk][metricKey] = Math.round(n);
   }
   return next;
 }
@@ -245,7 +234,7 @@ export function OperatingMetrics() {
     return Array.isArray(v) ? v as VersionMeta[] : [];
   }, [storeData]);
 
-  const { seller, setSeller } = useSeller();
+  const { industry, setIndustry } = useIndustry();
   const [localLikelihood, setLocalLikelihood] = useState<LikelihoodState | null>(null);
   const [saveStatus, setSaveStatus] = useState('');
 
@@ -285,8 +274,8 @@ export function OperatingMetrics() {
   }, [versionsMeta, dataset, batchMap, latestId]);
 
   const handleManualChange = (weekStart: Date, metricKey: string, rawValue: string) => {
-    if (!seller || seller === 'Overall') return;
-    setLocalLikelihood((prev) => setManualValue(prev ?? likelihood, seller, weekStart, metricKey, rawValue));
+    if (!industry || industry === 'Overall') return;
+    setLocalLikelihood((prev) => setManualValue(prev ?? likelihood, industry, weekStart, metricKey, rawValue));
     setSaveStatus('Unsaved');
   };
 
@@ -317,7 +306,7 @@ export function OperatingMetrics() {
       label: 'Weighted pipeline (next 4 quarters)',
       category: 'Revenue',
       fmt: 'money' as const,
-      getValue: (ws: Date, ds: Record<string, unknown> | null) => metric_pipelineEv4Q(ds, seller, ws),
+      getValue: (ws: Date, ds: Record<string, unknown> | null) => metric_pipelineEv4Q(ds, industry, ws),
       tone: (v: number) => v > 500_000 ? 'green' : v > 200_000 ? 'amber' : 'red',
     },
     {
@@ -325,7 +314,7 @@ export function OperatingMetrics() {
       label: 'New logos closed (quarter)',
       category: 'Revenue',
       fmt: 'count' as const,
-      getValue: (ws: Date, ds: Record<string, unknown> | null) => metric_newLogos(ds, seller, ws),
+      getValue: (ws: Date, ds: Record<string, unknown> | null) => metric_newLogos(ds, industry, ws),
       tone: (v: number) => v >= 2 ? 'green' : v === 1 ? 'amber' : 'red',
     },
     {
@@ -333,7 +322,7 @@ export function OperatingMetrics() {
       label: 'Late stage deals (5–6)',
       category: 'Pipeline',
       fmt: 'count' as const,
-      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_lateStage(ds, seller),
+      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_lateStage(ds, industry),
       tone: (v: number) => v >= 3 ? 'green' : v >= 1 ? 'amber' : 'red',
     },
     {
@@ -341,7 +330,7 @@ export function OperatingMetrics() {
       label: 'Intro → qualification conversion',
       category: 'Pipeline',
       fmt: 'percent' as const,
-      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_introToQual(ds, seller),
+      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_introToQual(ds, industry),
       tone: (v: number) => v >= 0.5 ? 'green' : v >= 0.4 ? 'amber' : 'red',
     },
     {
@@ -349,7 +338,7 @@ export function OperatingMetrics() {
       label: 'Days since last win',
       category: 'Pipeline',
       fmt: 'days' as const,
-      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_daysSinceLastWin(ds, seller),
+      getValue: (_: Date, ds: Record<string, unknown> | null) => metric_daysSinceLastWin(ds, industry),
       tone: (v: number) => v <= 30 ? 'green' : v <= 60 ? 'amber' : 'red',
     },
   ];
@@ -386,12 +375,12 @@ export function OperatingMetrics() {
             </button>
           )}
           <select
-            value={seller}
-            onChange={(e) => setSeller(e.target.value)}
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
             className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
             style={{ border: '0.5px solid var(--border-emphasis)' }}
           >
-            {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            {INDUSTRY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
@@ -442,8 +431,8 @@ export function OperatingMetrics() {
       <div className="rounded-lg overflow-hidden" style={{ border: '0.5px solid var(--border-hairline)' }}>
         <div className="px-4 py-2.5 flex items-center gap-3" style={{ background: 'var(--bg-surface)', borderBottom: '0.5px solid var(--border-hairline)' }}>
           <span className="text-13 font-medium text-text-primary">Manual inputs — key levers</span>
-          {seller === 'Overall' && (
-            <span className="text-11 text-text-tertiary">Select a seller to enter values</span>
+          {industry === 'Overall' && (
+            <span className="text-11 text-text-tertiary">Select an industry to enter values</span>
           )}
         </div>
         <div className="overflow-x-auto">
@@ -466,8 +455,8 @@ export function OperatingMetrics() {
                     <div className="text-11 text-text-tertiary">{m.category}</div>
                   </td>
                   {visibleWeeks.map((ws) => {
-                    if (seller === 'Overall') {
-                      const total = ACTIVE_SELLERS.reduce((acc, s) => {
+                    if (industry === 'Overall') {
+                      const total = INDUSTRIES.reduce((acc, s) => {
                         return acc + (getManualValue(likelihood, s, ws, m.key) ?? 0);
                       }, 0);
                       return (
@@ -476,7 +465,7 @@ export function OperatingMetrics() {
                         </td>
                       );
                     }
-                    const val = getManualValue(likelihood, seller, ws, m.key);
+                    const val = getManualValue(likelihood, industry, ws, m.key);
                     return (
                       <td key={weekKey(ws)} className="py-1 px-1 text-right">
                         <input

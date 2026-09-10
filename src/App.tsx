@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Tabs, type TabItem } from '@/components/Tabs';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { SellerProvider } from '@/lib/sellerContext';
+import { IndustryProvider } from '@/lib/industryContext';
 import { useSharedStore } from '@/lib/queries';
 import mathcoLogo from '/assets/mathco-logo.svg';
 import { LoginGate } from '@/components/LoginGate';
@@ -213,11 +213,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <SellerProvider>
+        <IndustryProvider>
           <BrowserRouter basename="/sales-reporting-dashboard">
             <Shell />
           </BrowserRouter>
-        </SellerProvider>
+        </IndustryProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

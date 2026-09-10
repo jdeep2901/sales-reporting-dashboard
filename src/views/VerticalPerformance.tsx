@@ -2,19 +2,19 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData, useDealStaleness } from '@/lib/queries';
 import type { DealStaleness } from '@/lib/queries';
-import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useIndustry, INDUSTRY_OPTIONS } from '@/lib/industryContext';
 import { useSessionState } from '@/lib/hooks';
 import { formatCurrency } from '@/lib/formatters';
 import {
   buildRows,
-  aggregateSellers,
+  aggregateIndustries,
   buildQuarterLabels,
   ratioTone,
   stageLabel,
   dealDisplay,
   STALENESS_THRESHOLD,
   stageNumber,
-  type SellerAggregate,
+  type IndustryAggregate,
   type RichDealRow,
   type QuarterTargets,
 } from '@/lib/vpCompute';
@@ -141,27 +141,27 @@ function NoNextStepsBadge({ nextMeetingDate }: { nextMeetingDate: string | null 
   );
 }
 
-// ─── expandable seller row ────────────────────────────────────────────────
+// ─── expandable industry row ────────────────────────────────────────────────
 
-const PLAN_KEY = (seller: string) =>
-  `vp_closure_plan__${seller.replace(/\s+/g, '_').toLowerCase()}`;
+const PLAN_KEY = (industry: string) =>
+  `vp_closure_plan__${industry.replace(/\s+/g, '_').toLowerCase()}`;
 
-function SellerRow({
+function IndustryRow({
   row,
   quarterFocus,
   staleness,
 }: {
-  row: SellerAggregate;
+  row: IndustryAggregate;
   quarterFocus: 'both' | 'current' | 'next';
   staleness: Map<string, DealStaleness>;
 }) {
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState(() => {
-    try { return localStorage.getItem(PLAN_KEY(row.seller)) ?? ''; } catch { return ''; }
+    try { return localStorage.getItem(PLAN_KEY(row.industry)) ?? ''; } catch { return ''; }
   });
 
   const tone = ratioTone(row.ratio);
-  const sellerDeals = row.deals.filter(
+  const industryDeals = row.deals.filter(
     (d) => quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus,
   );
 
@@ -169,7 +169,7 @@ function SellerRow({
   today.setHours(12, 0, 0, 0);
 
   // Staleness coaching counts
-  const staleDeals = sellerDeals.filter((d) => {
+  const staleDeals = industryDeals.filter((d) => {
     if (!d.item_id) return false;
     const s = staleness.get(d.item_id);
     if (!s) return false;
@@ -177,7 +177,7 @@ function SellerRow({
     const threshold = n != null ? (STALENESS_THRESHOLD[n] ?? 30) : 30;
     return s.days_stale >= threshold;
   });
-  const noNextStepsDeals = sellerDeals.filter((d) => {
+  const noNextStepsDeals = industryDeals.filter((d) => {
     const meeting = d.next_meeting_date
       ? new Date(String(d.next_meeting_date).slice(0, 10) + 'T12:00:00')
       : null;
@@ -188,7 +188,7 @@ function SellerRow({
 
   function savePlan(val: string) {
     setPlan(val);
-    try { localStorage.setItem(PLAN_KEY(row.seller), val); } catch {}
+    try { localStorage.setItem(PLAN_KEY(row.industry), val); } catch {}
   }
 
   // Quarter breakdown
@@ -203,7 +203,7 @@ function SellerRow({
         style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
         onClick={() => setOpen((v) => !v)}
       >
-        {/* Seller */}
+        {/* Industry */}
         <td className="py-2 pl-3 pr-4" style={{ borderLeft: `2px solid ${hasRisk ? 'var(--status-amber)' : 'transparent'}` }}>
           <div className="flex items-center gap-2">
             <span
@@ -215,10 +215,10 @@ function SellerRow({
                 borderRadius: '50%',
               }}
             >
-              {row.seller[0]}
+              {row.industry[0]}
             </span>
             <div>
-              <p className="text-13 font-medium text-text-primary">{row.seller}</p>
+              <p className="text-13 font-medium text-text-primary">{row.industry}</p>
               <p className="text-11 text-text-tertiary">
                 {row.open} open
                 {staleDeals.length > 0 && (
@@ -328,11 +328,11 @@ function SellerRow({
               )}
 
               {/* Top deals */}
-              {sellerDeals.length > 0 && (
+              {industryDeals.length > 0 && (
                 <div>
-                  <p className="text-11 text-text-secondary mb-2">Open deals ({sellerDeals.length})</p>
+                  <p className="text-11 text-text-secondary mb-2">Open deals ({industryDeals.length})</p>
                   <div className="flex flex-col gap-0">
-                    {sellerDeals.slice(0, 8).map((d, i) => {
+                    {industryDeals.slice(0, 8).map((d, i) => {
                       const stageN = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
                       const staleInfo = d.item_id ? staleness.get(d.item_id) : undefined;
                       const threshold = stageN != null ? (STALENESS_THRESHOLD[stageN] ?? 30) : 30;
@@ -401,7 +401,7 @@ function SellerRow({
 
 // ─── at-risk deals table ──────────────────────────────────────────────────
 
-type RiskSortKey = 'seller' | 'deal' | 'stage' | 'days' | 'value';
+type RiskSortKey = 'industry' | 'deal' | 'stage' | 'days' | 'value';
 
 function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Map<string, DealStaleness> }) {
   const [sortKey, setSortKey] = useState<RiskSortKey>('value');
@@ -416,7 +416,7 @@ function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Ma
 
   const sorted = [...deals].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
-    if (sortKey === 'seller') return a.leadership_seller.localeCompare(b.leadership_seller) * dir;
+    if (sortKey === 'industry') return a.leadership_industry.localeCompare(b.leadership_industry) * dir;
     if (sortKey === 'deal') return dealDisplay(a).localeCompare(dealDisplay(b)) * dir;
     if (sortKey === 'stage') return (stageLabel(a.stage ?? a.deal_stage) ?? '').localeCompare(stageLabel(b.stage ?? b.deal_stage) ?? '') * dir;
     if (sortKey === 'days') return ((stalenessDays(a) ?? 0) - (stalenessDays(b) ?? 0)) * dir;
@@ -441,7 +441,7 @@ function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Ma
       <table className="w-full text-13">
         <thead>
           <tr>
-            <Th k="seller" label="Seller" />
+            <Th k="industry" label="Industry" />
             <Th k="deal" label="Deal" />
             <Th k="stage" label="Stage" />
             <Th k="days" label="Days stale" />
@@ -473,7 +473,7 @@ function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Ma
                   borderTop: '0.5px solid var(--border-hairline)',
                 }}
               >
-                <td className="py-2 pr-4 text-text-primary pl-2">{d.leadership_seller}</td>
+                <td className="py-2 pr-4 text-text-primary pl-2">{d.leadership_industry}</td>
                 <td className="py-2 pr-4 text-text-primary max-w-xs truncate">{dealDisplay(d)}</td>
                 <td className="py-2 pr-4 text-text-secondary">{stageLabel(d.stage ?? d.deal_stage)}</td>
                 <td className="py-2 pr-4 tabular-nums" style={{ color: isStale ? 'var(--status-amber)' : 'var(--text-secondary)' }}>
@@ -507,7 +507,7 @@ function AtRiskTable({ deals, staleness }: { deals: RichDealRow[]; staleness: Ma
 
 export function VerticalPerformance() {
   const { credentials } = useAuth();
-  const { seller: sellerFilter, setSeller: setSellerFilter } = useSeller();
+  const { industry: industryFilter, setIndustry: setIndustryFilter } = useIndustry();
   const [quarterFocus, setQuarterFocus] = useSessionState<'both' | 'current' | 'next'>('vp_quarter_focus', 'both');
   const [riskFilter, setRiskFilter] = useSessionState<'all' | 'risk' | 'partner' | 'nopartner'>('vp_risk_filter', 'all');
 
@@ -542,17 +542,17 @@ export function VerticalPerformance() {
 
   // Filter summary rows
   const filteredSummary = summary.filter(
-    (r) => sellerFilter === 'Overall' || r.seller === sellerFilter,
+    (r) => industryFilter === 'Overall' || r.industry === industryFilter,
   ).filter(
     (r) => quarterFocus === 'both' || r.quarter.key === quarterFocus,
   );
 
   const allOpenForFilter = deals
-    .filter((d) => sellerFilter === 'Overall' || d.leadership_seller === sellerFilter)
+    .filter((d) => industryFilter === 'Overall' || d.leadership_industry === industryFilter)
     .filter((d) => quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus);
 
   const aggregates = useMemo(
-    () => aggregateSellers(filteredSummary, allOpenForFilter),
+    () => aggregateIndustries(filteredSummary, allOpenForFilter),
     [filteredSummary, allOpenForFilter],
   );
 
@@ -614,10 +614,10 @@ export function VerticalPerformance() {
       '',
       `Target: ${formatCurrency(totalTarget)} | Wtd pipeline: ${formatCurrency(totalEv)} | Booked: ${formatCurrency(totalActual)}`,
       '',
-      '| Seller | Target | Booked+committed | Wtd pipeline | Coverage | At risk |',
+      '| Industry | Target | Booked+committed | Wtd pipeline | Coverage | At risk |',
       '|---|---:|---:|---:|---:|---:|',
       ...aggregates.map((r) =>
-        `| ${r.seller} | ${formatCurrency(r.target)} | ${formatCurrency(r.bookedCommitted)} | ${formatCurrency(r.ev)} | ${r.target ? `${r.ratio.toFixed(2)}x` : '—'} | ${r.atRisk}/${r.open} |`,
+        `| ${r.industry} | ${formatCurrency(r.target)} | ${formatCurrency(r.bookedCommitted)} | ${formatCurrency(r.ev)} | ${r.target ? `${r.ratio.toFixed(2)}x` : '—'} | ${r.atRisk}/${r.open} |`,
       ),
     ];
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
@@ -771,9 +771,9 @@ export function VerticalPerformance() {
           {/* Filters */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <label className="text-11 text-text-secondary">Seller</label>
-              <select style={selectStyle} value={sellerFilter} onChange={(e) => setSellerFilter(e.target.value)}>
-                {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              <label className="text-11 text-text-secondary">Industry</label>
+              <select style={selectStyle} value={industryFilter} onChange={(e) => setIndustryFilter(e.target.value)}>
+                {INDUSTRY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div className="flex items-center gap-1.5">
@@ -795,7 +795,7 @@ export function VerticalPerformance() {
             </div>
           </div>
 
-          {/* Seller scorecard table */}
+          {/* Industry scorecard table */}
           <div
             className="bg-bg-card"
             style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-lg)' }}
@@ -806,7 +806,7 @@ export function VerticalPerformance() {
                   className="text-11 text-text-tertiary"
                   style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
                 >
-                  <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
+                  <th className="text-left py-2 pl-3 pr-4 font-normal">Industry</th>
                   <th className="text-right py-2 px-3 font-normal">Target</th>
                   <th className="text-right py-2 px-3 font-normal">
                     Booked + committed{quarterFocus === 'both' ? ` (${quarterLabels.current}+${quarterLabels.next})` : ''}
@@ -827,7 +827,7 @@ export function VerticalPerformance() {
                   </tr>
                 ) : (
                   aggregates.map((r) => (
-                    <SellerRow key={r.seller} row={r} quarterFocus={quarterFocus} staleness={staleness} />
+                    <IndustryRow key={r.industry} row={r} quarterFocus={quarterFocus} staleness={staleness} />
                   ))
                 )}
               </tbody>

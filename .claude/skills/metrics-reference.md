@@ -22,9 +22,9 @@ const { summary } = buildRows(dataset, targets, FY27_Q);
 
 ### New-sales exclusion (Prologis + Gilead)
 
-`buildRows` skips any deal whose account is **Prologis** or **Gilead** (`isExcludedFromNewSales()` — matches `deal`/`logo`/`account`). These are ongoing delivery/extension, not new sales, per JD's agreed definition: *new sales = all deals except Prologis and Gilead.* So all `summary` metrics (booked, committed, weighted pipeline) are already on the new-sales basis. Q1 booked reads **$649K**, not the $764K all-in (the $115K difference is Gilead $47.5K + Prologis-Sahana $67.5K). To change the excluded set, edit `NEW_SALES_EXCLUDED_ACCOUNTS` in `vpCompute.ts`. Note: `WeeklyScorecard.tsx` (deal movement) computes won/closure revenue independently and does **not** yet apply this exclusion.
+`buildRows` skips any deal whose account is **Prologis** or **Gilead** (`isExcludedFromNewSales()` — matches `deal`/`logo`/`account`). These are ongoing delivery/extension, not new sales, per JD's agreed definition: *new sales = all deals except Prologis and Gilead.* So all `summary` metrics (booked, committed, weighted pipeline) are already on the new-sales basis. Q1 booked reads **$649K**, not the $764K all-in (the $115K difference is Gilead $47.5K + Prologis-Sahana $67.5K). To change the excluded set, edit `NEW_SALES_EXCLUDED_ACCOUNTS` in `vpCompute.ts`. Views that compute from raw rows (Deal movement, Operating metrics, Partnerships, Intro activity) apply the same exclusion at their row source.
 
-To aggregate across sellers or quarters, filter `summary` and reduce:
+To aggregate across industries or quarters, filter `summary` and reduce:
 ```typescript
 const rows = summary.filter(s => s.quarter.key === 'current');
 const ev = rows.reduce((a, s) => a + s.ev, 0);
@@ -41,7 +41,7 @@ const ev = rows.reduce((a, s) => a + s.ev, 0);
 | `flooredEv` | S1–S4 with $100K floor | Leadership view only — same floor as `ev` (both use `leadershipDealSize`). Do not use for S3+ split. |
 | `booked` | Won deals paced into quarter | start_date + duration → quarter fraction; won deals skip `ev` via `continue` |
 | `committed` | S5+S6 paced into quarter | Same pacing path, actual deal size (no floor) |
-| `target` | Revenue target for seller+quarter | From `dashboard_state.quarter_targets` |
+| `target` | Revenue target for industry+quarter | From `dashboard_state.quarter_targets` (`pharma||Q2'27` keys) |
 
 ---
 
@@ -94,22 +94,13 @@ const s3Pct = ev > 0 ? (evS3Plus / ev) * 100 : null;
 - 35–50% → amber
 - > 50% → red
 
-**DO NOT invent new stage mix metrics.** These two (top-of-funnel % and S3+ %) are the only pipeline quality metrics. They are exact complements and sum to 100%. Any new view that needs pipeline quality uses one of these two from `row.earlyEv` and `row.ev` on `SellerAggregate`.
+**DO NOT invent new stage mix metrics.** These two (top-of-funnel % and S3+ %) are the only pipeline quality metrics. They are exact complements and sum to 100%. Any new view that needs pipeline quality uses one of these two from `row.earlyEv` and `row.ev` on `IndustryAggregate`.
 
 ---
 
-## Seller → vertical mapping (LT Trends table only)
+## Industry model (replaces seller reporting, Sep 2026)
 
-| Seller | Vertical |
-|---|---|
-| Akshay Iyer | Pharma |
-| Somya | CPG |
-| Suvom Mitro | Retail |
-| Andy Shankar | EU |
-| Maruti Peri | Engineering |
-| Sahana | RoW |
-
----
+`buildRows` loops over `INDUSTRIES = ['Pharma', 'CPG/Retail', 'Others']`, not sellers. `QuarterSummary.industry`, `IndustryAggregate` (`aggregateIndustries`), `RichDealRow.leadership_industry`. A deal's industry comes from `industryOf(row)` (its Monday `industry` field); scope comes from `inSalesScope(row)` (the `SALES_TEAM` roster). Views filter with the single helper `rowMatchesIndustry(row, industry)` — never write a local seller matcher. Buckets are mutually exclusive, so team totals no longer double-count co-owned deals the way summing seller rows did. Targets: `getTarget(targets, industry, quarter)` against `pharma||Q2'27`-style keys; Overall = sum of the three.
 
 ## FY definition
 
@@ -137,9 +128,9 @@ These two panels appear in Pipeline health and are often confused:
 - Two buckets: no NMD at all, and stale-but-has-NMD
 - Intent: what does JD need to unblock before this week's review?
 
-**"At-risk deals"** (inside an expanded seller row):
+**"At-risk deals"** (inside an expanded industry row):
 - Only visible when a specific vertical row is drilled into
 - Scope: S3–S6 — three tiers: committed no next step, committed stale, mid-funnel stuck (S3/S4)
-- Intent: per-seller diagnostic
+- Intent: per-industry diagnostic
 
 Committed-no-NMD deals appear in both — the top widget is the early warning, the expanded panel is the drill-down. The panel adds S3/S4 stale that the top widget deliberately omits (those are not committed revenue yet).

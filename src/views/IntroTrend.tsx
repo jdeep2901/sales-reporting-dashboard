@@ -2,72 +2,87 @@ import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from 'recharts';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore } from '@/lib/queries';
-import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useIndustry, INDUSTRY_OPTIONS } from '@/lib/industryContext';
+import { industryOf, isExcludedFromNewSales, rowMatchesIndustry, type DealRow } from '@/lib/vpCompute';
 
 type Granularity = 'week' | 'month';
 
 interface IntroRecord {
-  deal?: string;
-  intro_date?: string;
-  stage?: string;
-  seller?: string;
-  [key: string]: unknown;
+  deal: string;
+  intro_date: string;
+  stage: string;
+  industry: string;
+}
+
+// Monday-start week key — matches the week axis the sync function writes to intro_trend.
+function weekKeyOf(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Recomputed from deal rows (not the backend's per-seller series) so it can be cut by
+// industry and includes every current seller. Same rule as the sync function: intro
+// meeting date, excluding deals currently in No Show / Reschedule.
+function buildIntroRecords(rows: DealRow[], industry: string): IntroRecord[] {
+  const seen = new Set<string>();
+  const out: IntroRecord[] = [];
+  for (const r of rows) {
+    const intro = String(r.intro_date ?? '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(intro)) continue;
+    const stage = String(r.stage ?? r.deal_stage ?? '');
+    if (/no show|reschedule/i.test(stage)) continue;
+    if (isExcludedFromNewSales(r) || !rowMatchesIndustry(r, industry)) continue;
+    const key = `${r.deal}|${intro}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ deal: String(r.deal ?? r.account ?? '—'), intro_date: intro, stage, industry: industryOf(r) });
+  }
+  return out;
+}
+
+function weekAxis(backendWeeks: unknown, records: IntroRecord[]): string[] {
+  if (Array.isArray(backendWeeks) && backendWeeks.length) return (backendWeeks as string[]).slice().sort();
+  const keys = Array.from(new Set(records.map((r) => weekKeyOf(r.intro_date)))).sort();
+  return keys;
 }
 
 function buildSeries(
-  introTrend: Record<string, unknown>,
-  scope: string,
+  records: IntroRecord[],
+  weeks: string[],
   granularity: Granularity,
 ): { labels: string[]; points: number[]; target: number; targetLabel: string } {
-  const weeks: string[] = Array.isArray(introTrend.weeks) ? introTrend.weeks as string[] : [];
-  const seriesMap = (introTrend.series as Record<string, Record<string, number>> | undefined) ?? {};
-  const series = seriesMap[scope] ?? {};
+  const byWeek: Record<string, number> = {};
+  records.forEach((r) => { const w = weekKeyOf(r.intro_date); byWeek[w] = (byWeek[w] ?? 0) + 1; });
 
   if (granularity === 'month') {
     const agg: Record<string, number> = {};
     weeks.forEach((w) => {
-      const m = String(w ?? '').slice(0, 7);
-      agg[m] = (agg[m] ?? 0) + Number(series[w] ?? 0);
+      const m = w.slice(0, 7);
+      agg[m] = (agg[m] ?? 0) + (byWeek[w] ?? 0);
     });
     const labels = Object.keys(agg).sort();
     return { labels, points: labels.map((m) => agg[m] ?? 0), target: 16, targetLabel: 'Target 16 / month' };
   }
-  return {
-    labels: weeks,
-    points: weeks.map((w) => Number(series[w] ?? 0)),
-    target: 4,
-    targetLabel: 'Target 4 / week',
-  };
+  return { labels: weeks, points: weeks.map((w) => byWeek[w] ?? 0), target: 4, targetLabel: 'Target 4 / week' };
 }
 
 function buildDetailSeries(
-  introTrend: Record<string, unknown>,
-  scope: string,
+  records: IntroRecord[],
+  weeks: string[],
   granularity: Granularity,
 ): Record<string, IntroRecord[]> {
-  const weeks: string[] = Array.isArray(introTrend.weeks) ? introTrend.weeks as string[] : [];
-  const detailMap = ((introTrend.details as Record<string, Record<string, IntroRecord[]>> | undefined) ?? {})[scope] ?? {};
-
+  const byWeek: Record<string, IntroRecord[]> = {};
+  records.forEach((r) => { const w = weekKeyOf(r.intro_date); (byWeek[w] ??= []).push(r); });
   if (granularity === 'month') {
     const agg: Record<string, IntroRecord[]> = {};
-    weeks.forEach((w) => {
-      const m = String(w ?? '').slice(0, 7);
-      if (!agg[m]) agg[m] = [];
-      agg[m].push(...(detailMap[w] ?? []));
-    });
-    Object.keys(agg).forEach((k) => {
-      const seen = new Set<string>();
-      agg[k] = agg[k].filter((r) => {
-        const key = `${r.deal}|${r.intro_date}|${r.stage}|${r.seller}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    });
+    weeks.forEach((w) => { (agg[w.slice(0, 7)] ??= []).push(...(byWeek[w] ?? [])); });
     return agg;
   }
   const out: Record<string, IntroRecord[]> = {};
-  weeks.forEach((w) => { out[w] = detailMap[w] ?? []; });
+  weeks.forEach((w) => { out[w] = byWeek[w] ?? []; });
   return out;
 }
 
@@ -89,20 +104,27 @@ export function IntroTrend() {
   const dataset = (storeData?.dataset as Record<string, unknown> | null) ?? null;
   const introTrend = (dataset?.intro_trend as Record<string, unknown> | null) ?? {};
 
-  const { seller: scope, setSeller: setScope } = useSeller();
+  const { industry: scope, setIndustry: setScope } = useIndustry();
   const [granularity, setGranularity] = useState<Granularity>('week');
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
 
-  const scopeOptions = SELLER_OPTIONS;
+  const scopeOptions = INDUSTRY_OPTIONS;
+
+  const allRows = useMemo(
+    () => (Array.isArray(dataset?.all_deals_rows) ? (dataset!.all_deals_rows as DealRow[]) : []),
+    [dataset],
+  );
+  const records = useMemo(() => buildIntroRecords(allRows, scope), [allRows, scope]);
+  const weeks = useMemo(() => weekAxis(introTrend.weeks, records), [introTrend, records]);
 
   const { labels, points, target, targetLabel } = useMemo(
-    () => buildSeries(introTrend, scope, granularity),
-    [introTrend, scope, granularity],
+    () => buildSeries(records, weeks, granularity),
+    [records, weeks, granularity],
   );
 
   const detailSeries = useMemo(
-    () => buildDetailSeries(introTrend, scope, granularity),
-    [introTrend, scope, granularity],
+    () => buildDetailSeries(records, weeks, granularity),
+    [records, weeks, granularity],
   );
 
   const chartData = useMemo(
@@ -218,7 +240,7 @@ export function IntroTrend() {
                 <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                   <th className="text-left py-1.5 text-text-secondary font-medium">Deal</th>
                   <th className="text-left py-1.5 text-text-secondary font-medium">Stage</th>
-                  <th className="text-left py-1.5 text-text-secondary font-medium">Seller</th>
+                  <th className="text-left py-1.5 text-text-secondary font-medium">Industry</th>
                   <th className="text-right py-1.5 text-text-secondary font-medium">Intro date</th>
                 </tr>
               </thead>
@@ -227,7 +249,7 @@ export function IntroTrend() {
                   <tr key={i} style={{ borderBottom: '0.5px solid var(--border-hairline)' }} className="hover:bg-bg-hover">
                     <td className="py-1.5 pr-3 text-text-primary">{String(r.deal ?? '—')}</td>
                     <td className="py-1.5 pr-3 text-text-secondary">{String(r.stage ?? '—')}</td>
-                    <td className="py-1.5 pr-3 text-text-secondary">{String(r.seller ?? '—')}</td>
+                    <td className="py-1.5 pr-3 text-text-secondary">{r.industry}</td>
                     <td className="py-1.5 text-right text-text-secondary">{String(r.intro_date ?? '—').slice(0, 10)}</td>
                   </tr>
                 ))}

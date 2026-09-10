@@ -215,7 +215,7 @@ export function About() {
             <code style={{ fontSize: 12 }}>start_date</code> and{' '}
             <code style={{ fontSize: 12 }}>duration_months</code>, then summed into the fiscal
             quarter. Deduplicated by <code style={{ fontSize: 12 }}>dealKey</code> so a single deal
-            appearing across multiple sellers is not double-counted within one seller's view.
+            appearing more than once is not double-counted. Each deal belongs to exactly one industry.
             New-sales basis: Prologis and Gilead are ongoing delivery, not new sales, and are
             excluded from all revenue metrics across every screen.
           </DefRow>
@@ -246,9 +246,11 @@ export function About() {
             are applied.
           </DefRow>
           <DefRow term="Target">
-            Quarterly revenue target per seller, set manually in the shared dashboard state
-            (Admin tab → Targets). Stored as seller||quarter key pairs. Lookup is
-            case-insensitive on the seller name and normalized quarter label (e.g. "Q1'27").
+            Quarterly revenue target per industry (Pharma, CPG/Retail, Others), set in the shared
+            dashboard state (Admin tab → Targets). Stored as industry||quarter key pairs, lookup
+            case-insensitive on the normalized quarter label (e.g. "Q2'27"). Initial values were
+            carried over from the old seller targets: Pharma = Akshay's, CPG/Retail = Somya +
+            Suvom, Others = Maruti + Andy. The "Overall" target is the sum of the three.
           </DefRow>
           <DefRow
             term="Won (FY)"
@@ -287,7 +289,7 @@ export function About() {
             start_date).
           </DefRow>
           <DefRow term="Deduplication (dealKey)">
-            Deals are deduplicated within each seller view using the key:{' '}
+            Deals are deduplicated within each view using the key:{' '}
             <code style={{ fontSize: 12 }}>deal||intro_date</code> (both lowercased, trimmed). This
             prevents the same deal record appearing twice if the Monday.com board has duplicate rows.
           </DefRow>
@@ -451,14 +453,14 @@ export function About() {
             />
           </div>
 
-          <DefRow term="Seller coaching text (VP)">
-            Each seller row in Pipeline health shows a coaching sub-line if the seller has ≥1
+          <DefRow term="Industry coaching text (VP)">
+            Each industry row in Pipeline health shows a coaching sub-line if the industry has ≥1
             stale deal or ≥1 deal with no next steps. Format: "X stale in stage · Y no next steps".
             Counts are computed from the current open deal set filtered to the active quarter scope.
           </DefRow>
           <DefRow term="Pipeline health card (WS)">
             Shows total stale count and no-next-steps count across all open active-stage deals
-            visible in the current seller + quarter filter. "Stale in stage" = deals at or past
+            visible in the current industry + quarter filter. "Stale in stage" = deals at or past
             their stage-specific threshold. "No next steps" = deals missing a future
             next_meeting_date.
           </DefRow>
@@ -485,19 +487,20 @@ export function About() {
             client-side (TanStack Query staleTime). It scans all snapshots from April 1, 2026 to
             present — a relatively expensive query, hence the aggressive cache TTL.
           </DefRow>
-          <DefRow term="Seller matching">
-            A deal is attributed to a seller if: (1) the seller's canonical name or any alias
-            appears in <code style={{ fontSize: 12 }}>matched_sellers</code> (an array field set by
-            the sync function), or (2) the seller alias appears in the{' '}
-            <code style={{ fontSize: 12 }}>owner</code> / <code style={{ fontSize: 12 }}>seller</code>{' '}
-            / <code style={{ fontSize: 12 }}>deal_owner</code> field (substring match). The
-            matched_sellers check takes priority.
+          <DefRow term="Industry">
+            Every screen reports and filters by industry, taken from the deal's own Monday
+            industry field — not its owner — so reporting stays stable as the team changes.
+            Pharma = Pharma, Biotechnology, Health Care. CPG/Retail = CPG, Retail. Others =
+            everything else, including blank. The "Overall" selector aggregates all three.
           </DefRow>
-          <DefRow term="Active sellers">
-            Akshay Iyer, Somya, Maruti Peri, Andy Shankar, Sahana, Suvom Mitro. Defined in{' '}
-            <code style={{ fontSize: 12 }}>ACTIVE_SELLERS</code> in{' '}
-            <code style={{ fontSize: 12 }}>src/lib/vpCompute.ts</code>. The "Overall" selector
-            aggregates across all six sellers.
+          <DefRow term="Sales team scope">
+            Only deals owned by the new-sales team count: Akshay Iyer, Maruti Peri, Raj Jha, Andy
+            Shankar, Sahana, plus Somya and Suvom Mitro (departed — kept so their deals and wins
+            stay counted). Matched on{' '}
+            <code style={{ fontSize: 12 }}>matched_sellers</code> or the{' '}
+            <code style={{ fontSize: 12 }}>owner</code> field. Defined in{' '}
+            <code style={{ fontSize: 12 }}>SALES_TEAM</code> in{' '}
+            <code style={{ fontSize: 12 }}>src/lib/vpCompute.ts</code> — add new joiners there.
           </DefRow>
           <DefRow term="Active stages">
             Stages 1–6 (Intro through Contracting) are "active" pipeline. Won (7), Lost (8),

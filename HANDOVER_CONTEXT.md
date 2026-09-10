@@ -42,8 +42,11 @@ Context tags:
 ## 5. Core Business Rules Locked In
 - FY definition: April–March
 - Most dashboard views use Intro-date-based filtering logic.
-- Seller identity uses `deal owner` / matched seller mapping.
-- Include seller set: `Somya`, `Akshay Iyer`, `Abhinav Kishore`, `Maruti Peri`, `Vitor Quirino`, `Sahana`
+- **Reporting dimension is industry, not seller (Sep 2026).** Every view reports and filters by `Pharma`, `CPG/Retail`, `Others`, derived from the deal's own Monday `industry` field (not its owner), so reporting stays stable as the roster changes.
+  - Pharma = Pharma, Biotechnology, Health Care. CPG/Retail = CPG, Retail. Others = everything else, incl. blank.
+  - Targets are per industry (`pharma||Q2'27` etc.). Seeded Sep 2026 from the old seller targets: Pharma = Akshay's; CPG/Retail = Somya + Suvom; Others = Maruti + Andy. Legacy per-seller target keys remain in storage for history only.
+- Deal scope (which deals count) = new-sales team roster, matched on `deal owner` / `matched_sellers`: `Akshay Iyer`, `Maruti Peri`, `Raj Jha`, `Andy Shankar`, `Sahana`, plus departed `Somya` and `Suvom Mitro` (kept so their deals and wins stay counted). Defined as `SALES_TEAM` in `src/lib/vpCompute.ts` — add new joiners there.
+  - Roster history: Jun 2026 — Suvom replaced Abhinav; Andy took over Vitor's EU territory. Sep 2026 — Somya and Suvom left; Raj Jha joined as CPG/Retail seller.
 - Movement comparison uses versioned snapshots.
 - Help Needed is user-editable and persisted to backend shared state.
 - Historical versions are viewable; edits are intended for current/latest context.
@@ -105,7 +108,7 @@ Context tags:
 
 ## 14. Prompt Template for Any Future GenAI Agent
 Use this exact brief:
-- “Use MathCo Realtime Sales Reporting context. FY is Apr–Mar. Stage order is Intro, Qualification, Capability, Problem Scoping, Proposal, Contracting, Win/Loss. Seller scope default is Somya, Akshay Iyer, Abhinav Kishore, Maruti Peri, Vitor Quirino, Sahana. Specify intro cutoff, seller filter, and stage filter in every analysis. Use start-date quarter for closure views. Include assumptions and caveats explicitly.”
+- “Use MathCo Realtime Sales Reporting context. FY is Apr–Mar. Stage order is Intro, Qualification, Capability, Problem Scoping, Proposal, Contracting, Win/Loss. Report by industry (Pharma, CPG/Retail, Others) from the deal's industry field; deal scope is the SALES_TEAM roster in src/lib/vpCompute.ts. Specify intro cutoff, industry filter, and stage filter in every analysis. Use start-date quarter for closure views. Include assumptions and caveats explicitly.”
 
 ## 15. Guardrails for Consistency
 - Never change stage order implicitly.

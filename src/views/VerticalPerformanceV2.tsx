@@ -9,14 +9,14 @@ import { useSessionState } from '@/lib/hooks';
 import { formatCurrency } from '@/lib/formatters';
 import {
   buildRows,
-  aggregateSellers,
+  aggregateIndustries,
   buildQuarterLabels,
   ratioTone,
   stageLabel,
   dealDisplay,
   STALENESS_THRESHOLD,
   stageNumber,
-  type SellerAggregate,
+  type IndustryAggregate,
   type RichDealRow,
   type QuarterTargets,
 } from '@/lib/vpCompute';
@@ -139,20 +139,20 @@ function NoNmdBadge() {
   );
 }
 
-// ── focus area label (auto-derived per seller) ────────────────────────────
-function sellerFocusLabel(
-  row: SellerAggregate,
+// ── focus area label (auto-derived per industry) ────────────────────────────
+function industryFocusLabel(
+  row: IndustryAggregate,
   deals: RichDealRow[],
   staleness: Map<string, DealStaleness>,
   quarterFocus: 'both' | 'current' | 'next',
 ): { text: string; tone: Tone } | null {
-  const sellerDeals = deals.filter(
-    (d) => d.leadership_seller === row.seller &&
+  const industryDeals = deals.filter(
+    (d) => d.leadership_industry === row.industry &&
       (quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus),
   );
 
   // Committed (S5/S6) with no NMD — highest urgency
-  const noNmdCommitted = sellerDeals.filter((d) => {
+  const noNmdCommitted = industryDeals.filter((d) => {
     const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
     return n != null && n >= 5 && isNoNmd(d);
   });
@@ -165,7 +165,7 @@ function sellerFocusLabel(
   }
 
   // Stale committed (S5/S6) — second priority
-  const staleCommitted = sellerDeals.filter((d) => {
+  const staleCommitted = industryDeals.filter((d) => {
     const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage);
     return n != null && n >= 5 && isDealStale(d, staleness);
   });
@@ -252,7 +252,7 @@ function FocusPanel({
             return (
               <div key={i} className="flex items-center gap-3 py-1.5"
                 style={{ borderTop: i > 0 ? '0.5px solid var(--border-hairline)' : undefined }}>
-                <span className="text-11 text-text-tertiary w-16 flex-shrink-0">{d.leadership_seller.split(' ')[0]}</span>
+                <span className="text-11 text-text-tertiary w-20 flex-shrink-0">{d.leadership_industry}</span>
                 <span className="text-13 text-text-primary flex-1 min-w-0 truncate">{dealDisplay(d)}</span>
                 <span className="text-11 text-text-secondary flex-shrink-0">{stageLabel(d.stage ?? d.deal_stage)}</span>
                 {stale && days != null && <StaleBadge days={days} />}
@@ -272,7 +272,7 @@ function FocusPanel({
             return (
               <div key={i} className="flex items-center gap-3 py-1.5"
                 style={{ borderTop: i > 0 ? '0.5px solid var(--border-hairline)' : undefined }}>
-                <span className="text-11 text-text-tertiary w-16 flex-shrink-0">{d.leadership_seller.split(' ')[0]}</span>
+                <span className="text-11 text-text-tertiary w-20 flex-shrink-0">{d.leadership_industry}</span>
                 <span className="text-13 text-text-primary flex-1 min-w-0 truncate">{dealDisplay(d)}</span>
                 <span className="text-11 text-text-secondary flex-shrink-0">{stageLabel(d.stage ?? d.deal_stage)}</span>
                 {days != null && <StaleBadge days={days} />}
@@ -318,11 +318,11 @@ function ActionsBadge({ actions }: { actions: SellerAction[] }) {
 }
 
 function ActionsList({
-  sellerName,
+  industryName,
   actions,
   dealOptions,
 }: {
-  sellerName: string;
+  industryName: string;
   actions: SellerAction[];
   dealOptions: { id: string; name: string; stage: number | null; nmd: string | null }[];
 }) {
@@ -344,7 +344,7 @@ function ActionsList({
     if (!trimmed) return;
     const deal = dealOptions.find((d) => d.id === dealId);
     create.mutate({
-      seller_name: sellerName,
+      seller_name: industryName,
       deal_id: deal?.id ?? null,
       deal_name: deal?.name ?? null,
       text: trimmed,
@@ -418,7 +418,7 @@ function ActionsList({
             </button>
           )}
           <button
-            onClick={() => del.mutate({ id: action.id, seller_name: sellerName })}
+            onClick={() => del.mutate({ id: action.id, seller_name: industryName })}
             className="text-11 text-text-tertiary hover:text-text-primary px-1 leading-none"
             title="Delete"
           >
@@ -501,17 +501,17 @@ function ActionsList({
   );
 }
 
-// ── expandable seller row (v2) ────────────────────────────────────────────
-const PLAN_KEY = (seller: string) => `vp2_closure_plan__${seller.replace(/\s+/g, '_').toLowerCase()}`;
+// ── expandable industry row (v2) ────────────────────────────────────────────
+const PLAN_KEY = (industry: string) => `vp2_closure_plan__${industry.replace(/\s+/g, '_').toLowerCase()}`;
 
-function SellerRowV2({
+function IndustryRowV2({
   row,
   allDeals,
   quarterFocus,
   staleness,
   actions,
 }: {
-  row: SellerAggregate;
+  row: IndustryAggregate;
   allDeals: RichDealRow[];
   quarterFocus: 'both' | 'current' | 'next';
   staleness: Map<string, DealStaleness>;
@@ -519,18 +519,18 @@ function SellerRowV2({
 }) {
   const [open, setOpen] = useState(false);
   const [plan, setPlan] = useState(() => {
-    try { return localStorage.getItem(PLAN_KEY(row.seller)) ?? ''; } catch { return ''; }
+    try { return localStorage.getItem(PLAN_KEY(row.industry)) ?? ''; } catch { return ''; }
   });
 
-  const focus = sellerFocusLabel(row, allDeals, staleness, quarterFocus);
+  const focus = industryFocusLabel(row, allDeals, staleness, quarterFocus);
 
-  const sellerDeals = allDeals.filter(
-    (d) => d.leadership_seller === row.seller &&
+  const industryDeals = allDeals.filter(
+    (d) => d.leadership_industry === row.industry &&
       (quarterFocus === 'both' || d.leadership_quarter.key === quarterFocus),
   );
 
   // Sort deals by urgency: S5/S6 no-NMD → S5/S6 stale → S5/S6 healthy → S3/S4 → S1/S2
-  const sortedDeals = [...sellerDeals].sort((a, b) => {
+  const sortedDeals = [...industryDeals].sort((a, b) => {
     const nA = stageNumber(a.stage ?? a.deal_stage ?? a.dealStage) ?? 0;
     const nB = stageNumber(b.stage ?? b.deal_stage ?? b.dealStage) ?? 0;
     const urgencyA = nA >= 5 ? (isNoNmd(a) ? 0 : isDealStale(a, staleness) ? 1 : 2) : nA >= 3 ? 3 : 4;
@@ -543,7 +543,7 @@ function SellerRowV2({
 
   // Deal options for action tagging — S3–S6 active deals, with stage+NMD snapshot for auto-verify
   const dealOptions = useMemo(() =>
-    sellerDeals
+    industryDeals
       .filter((d) => { const n = stageNumber(d.stage ?? d.deal_stage ?? d.dealStage); return n != null && n >= 3; })
       .map((d) => ({
         id: d.item_id ?? dealDisplay(d),
@@ -551,7 +551,7 @@ function SellerRowV2({
         stage: stageNumber(d.stage ?? d.deal_stage ?? d.dealStage) ?? null,
         nmd: d.next_meeting_date ? String(d.next_meeting_date).slice(0, 10) : null,
       })),
-    [sellerDeals],
+    [industryDeals],
   );
 
   return (
@@ -561,15 +561,15 @@ function SellerRowV2({
         style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
         onClick={() => setOpen((v) => !v)}
       >
-        {/* Seller */}
+        {/* Industry */}
         <td className="py-2.5 pl-3 pr-4" style={{ borderLeft: `2px solid ${hasRisk ? (focus?.tone === 'red' ? 'var(--status-red)' : 'var(--status-amber)') : 'transparent'}` }}>
           <div className="flex items-center gap-2">
             <span className="text-11 font-medium flex-shrink-0 flex items-center justify-center"
               style={{ width: 24, height: 24, background: 'var(--bg-surface)', border: '0.5px solid var(--border-emphasis)', borderRadius: '50%', color: 'var(--text-secondary)' }}>
-              {row.seller[0]}
+              {row.industry[0]}
             </span>
             <div className="flex flex-col gap-0.5">
-              <p className="text-13 font-medium text-text-primary">{row.seller}</p>
+              <p className="text-13 font-medium text-text-primary">{row.industry}</p>
               <div className="flex items-center gap-1.5">
                 <p className="text-11 text-text-tertiary">{row.open} open</p>
                 <ActionsBadge actions={actions} />
@@ -630,7 +630,7 @@ function SellerRowV2({
               {/* Actions */}
               <div className="bg-bg-card p-3" style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-md)' }}>
                 <ActionsList
-                  sellerName={row.seller}
+                  industryName={row.industry}
                   actions={actions}
                   dealOptions={dealOptions}
                 />
@@ -721,7 +721,7 @@ function SellerRowV2({
                   style={{ border: '0.5px solid var(--border-emphasis)', borderRadius: 'var(--radius-sm)', minHeight: 56, outline: 'none' }}
                   placeholder="Add closure notes…"
                   value={plan}
-                  onChange={(e) => { setPlan(e.target.value); try { localStorage.setItem(PLAN_KEY(row.seller), e.target.value); } catch {} }}
+                  onChange={(e) => { setPlan(e.target.value); try { localStorage.setItem(PLAN_KEY(row.industry), e.target.value); } catch {} }}
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
@@ -753,7 +753,7 @@ function DealTier({ title, tone, deals, staleness }: DealTierProps) {
       <table className="w-full text-13 mb-4">
         <thead>
           <tr className="text-11 text-text-tertiary">
-            <th className="text-left pb-1.5 pr-4 font-normal">Seller</th>
+            <th className="text-left pb-1.5 pr-4 font-normal">Industry</th>
             <th className="text-left pb-1.5 pr-4 font-normal">Deal</th>
             <th className="text-left pb-1.5 pr-4 font-normal">Stage</th>
             <th className="text-left pb-1.5 pr-4 font-normal">Days stale</th>
@@ -770,7 +770,7 @@ function DealTier({ title, tone, deals, staleness }: DealTierProps) {
             return (
               <tr key={i} className="hover:bg-bg-hover"
                 style={{ borderTop: '0.5px solid var(--border-hairline)', borderLeft: `2px solid ${leftColor}` }}>
-                <td className="py-1.5 pr-4 text-text-secondary pl-2">{d.leadership_seller}</td>
+                <td className="py-1.5 pr-4 text-text-secondary pl-2">{d.leadership_industry}</td>
                 <td className="py-1.5 pr-4 text-text-primary max-w-xs truncate">{dealDisplay(d)}</td>
                 <td className="py-1.5 pr-4 text-text-secondary">{stageLabel(d.stage ?? d.deal_stage)}</td>
                 <td className="py-1.5 pr-4 tabular-nums" style={{ color: days != null ? toneColor[tone] : 'var(--text-tertiary)' }}>
@@ -877,15 +877,15 @@ export function VerticalPerformanceV2() {
   );
 
   const aggregates = useMemo(
-    () => aggregateSellers(filteredSummary, allOpenForFilter),
+    () => aggregateIndustries(filteredSummary, allOpenForFilter),
     [filteredSummary, allOpenForFilter],
   );
 
   const stalenessQuery = useDealStaleness();
   const staleness = stalenessQuery.data ?? new Map<string, DealStaleness>();
 
-  const sellerNames = useMemo(() => aggregates.map((r) => r.seller), [aggregates]);
-  const actionsQuery = useAllSellerActions(sellerNames);
+  const industryNames = useMemo(() => aggregates.map((r) => r.industry), [aggregates]);
+  const actionsQuery = useAllSellerActions(industryNames);
   const actionsMap = actionsQuery.data ?? new Map<string, SellerAction[]>();
 
   // Auto-verify: close actions whose deal has advanced stage or gained a new future NMD
@@ -985,12 +985,12 @@ export function VerticalPerformanceV2() {
           {/* Focus panel — committed deals needing action */}
           <FocusPanel deals={allOpenForFilter} staleness={staleness} quarterFocus={quarterFocus} />
 
-          {/* Seller table */}
+          {/* Industry table */}
           <div className="bg-bg-card" style={{ border: '0.5px solid var(--border-hairline)', borderRadius: 'var(--radius-lg)' }}>
             <table className="w-full">
               <thead>
                 <tr className="text-11 text-text-tertiary" style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-                  <th className="text-left py-2 pl-3 pr-4 font-normal">Seller</th>
+                  <th className="text-left py-2 pl-3 pr-4 font-normal">Industry</th>
                   <th className="text-left py-2 px-3 font-normal" style={{ minWidth: 130 }}>Forecast vs target</th>
                   <th className="text-left py-2 px-3 font-normal">S3+</th>
                   <th className="text-right py-2 px-3 font-normal">Booked</th>
@@ -1007,13 +1007,13 @@ export function VerticalPerformanceV2() {
                   </tr>
                 ) : (
                   aggregates.map((r) => (
-                    <SellerRowV2
-                      key={r.seller}
+                    <IndustryRowV2
+                      key={r.industry}
                       row={r}
                       allDeals={allOpenForFilter}
                       quarterFocus={quarterFocus}
                       staleness={staleness}
-                      actions={actionsMap.get(r.seller) ?? []}
+                      actions={actionsMap.get(r.industry) ?? []}
                     />
                   ))
                 )}

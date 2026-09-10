@@ -1,16 +1,34 @@
 // Pure computation for Vertical Performance view.
 // Ported from legacy/index.html renderLeadershipForecastV2 and helpers.
 
-export const ACTIVE_SELLERS = [
+// Reporting is by INDUSTRY, not seller, so it stays stable as the roster changes.
+// SALES_TEAM only scopes which deals count (new-sales team pipeline). It includes
+// departed sellers so their deals and wins stay counted. Add new joiners here.
+export const SALES_TEAM = [
   'Akshay Iyer',
-  'Somya',
   'Maruti Peri',
+  'Raj Jha',
   'Andy Shankar',
   'Sahana',
+  'Somya',
   'Suvom Mitro',
 ] as const;
 
-export type SellerName = (typeof ACTIVE_SELLERS)[number];
+export const INDUSTRIES = ['Pharma', 'CPG/Retail', 'Others'] as const;
+export type Industry = (typeof INDUSTRIES)[number];
+
+// Monday "industry" values → reporting industry. Anything unlisted (incl. blank) → Others.
+const INDUSTRY_MAP: Record<string, Industry> = {
+  pharma: 'Pharma',
+  biotechnology: 'Pharma',
+  'health care': 'Pharma',
+  cpg: 'CPG/Retail',
+  retail: 'CPG/Retail',
+};
+
+export function industryOf(row: Pick<DealRow, 'industry'>): Industry {
+  return INDUSTRY_MAP[String(row.industry ?? '').trim().toLowerCase()] ?? 'Others';
+}
 
 // Stage ordering matching MATTER_STAGE_ORDER in legacy code
 const MATTER_STAGE_ORDER = [
@@ -63,6 +81,7 @@ const SELLER_ALIASES: Record<string, string[]> = {
   'Andy Shankar': ['andy shankar', 'andy'],
   Sahana: ['sahana'],
   'Suvom Mitro': ['suvom mitro', 'suvom'],
+  'Raj Jha': ['raj jha'],
 };
 
 // Empirical win probabilities for each stage (v2 — source of truth)
@@ -102,6 +121,7 @@ export interface DealRow {
   logo?: string | null;
   account?: string | null;
   deal?: string | null;
+  industry?: string | null;
   tech_stack?: string | null;
   partner_source_type?: string | null;
   alliances_team_intro?: string | null;
@@ -113,7 +133,7 @@ export interface DealRow {
 }
 
 export interface RichDealRow extends DealRow {
-  leadership_seller: string;
+  leadership_industry: Industry;
   leadership_quarter: { key: 'current' | 'next'; label: string };
   leadership_contribution: number;
   leadership_total_size: number;
@@ -123,7 +143,7 @@ export interface RichDealRow extends DealRow {
 }
 
 export interface QuarterSummary {
-  seller: string;
+  industry: Industry;
   quarter: { key: 'current' | 'next'; label: string };
   target: number;
   booked: number;
@@ -134,8 +154,8 @@ export interface QuarterSummary {
   earlyEv: number; // S1+S2 only — complement of S3+ (earlyEv/ev + s3PlusPct = 1)
 }
 
-export interface SellerAggregate {
-  seller: string;
+export interface IndustryAggregate {
+  industry: Industry;
   target: number;
   booked: number;
   committed: number;
@@ -163,8 +183,10 @@ export interface PartnerInfo {
   text: string;
 }
 
+// Keyed `${label.toLowerCase()}||${quarter}`. Industry keys (pharma / cpg/retail / others)
+// are what the app reads; legacy per-seller keys are kept in storage for history only.
 export interface QuarterTargets {
-  [key: string]: { seller: string; quarter: string; revenue: number };
+  [key: string]: { seller?: string; industry?: string; quarter: string; revenue: number };
 }
 
 // ─── date helpers ────────────────────────────────────────────────────────────
@@ -281,7 +303,7 @@ function sellerAliases(seller: string): string[] {
 function rowMatchesSeller(row: DealRow, seller: string): boolean {
   const label = String(seller ?? '').trim();
   if (!label || label === 'Overall') {
-    return ACTIVE_SELLERS.some((s) => rowMatchesSeller(row, s));
+    return SALES_TEAM.some((s) => rowMatchesSeller(row, s));
   }
   const aliases = sellerAliases(label).map((x) => x.toLowerCase());
   const matched: string[] = Array.isArray(row.matched_sellers) ? row.matched_sellers : [];
@@ -289,6 +311,17 @@ function rowMatchesSeller(row: DealRow, seller: string): boolean {
   if (matched.some((s) => aliases.includes(String(s).trim().toLowerCase()))) return true;
   const raw = String(row.owner ?? row.seller ?? row.deal_owner ?? '').toLowerCase();
   return aliases.some((a) => a && raw.includes(a));
+}
+
+/** Deal is owned by someone on the (current or former) new-sales team. */
+export function inSalesScope(row: DealRow): boolean {
+  return rowMatchesSeller(row, 'Overall');
+}
+
+/** Single filter every view uses: in sales scope AND in the selected industry ('Overall' = all). */
+export function rowMatchesIndustry(row: DealRow, industry: string): boolean {
+  if (!inSalesScope(row)) return false;
+  return !industry || industry === 'Overall' || industryOf(row) === industry;
 }
 
 // ─── deal size ───────────────────────────────────────────────────────────────
@@ -422,8 +455,8 @@ export function dealDisplay(row: DealRow): string {
 
 // ─── target lookup ───────────────────────────────────────────────────────────
 
-export function getTarget(targets: QuarterTargets, seller: string, quarter: string): number {
-  const key = `${seller.trim().toLowerCase()}||${quarter.trim().toUpperCase()}`;
+export function getTarget(targets: QuarterTargets, label: string, quarter: string): number {
+  const key = `${label.trim().toLowerCase()}||${quarter.trim().toUpperCase()}`;
   const x = targets[key];
   return isFinite(Number(x?.revenue)) ? Number(x.revenue) : 0;
 }
@@ -456,9 +489,9 @@ export function buildRows(
   const summary: QuarterSummary[] = [];
   const deals: RichDealRow[] = [];
 
-  for (const seller of ACTIVE_SELLERS) {
+  for (const industry of INDUSTRIES) {
     for (const quarter of quarters) {
-      const target = getTarget(targets, seller, quarter.label);
+      const target = getTarget(targets, industry, quarter.label);
       let booked = 0;
       let committed = 0;
       let ev = 0;
@@ -466,7 +499,7 @@ export function buildRows(
       let earlyEv = 0;
 
       for (const r of rows) {
-        if (!rowMatchesSeller(r, seller)) continue;
+        if (!rowMatchesIndustry(r, industry)) continue;
         if (isExcludedFromNewSales(r)) continue; // Prologis/Gilead = delivery, not new sales
         if (isWonStage(r.stage ?? r.deal_stage ?? r.dealStage)) {
           booked += quarterPacedAmount(r, quarter.label, dealSizeValue(r.deal_size));
@@ -482,7 +515,7 @@ export function buildRows(
           const partner = partnerSummary(r);
           deals.push({
             ...r,
-            leadership_seller: seller,
+            leadership_industry: industry,
             leadership_quarter: quarter,
             leadership_contribution: contrib,
             leadership_total_size: displaySize,
@@ -501,12 +534,12 @@ export function buildRows(
         if (n != null && n <= 2) earlyEv += evContrib;
       }
 
-      summary.push({ seller, quarter, target, booked, committed, bookedCommitted: booked + committed, ev, flooredEv, earlyEv });
+      summary.push({ industry, quarter, target, booked, committed, bookedCommitted: booked + committed, ev, flooredEv, earlyEv });
     }
   }
 
   deals.sort((a, b) => {
-    const sr = a.leadership_seller.localeCompare(b.leadership_seller);
+    const sr = a.leadership_industry.localeCompare(b.leadership_industry);
     if (sr) return sr;
     const qr = a.leadership_quarter.key.localeCompare(b.leadership_quarter.key);
     if (qr) return qr;
@@ -517,22 +550,22 @@ export function buildRows(
   return { summary, deals };
 }
 
-export function aggregateSellers(
+export function aggregateIndustries(
   summaryRows: QuarterSummary[],
   deals: RichDealRow[],
-): SellerAggregate[] {
-  const map = new Map<string, SellerAggregate>();
+): IndustryAggregate[] {
+  const map = new Map<string, IndustryAggregate>();
 
   for (const r of summaryRows) {
-    if (!map.has(r.seller)) {
-      map.set(r.seller, {
-        seller: r.seller,
+    if (!map.has(r.industry)) {
+      map.set(r.industry, {
+        industry: r.industry,
         target: 0, booked: 0, committed: 0, bookedCommitted: 0, ev: 0, flooredEv: 0, earlyEv: 0,
         open: 0, atRisk: 0, riskExposure: 0, ratio: 0, gap: 0,
         quarters: [], deals: [],
       });
     }
-    const s = map.get(r.seller)!;
+    const s = map.get(r.industry)!;
     s.target += r.target;
     s.booked += r.booked;
     s.committed += r.committed;
@@ -544,7 +577,7 @@ export function aggregateSellers(
   }
 
   for (const d of deals) {
-    map.get(d.leadership_seller)?.deals.push(d);
+    map.get(d.leadership_industry)?.deals.push(d);
   }
 
   return Array.from(map.values()).map((s) => {
@@ -556,7 +589,7 @@ export function aggregateSellers(
     s.ratio = s.target > 0 ? s.ev / s.target : 0;
     s.gap = s.target - s.ev;
     return s;
-  }).sort((a, b) => (b.gap - a.gap) || a.seller.localeCompare(b.seller));
+  }).sort((a, b) => INDUSTRIES.indexOf(a.industry) - INDUSTRIES.indexOf(b.industry));
 }
 
 export function ratioTone(ratio: number): 'green' | 'amber' | 'red' {

@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore } from '@/lib/queries';
-import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useIndustry, INDUSTRY_OPTIONS } from '@/lib/industryContext';
 import { useSessionState } from '@/lib/hooks';
-import { ACTIVE_SELLERS, stageNumber, isExcludedFromNewSales } from '@/lib/vpCompute';
+import { industryOf, rowMatchesIndustry, stageNumber, isExcludedFromNewSales } from '@/lib/vpCompute';
 import { formatCurrency } from '@/lib/formatters';
 import type { DealRow } from '@/lib/vpCompute';
 
@@ -33,13 +33,6 @@ function normStage(raw: string | null | undefined): string {
   return STAGE_NORM[String(raw ?? '').trim()] ?? String(raw ?? '').trim();
 }
 
-function matchSeller(row: DealRow, seller: string): boolean {
-  if (!seller || seller === 'Overall') return ACTIVE_SELLERS.some((s) => matchSeller(row, s));
-  const label = seller.trim().toLowerCase();
-  const matched: string[] = Array.isArray(row.matched_sellers) ? (row.matched_sellers as string[]) : [];
-  if (matched.some((s) => String(s).trim().toLowerCase() === label)) return true;
-  return String(row.owner ?? row.seller ?? '').toLowerCase().includes(label);
-}
 
 function dealKey(row: DealRow): string {
   return `${String(row.deal ?? row.account ?? '').trim().toLowerCase()}||${String(row.intro_date ?? '').trim()}`;
@@ -215,7 +208,7 @@ export function Partnerships() {
   const allRows: DealRow[] = (Array.isArray(dataset?.all_deals_rows) ? (dataset!.all_deals_rows as DealRow[]) : [])
     .filter((r) => !isExcludedFromNewSales(r)); // Prologis/Gilead = delivery, not new sales
 
-  const { seller, setSeller } = useSeller();
+  const { industry, setIndustry } = useIndustry();
 
   // ── filters ──
   const [stageGroup, setStageGroup]     = useSessionState<'all' | 'early' | 'mid' | 'late'>('pship_stage_group', 'all');
@@ -254,7 +247,7 @@ export function Partnerships() {
     const seen = new Set<string>();
     const result: DealRow[] = [];
     allRows.forEach((r) => {
-      if (!matchSeller(r, seller)) return;
+      if (!rowMatchesIndustry(r, industry)) return;
       const stageNorm = normStage(r.stage ?? r.deal_stage);
       const n = stageNumber(stageNorm);
       if (n == null) return;
@@ -266,7 +259,7 @@ export function Partnerships() {
       result.push(r);
     });
     return result;
-  }, [allRows, seller, includeWon]);
+  }, [allRows, industry, includeWon]);
 
   // ── filtered + sorted ──
   const filtered = useMemo(() => {
@@ -312,14 +305,14 @@ export function Partnerships() {
     };
   }, [deals]);
 
-  const showSeller = seller === 'Overall';
-  const cols = showSeller
+  const showIndustry = industry === 'Overall';
+  const cols = showIndustry
     ? '1fr 90px 130px 80px 1fr 160px 70px 90px 80px 60px'
     : '1fr 130px 80px 1fr 160px 70px 90px 80px 60px';
 
   const headers = [
     { label: 'Deal' },
-    ...(showSeller ? [{ label: 'Seller' }] : []),
+    ...(showIndustry ? [{ label: 'Industry' }] : []),
     { label: 'Stage' },
     { label: 'Size', right: true },
     { label: 'Tech stack' },
@@ -343,12 +336,12 @@ export function Partnerships() {
           <p className="text-12 text-text-tertiary mt-0.5">Alliance prioritization and partner action tracking across active pipeline</p>
         </div>
         <select
-          value={seller}
-          onChange={(e) => setSeller(e.target.value)}
+          value={industry}
+          onChange={(e) => setIndustry(e.target.value)}
           className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
           style={{ border: '0.5px solid var(--border-emphasis)' }}
         >
-          {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+          {INDUSTRY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
@@ -507,8 +500,7 @@ export function Partnerships() {
             const ae         = getAEStatus(r);
             const portal     = String(r.partner_registered_on_portal ?? '').trim();
             const startDate  = r.start_date ? String(r.start_date).slice(0, 10) : null;
-            const sellerLabel = Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0
-              ? String(r.matched_sellers[0]) : String(r.owner ?? '—');
+            const industryLabel = industryOf(r);
             const nk         = noteKey(r);
             const hasNote    = Boolean(notes[nk]);
             const isExpanded = expandedKey === nk;
@@ -533,8 +525,8 @@ export function Partnerships() {
                     )}
                   </div>
 
-                  {/* Seller (Overall only) */}
-                  {showSeller && <div className="text-12 text-text-secondary truncate">{sellerLabel}</div>}
+                  {/* Industry (Overall only) */}
+                  {showIndustry && <div className="text-12 text-text-secondary truncate">{industryLabel}</div>}
 
                   {/* Stage */}
                   <div><StageBadge stage={stageNorm} /></div>

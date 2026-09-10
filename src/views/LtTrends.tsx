@@ -6,7 +6,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useBatchVersionData } from '@/lib/queries';
 import {
-  ACTIVE_SELLERS, buildRows, type QuarterTargets,
+  INDUSTRIES, buildRows, type Industry, type QuarterTargets,
 } from '@/lib/vpCompute';
 import { KpiCard } from '@/components/KpiCard';
 import { formatCurrency } from '@/lib/formatters';
@@ -15,14 +15,6 @@ import { formatCurrency } from '@/lib/formatters';
 
 const FY27_Q = { current: "Q1'27", next: "Q2'27" };
 
-const SELLER_VERTICAL: Record<string, string> = {
-  'Akshay Iyer': 'Pharma',
-  'Somya':       'CPG',
-  'Suvom Mitro': 'Retail',
-  'Andy Shankar': 'EU',
-  'Maruti Peri': 'Engineering',
-  'Sahana':      'RoW',
-};
 const FY_START = new Date(2026, 3, 1, 0, 0, 0); // Apr 1 2026
 
 // Recharts stroke colors — must be hardcoded here (not in CSS vars)
@@ -39,7 +31,7 @@ interface VersionMeta { id: string; created_at: string }
 interface TeamMetrics {
   ev: number; booked: number; committed: number;
   target: number; forecast: number; evS3Plus: number;
-  sellers: { seller: string; ev: number; booked: number; committed: number; target: number; evS3Plus: number }[];
+  industries: { industry: Industry; ev: number; booked: number; committed: number; target: number; evS3Plus: number }[];
 }
 
 interface WeekPoint {
@@ -87,7 +79,7 @@ function computeMetrics(
   targets: QuarterTargets,
   scope: QuarterScope,
 ): TeamMetrics {
-  const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, evS3Plus: 0, sellers: [] };
+  const empty = { ev: 0, booked: 0, committed: 0, target: 0, forecast: 0, evS3Plus: 0, industries: [] };
   if (!dataset) return empty;
   const { summary } = buildRows(dataset, targets, FY27_Q);
   // Single-quarter scope — each view (Q1 or Q2) shows that quarter's paced metrics
@@ -108,17 +100,17 @@ function computeMetrics(
     { ev: 0, booked: 0, committed: 0, target: 0, earlyEv: 0 },
   );
 
-  const sellers = [...ACTIVE_SELLERS].map((seller) => {
-    const sellerRows = rows.filter((s) => s.seller === seller);
-    const sellerEv = sellerRows.reduce((a, s) => a + s.ev, 0);
-    const sellerEarlyEv = sellerRows.reduce((a, s) => a + s.earlyEv, 0);
+  const industries = INDUSTRIES.map((industry) => {
+    const indRows = rows.filter((s) => s.industry === industry);
+    const indEv = indRows.reduce((a, s) => a + s.ev, 0);
+    const indEarlyEv = indRows.reduce((a, s) => a + s.earlyEv, 0);
     return {
-      seller,
-      ev: sellerEv,
-      booked: sellerRows.reduce((a, s) => a + s.booked, 0),
-      committed: sellerRows.reduce((a, s) => a + s.committed, 0),
-      target: sellerRows.reduce((a, s) => a + s.target, 0),
-      evS3Plus: sellerEv - sellerEarlyEv,
+      industry,
+      ev: indEv,
+      booked: indRows.reduce((a, s) => a + s.booked, 0),
+      committed: indRows.reduce((a, s) => a + s.committed, 0),
+      target: indRows.reduce((a, s) => a + s.target, 0),
+      evS3Plus: indEv - indEarlyEv,
     };
   });
 
@@ -126,7 +118,7 @@ function computeMetrics(
     ...team,
     forecast: team.booked + team.committed,
     evS3Plus: team.ev - team.earlyEv,
-    sellers,
+    industries,
   };
 }
 
@@ -153,7 +145,7 @@ function ChartTooltip({ active, payload, label }: {
   );
 }
 
-// ── per-seller table ──────────────────────────────────────────────────────────
+// ── per-industry table ──────────────────────────────────────────────────────────
 
 function pct(num: number, den: number): number | null {
   return den > 0 ? Math.round((num / den) * 100) : null;
@@ -166,7 +158,7 @@ function s3PctColor(val: number | null): string | undefined {
   return 'var(--status-red)';
 }
 
-function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
+function IndustryTable({ points, metric, scope }: { points: WeekPoint[]; metric: MetricKey; scope: QuarterScope }) {
   const visible = points.slice(-8);
   const q = scope === 'next' ? 'Q2' : 'Q1';
   const metricLabel: Record<MetricKey, string> = {
@@ -184,7 +176,7 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
     if (metric === 'evS3Pct') return pct(m.evS3Plus, m.ev);
     return m[metric];
   }
-  function getSellerVal(row: TeamMetrics['sellers'][number]): number | null {
+  function getIndustryVal(row: TeamMetrics['industries'][number]): number | null {
     if (metric === 'forecast') return row.booked + row.committed;
     if (metric === 'evS3Pct') return pct(row.evS3Plus, row.ev);
     return row[metric];
@@ -204,7 +196,7 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
           <thead>
             <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
               <th className="text-left py-2 px-3 text-text-secondary font-medium"
-                style={{ minWidth: 130, background: 'var(--bg-card)' }}>Seller</th>
+                style={{ minWidth: 130, background: 'var(--bg-card)' }}>Industry</th>
               {visible.map((p) => (
                 <th key={p.versionId} className="text-right py-2 px-3 text-text-secondary font-medium whitespace-nowrap">
                   {p.label}
@@ -223,15 +215,15 @@ function SellerTable({ points, metric, scope }: { points: WeekPoint[]; metric: M
                 </td>
               ))}
             </tr>
-            {[...ACTIVE_SELLERS].map((seller) => (
-              <tr key={seller} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
+            {INDUSTRIES.map((industry) => (
+              <tr key={industry} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}
                 className="hover:bg-bg-hover">
                 <td className="py-2 px-3 text-text-secondary" style={{ background: 'var(--bg-card)' }}>
-                  {SELLER_VERTICAL[seller] ?? seller}
+                  {industry}
                 </td>
                 {visible.map((p) => {
-                  const row = p.metrics?.sellers.find((s) => s.seller === seller);
-                  const val = row ? getSellerVal(row) : null;
+                  const row = p.metrics?.industries.find((s) => s.industry === industry);
+                  const val = row ? getIndustryVal(row) : null;
                   return (
                     <td key={p.versionId} className="py-2 px-3 text-right tabular-nums"
                       style={{ color: isPercent ? (s3PctColor(val) ?? 'var(--text-tertiary)') : 'var(--text-secondary)' }}>
@@ -462,7 +454,7 @@ export function LtTrends() {
         </ResponsiveContainer>
       </div>
 
-      {/* Per-seller breakdown */}
+      {/* Per-industry breakdown */}
       <div className="space-y-2">
         <div className="flex items-center gap-1">
           {metricTabs.map((t) => (
@@ -481,7 +473,7 @@ export function LtTrends() {
             </button>
           ))}
         </div>
-        {points.length > 0 && <SellerTable points={points} metric={tableMetric} scope={scope} />}
+        {points.length > 0 && <IndustryTable points={points} metric={tableMetric} scope={scope} />}
       </div>
     </div>
   );

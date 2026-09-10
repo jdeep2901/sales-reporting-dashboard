@@ -113,7 +113,7 @@ export function UserGuide() {
         />
         <ViewCard
           title="Intro activity"
-          purpose="Tracks intro and connect meeting cadence over time, by seller and overall. Use this to monitor whether the team is generating enough top-of-funnel activity to sustain future pipeline. The dashed line is the weekly target — bars below it indicate a generation gap. Select a seller from the dropdown to drill into individual activity."
+          purpose="Tracks intro and connect meeting cadence over time, by industry and overall. Use this to monitor whether the team is generating enough top-of-funnel activity to sustain future pipeline. The dashed line is the weekly target — bars below it indicate a generation gap. Select a seller from the dropdown to drill into individual activity."
           audience={['LT', 'JD']}
           screenshot="call-trends.png"
         />

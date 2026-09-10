@@ -3,17 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useSaveSharedStore } from '@/lib/queries';
 import { rpc, SUPABASE_FUNCTIONS_URL } from '@/lib/supabase';
-import { ACTIVE_SELLERS } from '@/lib/vpCompute';
-import { buildQuarterLabels } from '@/lib/vpCompute';
+import { buildQuarterLabels, INDUSTRIES, type QuarterTargets } from '@/lib/vpCompute';
 import { formatCurrency } from '@/lib/formatters';
 
-interface QuarterTarget {
-  seller: string;
-  quarter: string;
-  revenue: number;
-}
-
-type QuarterTargets = Record<string, QuarterTarget>;
 
 interface UserRecord {
   username: string;
@@ -22,8 +14,8 @@ interface UserRecord {
   last_login_at?: string;
 }
 
-function normalizeQuarterKey(seller: string, quarter: string): string {
-  return `${seller.trim().toLowerCase()}||${quarter.trim().toUpperCase()}`;
+function normalizeQuarterKey(label: string, quarter: string): string {
+  return `${label.trim().toLowerCase()}||${quarter.trim().toUpperCase()}`;
 }
 
 function fmtTs(ts: string | undefined): string {
@@ -44,19 +36,20 @@ function TargetsSection({ targets, quarters, onSave }: {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const sellers = [...ACTIVE_SELLERS];
+  // Targets are set per industry; legacy per-seller keys stay in storage untouched.
+  const industries = [...INDUSTRIES];
 
-  const getValue = (seller: string, quarter: string) => {
-    const key = normalizeQuarterKey(seller, quarter);
+  const getValue = (industry: string, quarter: string) => {
+    const key = normalizeQuarterKey(industry, quarter);
     return localTargets[key]?.revenue ?? 0;
   };
 
-  const setValue = (seller: string, quarter: string, raw: string) => {
-    const key = normalizeQuarterKey(seller, quarter);
+  const setValue = (industry: string, quarter: string, raw: string) => {
+    const key = normalizeQuarterKey(industry, quarter);
     const n = Number(raw);
     setLocalTargets((prev) => ({
       ...prev,
-      [key]: { seller, quarter, revenue: isFinite(n) ? n : 0 },
+      [key]: { industry, quarter, revenue: isFinite(n) ? n : 0 },
     }));
     setDirty(true);
     setMsg('');
@@ -100,24 +93,24 @@ function TargetsSection({ targets, quarters, onSave }: {
         <table className="w-full text-12">
           <thead>
             <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-              <th className="text-left py-2 text-text-secondary font-medium pr-4">Seller</th>
+              <th className="text-left py-2 text-text-secondary font-medium pr-4">Industry</th>
               {quarters.map((q) => (
                 <th key={q} className="text-right py-2 text-text-secondary font-medium px-2">{q}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {sellers.map((seller) => (
-              <tr key={seller} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
-                <td className="py-2 pr-4 text-text-primary">{seller}</td>
+            {industries.map((industry) => (
+              <tr key={industry} style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
+                <td className="py-2 pr-4 text-text-primary">{industry}</td>
                 {quarters.map((q) => (
                   <td key={q} className="py-2 px-2 text-right">
                     <input
                       type="number"
                       min="0"
                       step="1000"
-                      value={getValue(seller, q)}
-                      onChange={(e) => setValue(seller, q, e.target.value)}
+                      value={getValue(industry, q)}
+                      onChange={(e) => setValue(industry, q, e.target.value)}
                       className="w-28 text-right text-12 tabular-nums px-2 py-1 rounded"
                       style={{ background: 'var(--bg-surface)', border: '0.5px solid var(--border-emphasis)', color: 'var(--text-primary)' }}
                     />
@@ -130,7 +123,7 @@ function TargetsSection({ targets, quarters, onSave }: {
             <tr style={{ borderTop: '0.5px solid var(--border-emphasis)' }}>
               <td className="py-2 pr-4 text-text-secondary font-medium">Overall</td>
               {quarters.map((q) => {
-                const total = sellers.reduce((acc, s) => acc + getValue(s, q), 0);
+                const total = industries.reduce((acc, s) => acc + getValue(s, q), 0);
                 return (
                   <td key={q} className="py-2 px-2 text-right tabular-nums text-text-primary font-medium">
                     {formatCurrency(total)}

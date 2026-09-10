@@ -2,10 +2,12 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useSharedStore, useVersionData, useDealStaleness } from '@/lib/queries';
 import type { DealStaleness } from '@/lib/queries';
-import { useSeller, SELLER_OPTIONS } from '@/lib/sellerContext';
+import { useIndustry, INDUSTRY_OPTIONS } from '@/lib/industryContext';
 import { useSessionState } from '@/lib/hooks';
 import {
-  ACTIVE_SELLERS,
+  INDUSTRIES,
+  industryOf,
+  rowMatchesIndustry,
   EMPIRICAL_STAGE,
   STALENESS_THRESHOLD,
   stageNumber,
@@ -35,7 +37,7 @@ interface StageStats {
 
 interface RankedDeal {
   row: DealRow;
-  seller: string;
+  industry: string;
   stageN: number;
   stageName: string;
   ev: number;
@@ -93,15 +95,9 @@ function isActiveStage(stage: string | null | undefined): boolean {
   return n != null && n >= 1 && n <= 6;
 }
 
-// ─── seller matching ──────────────────────────────────────────────────────────
-
-function matchSeller(row: DealRow, seller: string): boolean {
-  if (!seller || seller === 'Overall') return ACTIVE_SELLERS.some((s) => matchSeller(row, s));
-  const label = seller.trim().toLowerCase();
-  const matched: string[] = Array.isArray(row.matched_sellers) ? row.matched_sellers as string[] : [];
-  if (matched.some((s) => String(s).trim().toLowerCase() === label)) return true;
-  return String(row.owner ?? row.seller ?? row.deal_owner ?? '').toLowerCase().includes(label);
-}
+// ─── industry matching ────────────────────────────────────────────────────────
+// Scope (sales team) + industry filter lives in vpCompute so every view agrees.
+const matchIndustry = rowMatchesIndustry;
 
 function dealKey(row: DealRow): string {
   return `${String(row.deal ?? row.account ?? '').trim().toLowerCase()}||${String(row.intro_date ?? '').trim()}`;
@@ -144,9 +140,9 @@ function closureEv(row: DealRow): number {
 }
 
 // Won revenue paced to a fiscal quarter from start_date + duration_months.
-function wonRevenuePacedToQ(rows: DealRow[], seller: string, qLabel: string): number {
+function wonRevenuePacedToQ(rows: DealRow[], industry: string, qLabel: string): number {
   const won = rows.filter((r) => {
-    if (!matchSeller(r, seller)) return false;
+    if (!matchIndustry(r, industry)) return false;
     const s = String(r.stage ?? r.deal_stage ?? '').toLowerCase();
     return s.includes('7. win') || s === 'won' || s === 'win';
   });
@@ -171,9 +167,9 @@ function wonRevenuePacedToQ(rows: DealRow[], seller: string, qLabel: string): nu
 }
 
 // Committed revenue paced to a fiscal quarter: stages 5-6 at face value.
-function committedPacedToQ(rows: DealRow[], seller: string, qLabel: string): number {
+function committedPacedToQ(rows: DealRow[], industry: string, qLabel: string): number {
   const relevant = rows.filter((r) => {
-    if (!matchSeller(r, seller)) return false;
+    if (!matchIndustry(r, industry)) return false;
     const n = stageNumber(r.stage ?? r.deal_stage);
     return n != null && n >= 5 && n <= 6;
   });
@@ -212,10 +208,10 @@ function fyStartFromQLabel(qLabel: string): string {
   return `${fy - 1}-04-01`;
 }
 
-function buildWonStats(rows: DealRow[], prevRows: DealRow[], seller: string, currentQLabel: string): WonStats {
+function buildWonStats(rows: DealRow[], prevRows: DealRow[], industry: string, currentQLabel: string): WonStats {
   const fyStart = fyStartFromQLabel(currentQLabel);
   const filterWon = (r: DealRow): boolean => {
-    if (!matchSeller(r, seller)) return false;
+    if (!matchIndustry(r, industry)) return false;
     if (normStage(r.stage ?? r.deal_stage) !== '7. Win') return false;
     return String(r.start_date ?? '').slice(0, 10) >= fyStart;
   };
@@ -239,11 +235,11 @@ function buildWonStats(rows: DealRow[], prevRows: DealRow[], seller: string, cur
 function buildStageStats(
   rows: DealRow[],
   prevRows: DealRow[],
-  seller: string,
+  industry: string,
   currentQLabel: string,
 ): StageStats[] {
-  const curr = rows.filter((r) => matchSeller(r, seller) && isActiveStage(r.stage ?? r.deal_stage));
-  const prev = prevRows.filter((r) => matchSeller(r, seller) && isActiveStage(r.stage ?? r.deal_stage));
+  const curr = rows.filter((r) => matchIndustry(r, industry) && isActiveStage(r.stage ?? r.deal_stage));
+  const prev = prevRows.filter((r) => matchIndustry(r, industry) && isActiveStage(r.stage ?? r.deal_stage));
 
   const prevCountByStage: Record<string, number> = {};
   const prevSizeByStage: Record<string, number> = {};
@@ -299,7 +295,7 @@ function classifyMomentum(row: DealRow, prevStageN: number | null): Momentum {
 function buildRankedDeals(
   rows: DealRow[],
   prevRows: DealRow[],
-  seller: string,
+  industry: string,
   currentQLabel: string,
   compareSnapshotDate?: string | null,
 ): RankedDeal[] {
@@ -317,7 +313,7 @@ function buildRankedDeals(
     ? Math.max(0, Math.round((today.getTime() - snapDate.getTime()) / 86_400_000))
     : null;
 
-  const active = rows.filter((r) => matchSeller(r, seller) && isActiveStage(r.stage ?? r.deal_stage));
+  const active = rows.filter((r) => matchIndustry(r, industry) && isActiveStage(r.stage ?? r.deal_stage));
   const deduped = new Map<string, DealRow>();
   active.forEach((r) => { const k = dealKey(r); if (!deduped.has(k)) deduped.set(k, r); });
 
@@ -343,15 +339,10 @@ function buildRankedDeals(
       }
     }
 
-    const sellerOwner = seller === 'Overall'
-      ? (Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0
-        ? String(r.matched_sellers[0])
-        : String(r.owner ?? r.seller ?? '—'))
-      : seller;
 
     deals.push({
       row: r,
-      seller: sellerOwner,
+      industry: industryOf(r),
       stageN,
       stageName: STAGE_SHORT[stageNorm] ?? stageNorm,
       ev,
@@ -374,9 +365,9 @@ function buildRankedDeals(
   return deals;
 }
 
-function buildClosureDeals(rows: DealRow[], seller: string, qLabel: string): RankedDeal[] {
+function buildClosureDeals(rows: DealRow[], industry: string, qLabel: string): RankedDeal[] {
   const active = rows.filter((r) => {
-    if (!matchSeller(r, seller)) return false;
+    if (!matchIndustry(r, industry)) return false;
     const isWon = normStage(r.stage ?? r.deal_stage) === '7. Win';
     if (!isWon && !isActiveStage(r.stage ?? r.deal_stage)) return false;
     return fiscalQForDate(r.start_date as string | null) === qLabel;
@@ -388,12 +379,9 @@ function buildClosureDeals(rows: DealRow[], seller: string, qLabel: string): Ran
   deduped.forEach((r) => {
     const stageNorm = normStage(r.stage ?? r.deal_stage);
     const stageN = stageNumber(stageNorm) ?? 0;
-    const sellerOwner = seller === 'Overall'
-      ? (Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0 ? String(r.matched_sellers[0]) : String(r.owner ?? r.seller ?? '—'))
-      : seller;
     deals.push({
       row: r,
-      seller: sellerOwner,
+      industry: industryOf(r),
       stageN,
       stageName: STAGE_SHORT[stageNorm] ?? stageNorm,
       ev: closureEv(r),
@@ -413,7 +401,7 @@ function buildClosureDeals(rows: DealRow[], seller: string, qLabel: string): Ran
 
 interface DeltaDeal {
   dealLabel: string;
-  seller: string;
+  industry: string;
   dealSize: number;
   prevDealSize?: number;     // size-changed deals: what size was in prev snapshot
   fromStage: string | null;  // entered: where they came from (null = brand new deal)
@@ -429,17 +417,11 @@ interface StageDelta {
 function buildStageDelta(
   allRows: DealRow[],
   prevRows: DealRow[],
-  seller: string,
+  industry: string,
   stage: string,
 ): StageDelta {
-  const resolveSeller = (r: DealRow): string => {
-    if (seller !== 'Overall') return seller;
-    return Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0
-      ? String(r.matched_sellers[0])
-      : String(r.owner ?? r.seller ?? '—');
-  };
 
-  // Index ALL rows by dealKey → first matching row (any stage/seller)
+  // Index ALL rows by dealKey → first matching row (any stage/industry)
   const allCurrByKey = new Map<string, DealRow>();
   allRows.forEach((r) => { const k = dealKey(r); if (!allCurrByKey.has(k)) allCurrByKey.set(k, r); });
 
@@ -456,7 +438,7 @@ function buildStageDelta(
   const seenExited = new Set<string>();
   const exited: DeltaDeal[] = [];
   prevRows.forEach((r) => {
-    if (!matchSeller(r, seller)) return;
+    if (!matchIndustry(r, industry)) return;
     if (normStage(r.stage ?? r.deal_stage) !== stage) return;
     const k = dealKey(r);
     if (seenExited.has(k)) return;
@@ -473,14 +455,14 @@ function buildStageDelta(
       else if (s.includes('lost') || s.includes('loss')) toStage = 'Lost';
       else toStage = stageLabelOf(curr.stage ?? curr.deal_stage);
     }
-    exited.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), seller: resolveSeller(r), dealSize: resolveSize(r), fromStage: null, toStage });
+    exited.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), industry: industryOf(r), dealSize: resolveSize(r), fromStage: null, toStage });
   });
 
   // Entered: is at this stage now, was at a different stage (or absent) in prev
   const seenEntered = new Set<string>();
   const entered: DeltaDeal[] = [];
   allRows.forEach((r) => {
-    if (!matchSeller(r, seller)) return;
+    if (!matchIndustry(r, industry)) return;
     if (normStage(r.stage ?? r.deal_stage) !== stage) return;
     const k = dealKey(r);
     if (seenEntered.has(k)) return;
@@ -489,14 +471,14 @@ function buildStageDelta(
     const prevStageNorm = prev ? normStage(prev.stage ?? prev.deal_stage) : null;
     if (prevStageNorm === stage) return; // was already here
     const fromStage = prev ? stageLabelOf(prev.stage ?? prev.deal_stage) : null;
-    entered.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), seller: resolveSeller(r), dealSize: resolveSize(r), fromStage, toStage: null });
+    entered.push({ dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'), industry: industryOf(r), dealSize: resolveSize(r), fromStage, toStage: null });
   });
 
   // Size changed: stayed at this stage but deal_size was edited
   const seenSizeChanged = new Set<string>();
   const sizeChanged: DeltaDeal[] = [];
   allRows.forEach((r) => {
-    if (!matchSeller(r, seller)) return;
+    if (!matchIndustry(r, industry)) return;
     if (normStage(r.stage ?? r.deal_stage) !== stage) return;
     const k = dealKey(r);
     if (seenSizeChanged.has(k)) return;
@@ -509,7 +491,7 @@ function buildStageDelta(
     if (currSize === prevSize) return;
     sizeChanged.push({
       dealLabel: String(r.deal ?? r.account ?? r.logo ?? '—'),
-      seller: resolveSeller(r),
+      industry: industryOf(r),
       dealSize: currSize,
       prevDealSize: prevSize,
       fromStage: null,
@@ -555,9 +537,9 @@ function StageBadge({ n, label }: { n: number; label: string }) {
 
 // ─── won row (FY) ────────────────────────────────────────────────────────────
 
-function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
+function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart, industry }: {
   wonStats: WonStats; maxCount: number; cols: string;
-  allRows: DealRow[]; prevRows: DealRow[]; fyStart: string;
+  allRows: DealRow[]; prevRows: DealRow[]; fyStart: string; industry: string;
 }) {
   const [open, setOpen] = useState(false);
   const wonDelta = wonStats.count - wonStats.prevCount;
@@ -570,7 +552,7 @@ function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
     const prevByKey = new Map<string, DealRow>();
     prevRows.forEach((r) => { const k = dealKey(r); if (!prevByKey.has(k)) prevByKey.set(k, r); });
     const seen = new Set<string>();
-    const deals: Array<{ dealLabel: string; seller: string; dealSize: number; startDate: string | null; isNew: boolean }> = [];
+    const deals: Array<{ dealLabel: string; industry: string; dealSize: number; startDate: string | null; isNew: boolean }> = [];
     allRows.forEach((r) => {
       if (normStage(r.stage ?? r.deal_stage) !== '7. Win') return;
       if (String(r.start_date ?? '').slice(0, 10) < fyStart) return;
@@ -578,12 +560,11 @@ function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
       if (seen.has(k)) return; seen.add(k);
       const prev = prevByKey.get(k);
       const isNew = !prev || normStage(prev.stage ?? prev.deal_stage) !== '7. Win';
-      const sellerLabel = Array.isArray(r.matched_sellers) && r.matched_sellers.length > 0
-        ? String(r.matched_sellers[0]) : String(r.owner ?? r.seller ?? '—');
-      deals.push({ dealLabel: String(r.deal ?? r.account ?? '—'), seller: sellerLabel, dealSize: resolveSize(r), startDate: r.start_date ? String(r.start_date).slice(0, 10) : null, isNew });
+      if (!matchIndustry(r, industry)) return;
+      deals.push({ dealLabel: String(r.deal ?? r.account ?? '—'), industry: industryOf(r), dealSize: resolveSize(r), startDate: r.start_date ? String(r.start_date).slice(0, 10) : null, isNew });
     });
     return deals.sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
-  }, [allRows, prevRows, fyStart]);
+  }, [allRows, prevRows, fyStart, industry]);
 
   const toggleOpen = () => setOpen((v) => !v);
   const stopAndToggle = (e: React.MouseEvent) => { e.stopPropagation(); toggleOpen(); };
@@ -637,7 +618,7 @@ function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
             <thead>
               <tr style={{ borderBottom: '0.5px solid var(--border-hairline)' }}>
                 <th className="text-left py-1.5 px-4 text-text-secondary font-medium">Deal</th>
-                <th className="text-left py-1.5 px-2 text-text-secondary font-medium">Seller</th>
+                <th className="text-left py-1.5 px-2 text-text-secondary font-medium">Industry</th>
                 <th className="text-right py-1.5 px-2 text-text-secondary font-medium">Size</th>
                 <th className="text-right py-1.5 px-4 text-text-secondary font-medium">Start date</th>
               </tr>
@@ -649,7 +630,7 @@ function WonRow({ wonStats, maxCount, cols, allRows, prevRows, fyStart }: {
                     <span className="text-text-primary font-medium">{d.dealLabel}</span>
                     {d.isNew && <span className="ml-2 text-11 px-1.5 py-0.5 rounded font-medium" style={{ background: 'var(--status-green-bg)', color: 'var(--status-green-text)' }}>New</span>}
                   </td>
-                  <td className="py-1.5 px-2 text-text-secondary">{d.seller}</td>
+                  <td className="py-1.5 px-2 text-text-secondary">{d.industry}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums font-medium text-text-primary">{d.dealSize > 0 ? formatCurrency(d.dealSize) : '—'}</td>
                   <td className="py-1.5 px-4 text-right text-text-secondary">{d.startDate ?? '—'}</td>
                 </tr>
@@ -671,7 +652,7 @@ function FunnelSection({
   activeStage,
   allRows,
   prevRows,
-  seller,
+  industry,
   wonStats,
   fyStart,
 }: {
@@ -681,15 +662,15 @@ function FunnelSection({
   activeStage?: string | null;
   allRows: DealRow[];
   prevRows: DealRow[];
-  seller: string;
+  industry: string;
   wonStats: WonStats;
   fyStart: string;
 }) {
   const [expandedDelta, setExpandedDelta] = useState<string | null>(null);
   const deltaData = useMemo(() => {
     if (!expandedDelta) return null;
-    return buildStageDelta(allRows, prevRows, seller, expandedDelta);
-  }, [expandedDelta, allRows, prevRows, seller]);
+    return buildStageDelta(allRows, prevRows, industry, expandedDelta);
+  }, [expandedDelta, allRows, prevRows, industry]);
 
   const totalEv = stats.reduce((a, s) => a + s.totalEv, 0);
   const cols = '140px 1fr 80px 110px 110px';
@@ -908,7 +889,7 @@ function FunnelSection({
         })}
 
         {/* Won row — FY to date */}
-        <WonRow wonStats={wonStats} maxCount={maxCount} cols={cols} allRows={allRows} prevRows={prevRows} fyStart={fyStart} />
+        <WonRow wonStats={wonStats} maxCount={maxCount} cols={cols} allRows={allRows} prevRows={prevRows} fyStart={fyStart} industry={industry} />
       </div>
     </div>
   );
@@ -976,7 +957,7 @@ function ClosureSection({ qLabel, deals, target, collapsed }: { qLabel: string; 
                     className="hover:bg-bg-hover">
                     <td className="py-2 px-4">
                       <div className="text-text-primary font-medium">{d.dealLabel}</div>
-                      {d.seller && <div className="text-11 text-text-tertiary">{d.seller}</div>}
+                      {d.industry && <div className="text-11 text-text-tertiary">{d.industry}</div>}
                     </td>
                     <td className="py-2 px-2"><StageBadge n={d.stageN} label={d.stageName} /></td>
                     <td className="py-2 px-2 text-right tabular-nums font-medium text-text-primary">{formatCurrency(d.ev)}</td>
@@ -1144,7 +1125,7 @@ function DealMomentumSection({
                   >
                     <td className="py-2 px-4">
                       <div className="text-text-primary font-medium">{d.dealLabel}</div>
-                      <div className="text-11 text-text-tertiary">{d.seller}</div>
+                      <div className="text-11 text-text-tertiary">{d.industry}</div>
                     </td>
                     <td className="py-2 px-2"><MomentumBadge m={d.momentum} /></td>
                     <td className="py-2 px-2"><StageBadge n={d.stageN} label={d.stageName} /></td>
@@ -1239,7 +1220,7 @@ export function WeeklyScorecard() {
   const prevRow = prevQuery.data as { dataset?: { all_deals_rows?: DealRow[] } } | null;
   const prevRows: DealRow[] = (prevRow?.dataset?.all_deals_rows ?? []).filter((r) => !isExcludedFromNewSales(r));
 
-  const { seller, setSeller } = useSeller();
+  const { industry, setIndustry } = useIndustry();
   const [stageFilter, setStageFilter] = useSessionState<string | null>('ws_stage_filter', null);
   const [closuresCollapsed, setClosuresCollapsed] = useSessionState<boolean>('ws_closures_collapsed', false);
 
@@ -1251,32 +1232,32 @@ export function WeeklyScorecard() {
   const quarterLabels = useMemo(() => buildQuarterLabels(asOfDate || null), [asOfDate]);
 
   const stageStats = useMemo(
-    () => buildStageStats(allRows, prevRows, seller, quarterLabels.current),
+    () => buildStageStats(allRows, prevRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, prevRows, seller, quarterLabels.current],
+    [allRows, prevRows, industry, quarterLabels.current],
   );
 
   const rankedDeals = useMemo(
-    () => buildRankedDeals(allRows, prevRows, seller, quarterLabels.current, compareSnapshotDate),
+    () => buildRankedDeals(allRows, prevRows, industry, quarterLabels.current, compareSnapshotDate),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, prevRows, seller, quarterLabels.current, compareSnapshotDate],
+    [allRows, prevRows, industry, quarterLabels.current, compareSnapshotDate],
   );
 
   const wonStats = useMemo(
-    () => buildWonStats(allRows, prevRows, seller, quarterLabels.current),
+    () => buildWonStats(allRows, prevRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, prevRows, seller, quarterLabels.current],
+    [allRows, prevRows, industry, quarterLabels.current],
   );
 
   const closureCurrent = useMemo(
-    () => buildClosureDeals(allRows, seller, quarterLabels.current),
+    () => buildClosureDeals(allRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, seller, quarterLabels.current],
+    [allRows, industry, quarterLabels.current],
   );
   const closureNext = useMemo(
-    () => buildClosureDeals(allRows, seller, quarterLabels.next),
+    () => buildClosureDeals(allRows, industry, quarterLabels.next),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, seller, quarterLabels.next],
+    [allRows, industry, quarterLabels.next],
   );
 
   // ── KPI aggregates ──
@@ -1297,41 +1278,41 @@ export function WeeklyScorecard() {
   const advancingCount = rankedDeals.filter((d) => d.momentum === 'advanced').length;
 
   const currentActuals = useMemo(
-    () => wonRevenuePacedToQ(allRows, seller, quarterLabels.current),
+    () => wonRevenuePacedToQ(allRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, seller, quarterLabels.current],
+    [allRows, industry, quarterLabels.current],
   );
   const prevActuals = useMemo(
-    () => wonRevenuePacedToQ(prevRows, seller, quarterLabels.current),
+    () => wonRevenuePacedToQ(prevRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prevRows, seller, quarterLabels.current],
+    [prevRows, industry, quarterLabels.current],
   );
   const actualsDelta = prevRows.length > 0 ? currentActuals - prevActuals : 0;
 
   const currentCommitted = useMemo(
-    () => committedPacedToQ(allRows, seller, quarterLabels.current),
+    () => committedPacedToQ(allRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allRows, seller, quarterLabels.current],
+    [allRows, industry, quarterLabels.current],
   );
   const prevCommitted = useMemo(
-    () => committedPacedToQ(prevRows, seller, quarterLabels.current),
+    () => committedPacedToQ(prevRows, industry, quarterLabels.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [prevRows, seller, quarterLabels.current],
+    [prevRows, industry, quarterLabels.current],
   );
   const committedDelta = prevRows.length > 0 ? currentCommitted - prevCommitted : 0;
 
-  const overallTarget = seller === 'Overall'
-    ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.current), 0)
-    : getTarget(quarterTargets, seller, quarterLabels.current);
+  const overallTarget = industry === 'Overall'
+    ? INDUSTRIES.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.current), 0)
+    : getTarget(quarterTargets, industry, quarterLabels.current);
   const forecast = currentActuals + currentCommitted;
   const forecastGap = forecast - overallTarget;
   const forecastTone = overallTarget === 0 ? 'green' : forecast >= overallTarget ? 'green' : forecast >= overallTarget * 0.7 ? 'amber' : 'red';
   const forecastColor = `var(--status-${forecastTone})`;
   const pipelineCoverage = overallTarget > 0 ? totalEv / overallTarget : 0;
 
-  const nextTarget = seller === 'Overall'
-    ? ACTIVE_SELLERS.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.next), 0)
-    : getTarget(quarterTargets, seller, quarterLabels.next);
+  const nextTarget = industry === 'Overall'
+    ? INDUSTRIES.reduce((acc, s) => acc + getTarget(quarterTargets, s, quarterLabels.next), 0)
+    : getTarget(quarterTargets, industry, quarterLabels.next);
 
   const maxCount = Math.max(1, wonStats.count, ...stageStats.map((s) => s.count));
 
@@ -1385,12 +1366,12 @@ export function WeeklyScorecard() {
             </div>
           )}
           <select
-            value={seller}
-            onChange={(e) => setSeller(e.target.value)}
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
             className="text-13 px-3 py-1.5 rounded-md bg-bg-surface text-text-primary"
             style={{ border: '0.5px solid var(--border-emphasis)' }}
           >
-            {SELLER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            {INDUSTRY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
@@ -1532,7 +1513,7 @@ export function WeeklyScorecard() {
         activeStage={stageFilter}
         allRows={allRows}
         prevRows={prevRows}
-        seller={seller}
+        industry={industry}
         wonStats={wonStats}
         fyStart={fyStartFromQLabel(quarterLabels.current)}
       />
