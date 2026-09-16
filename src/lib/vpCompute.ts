@@ -98,6 +98,34 @@ export const STALENESS_THRESHOLD: Record<number, number> = {
   1: 45, 2: 30, 3: 21, 4: 21, 5: 14, 6: 14,
 };
 
+// ─── calibration (the forecast model reads this, not EMPIRICAL_STAGE) ─────────
+//
+// P(win | deal ever reached this stage), resolved-deal basis, measured from our own
+// versioned snapshots. EMPIRICAL_STAGE above is the vendor default and runs 2–4x hot at
+// every stage except Contracting; using it is what made Q3 look like 1.3x coverage when
+// our own history says 0.36x.
+//
+// Measured 2026-07-28 over 81 snapshots (Feb–Jul 2026). `raw` is what the data said;
+// `p` adds a small uplift at the thin stages because ~6 months of history right-censors
+// deals still open. Contracting is smoothed off 11/11 — too small a sample to bet 100%.
+// `cycleDays` is the median days from first seen at that stage to Win, same window.
+//
+// RECOMPUTE MONTHLY: `node scripts/calibrate.mjs` (writes a report; update these by hand
+// so a bad month can't silently move the forecast).
+export const CALIBRATION = {
+  measuredOn: '2026-07-28',
+  window: 'Feb–Jul 2026, 81 snapshots',
+  stage: {
+    1: { p: 0.02, raw: 0.012, n: 351, label: 'Intro' },
+    2: { p: 0.03, raw: 0.006, n: 279, label: 'Qualification' },
+    3: { p: 0.06, raw: 0.034, n: 102, label: 'Capability' },
+    4: { p: 0.14, raw: 0.121, n: 74, label: 'Problem Scoping' },
+    5: { p: 0.25, raw: 0.200, n: 51, label: 'Commercial Proposal' },
+    6: { p: 0.88, raw: 1.000, n: 15, label: 'Contracting' },
+  } as Record<number, { p: number; raw: number; n: number; label: string }>,
+  cycleDays: { 1: 200, 2: 180, 3: 145, 4: 73, 5: 65, 6: 43 } as Record<number, number>,
+};
+
 export interface DealRow {
   item_id?: string | null;
   stage?: string;
@@ -257,6 +285,37 @@ export function buildQuarterLabels(referenceDate: string | null | undefined): { 
   return { current: fiscalQText(cur), next: fiscalQText(nxt) };
 }
 
+/** N consecutive fiscal quarter labels starting at the one containing `referenceDate`. */
+export function quarterSequence(referenceDate: string | null | undefined, count: number): string[] {
+  const d = referenceDate ? (parseIsoDate(referenceDate) ?? new Date()) : new Date();
+  let { quarter, fiscalYear } = fiscalQInfo(d);
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(fiscalQText({ quarter, fiscalYear }));
+    if (quarter < 4) quarter += 1;
+    else { quarter = 1; fiscalYear += 1; }
+  }
+  return out;
+}
+
+/** First and last calendar day of a fiscal quarter label (FY runs Apr–Mar). */
+export function quarterBounds(qLabel: string): { start: Date; end: Date } | null {
+  const info = quarterLabelToInfo(qLabel);
+  if (!info) return null;
+  // Q1 starts in April of (fiscalYear - 1)
+  const startMonth = (info.quarter - 1) * 3 + 3; // 0-based: Q1 -> 3 (April)
+  const year = info.fiscalYear - 1 + (startMonth > 11 ? 1 : 0);
+  const m = startMonth % 12;
+  const start = new Date(year, m, 1, 12, 0, 0);
+  const end = new Date(start.getFullYear(), start.getMonth() + 3, 0, 12, 0, 0);
+  return { start, end };
+}
+
+/** Fiscal quarter label containing a date — exported for the forecast timing model. */
+export function quarterForDate(date: Date): string {
+  return quarterLabelForDate(date);
+}
+
 // ─── stage helpers ────────────────────────────────────────────────────────────
 
 function normalizeStage(stage: string): string {
@@ -339,7 +398,7 @@ function leadershipDealSize(row: DealRow): number {
 
 // ─── quarter pacing ──────────────────────────────────────────────────────────
 
-function quarterPacedAmount(row: DealRow, qKey: string, amountOverride?: number): number {
+export function quarterPacedAmount(row: DealRow, qKey: string, amountOverride?: number): number {
   const start = parseIsoDate(row.start_date);
   const total = Number(amountOverride ?? dealSizeValue(row.deal_size));
   if (!start || !isFinite(total) || total <= 0) return 0;
