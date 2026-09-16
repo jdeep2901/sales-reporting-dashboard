@@ -215,7 +215,7 @@ function DealLedger({
 export function RevenueForecast() {
   const { credentials } = useAuth();
   const { industry, setIndustry } = useIndustry();
-  const [basis, setBasis] = useSessionState<Basis>('fc_basis', 'bookings');
+  const [basis, setBasis] = useSessionState<Basis>('fc_basis', 'recognized');
   const [qIndex, setQIndex] = useSessionState<number>('fc_quarter_index', 0);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -329,6 +329,17 @@ export function RevenueForecast() {
           </label>
         </div>
       </div>
+
+      {basis === 'bookings' && (
+        <div
+          className="text-12 px-[14px] py-2.5 rounded-md"
+          style={{ background: 'var(--status-amber-bg)', color: 'var(--status-amber-text)', border: '0.5px solid var(--border-hairline)' }}
+        >
+          Targets are set on recognized revenue. The bookings basis credits full contract value in the quarter a deal
+          starts, so percentages of target here read high and are directional, not a like-for-like call against plan.
+          Switch to recognized revenue for the number that reconciles to finance.
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -574,6 +585,11 @@ export function RevenueForecast() {
             <span className="text-text-primary">The gap splits two ways.</span> Conversion gap means the pipeline exists and has to
             convert. Coverage gap means no pipeline exists for it and new deals have to be sourced, which only works if they can clear a
             full sales cycle before the quarter closes.
+          </li>
+          <li>
+            <span className="text-text-primary">Basis matters.</span> Quarter targets are recognized-revenue targets, which is the
+            basis every other screen and the finance reconciliation use. Bookings answers a different question — how much contract
+            value we signed — and will read higher for any multi-quarter deal.
           </li>
           <li>
             <span className="text-text-primary">Prologis and Gilead are excluded</span> as ongoing delivery, matching every other screen.
