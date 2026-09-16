@@ -68,54 +68,59 @@ function hygieneTone(x: number): string {
 // ── the call: three bands against target ────────────────────────────────────
 function BandChart({ q }: { q: { target: number; booked: number; commit: number; base: number; upside: number } }) {
   const scale = Math.max(q.target, q.upside, q.base, q.commit, 1) * 1.06;
-  const pos = (v: number) => `${Math.min(100, (v / scale) * 100)}%`;
+  const pct = (v: number) => Math.min(100, (v / scale) * 100);
 
-  const bands: Array<{ label: string; value: number; hint: string; fill: string }> = [
-    { label: 'Commit', value: q.commit, hint: 'late stage with a booked next step', fill: 'rgba(99,91,255,0.85)' },
-    { label: 'Base case', value: q.base, hint: 'booked + probability-weighted pipeline', fill: 'rgba(99,91,255,0.5)' },
-    { label: 'Upside', value: q.upside, hint: 'every late-stage deal lands', fill: 'rgba(99,91,255,0.22)' },
+  const bands: Array<{ label: string; value: number; fill: string }> = [
+    { label: 'Commit', value: q.commit, fill: 'rgba(99,91,255,0.85)' },
+    { label: 'Base case', value: q.base, fill: 'rgba(99,91,255,0.5)' },
+    { label: 'Upside', value: q.upside, fill: 'rgba(99,91,255,0.22)' },
   ];
 
   return (
-    <div className="relative">
-      {/* target marker */}
-      <div
-        className="absolute top-0 bottom-[18px] z-10 pointer-events-none"
-        style={{ left: pos(q.target), borderLeft: '1px dashed var(--text-primary)' }}
-      />
-      <div className="flex flex-col gap-2.5">
-        {bands.map((b) => (
-          <div key={b.label} className="flex items-center gap-3">
-            <div className="w-[76px] shrink-0">
-              <div className="text-12 text-text-secondary">{b.label}</div>
-            </div>
-            <div className="flex-1 h-[22px] rounded-sm relative" style={{ background: 'var(--bg-surface)' }}>
-              <div className="absolute inset-y-0 left-0 rounded-sm" style={{ width: pos(b.value), background: b.fill }} />
-              {/* booked portion, always the darkest leading segment */}
+    <div>
+      <div className="grid items-center gap-x-3 gap-y-2.5" style={{ gridTemplateColumns: '76px 1fr 150px' }}>
+        {/* target marker — confined to the bar track so it lines up with the bars */}
+        <div
+          className="relative pointer-events-none self-stretch"
+          style={{ gridColumn: 2, gridRow: `1 / ${bands.length + 1}`, zIndex: 5 }}
+        >
+          <div
+            className="absolute top-0 bottom-0"
+            style={{ left: `${pct(q.target)}%`, borderLeft: '1px dashed var(--text-primary)' }}
+          />
+        </div>
+
+        {bands.map((b, i) => (
+          <Fragment key={b.label}>
+            <div className="text-12 text-text-secondary" style={{ gridColumn: 1, gridRow: i + 1 }}>{b.label}</div>
+            <div
+              className="h-[22px] rounded-sm relative"
+              style={{ gridColumn: 2, gridRow: i + 1, background: 'var(--bg-surface)' }}
+            >
+              <div className="absolute inset-y-0 left-0 rounded-sm" style={{ width: `${pct(b.value)}%`, background: b.fill }} />
+              {/* booked portion — always the darkest leading segment */}
               <div
                 className="absolute inset-y-0 left-0 rounded-sm"
-                style={{ width: pos(Math.min(q.booked, b.value)), background: 'var(--text-primary)' }}
+                style={{ width: `${pct(Math.min(q.booked, b.value))}%`, background: 'var(--text-primary)' }}
               />
             </div>
-            <div className="w-[150px] shrink-0 text-right">
+            <div className="text-right" style={{ gridColumn: 3, gridRow: i + 1 }}>
               <span className="text-13 font-medium tabular-nums">{formatCurrency(b.value)}</span>
               <span className="text-11 text-text-tertiary tabular-nums ml-1.5">{pctOfTarget(b.value, q.target)}</span>
             </div>
-          </div>
+          </Fragment>
         ))}
-      </div>
-      <div className="flex items-center gap-3 mt-1.5">
-        <div className="w-[76px] shrink-0" />
-        <div className="flex-1 relative h-[14px]">
+
+        <div className="relative h-[14px]" style={{ gridColumn: 2, gridRow: bands.length + 1 }}>
           <div
             className="absolute text-11 text-text-secondary tabular-nums whitespace-nowrap"
-            style={{ left: pos(q.target), transform: 'translateX(-50%)' }}
+            style={{ left: `${pct(q.target)}%`, transform: 'translateX(-50%)' }}
           >
             target {formatCurrency(q.target)}
           </div>
         </div>
-        <div className="w-[150px] shrink-0" />
       </div>
+
       <div className="flex items-center gap-4 mt-3 text-11 text-text-tertiary">
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'var(--text-primary)' }} />
@@ -527,7 +532,11 @@ export function RevenueForecast() {
                     {r.gap > 0 ? formatCurrency(r.gap) : '—'}
                   </td>
                   <td className="py-2.5 text-right tabular-nums">
-                    {r.requiredNewPipeline > 0 ? formatCurrency(r.requiredNewPipeline) : '—'}
+                    {r.coverageGap <= 0
+                      ? <span className="text-text-tertiary">none needed</span>
+                      : r.addressable
+                        ? formatCurrency(r.requiredNewPipeline)
+                        : <span className="text-text-tertiary">cannot be sourced in time</span>}
                   </td>
                   <td className="pl-4 py-2.5 pr-[14px] text-text-secondary">
                     {r.coverageGap <= 0
