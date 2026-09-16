@@ -16,6 +16,7 @@ import { LtTrends } from '@/views/LtTrends';
 import { About } from '@/views/About';
 import { Admin } from '@/views/Admin';
 import { Forecast } from '@/views/Forecast';
+import { RevenueForecast } from '@/views/RevenueForecast';
 import { ForecastActuals } from '@/views/ForecastActuals';
 import { Partnerships } from '@/views/Partnerships';
 import { ConnectHealth } from '@/views/ConnectHealth';
@@ -39,6 +40,7 @@ const queryClient = new QueryClient({
 
 const mainTabs: TabItem[] = [
   { label: 'Pipeline health', to: '/pipeline-health' },
+  { label: 'Forecast', to: '/forecast' },
   { label: 'Deal movement', to: '/deal-movement' },
   { label: 'Intro activity', to: '/intro-activity' },
   { label: 'Operating metrics', to: '/operating-metrics' },
@@ -49,7 +51,7 @@ const mainTabs: TabItem[] = [
 
 const appendixTabs: TabItem[] = [
   { label: 'Engagement', to: '/engagement' },
-  { label: 'Forecast (EV)', to: '/forecast' },
+  { label: 'Forecast (EV, legacy)', to: '/forecast-ev' },
   { label: 'Forecast (actuals)', to: '/forecast-actuals' },
   { label: 'Partnerships', to: '/partnerships' },
   { label: 'Connect health', to: '/connect-health' },
@@ -181,7 +183,8 @@ function Shell() {
             <Route path="/admin" element={<Admin />} />
             <Route path="/user-guide" element={<UserGuide />} />
             <Route path="/engagement" element={<Engagement />} />
-            <Route path="/forecast" element={<Forecast />} />
+            <Route path="/forecast" element={<RevenueForecast />} />
+            <Route path="/forecast-ev" element={<Forecast />} />
             <Route path="/forecast-actuals" element={<ForecastActuals />} />
             <Route path="/partnerships" element={<Partnerships />} />
             <Route path="/connect-health" element={<ConnectHealth />} />
