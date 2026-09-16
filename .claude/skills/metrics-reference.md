@@ -134,3 +134,42 @@ These two panels appear in Pipeline health and are often confused:
 - Intent: per-industry diagnostic
 
 Committed-no-NMD deals appear in both — the top widget is the early warning, the expanded panel is the drill-down. The panel adds S3/S4 stale that the top widget deliberately omits (those are not committed revenue yet).
+
+---
+
+## Calibrated forecast family (Forecast screen, Sep 2026)
+
+There are now **two metric families**. Do not mix them in one number.
+
+| Family | Entry point | Powers | Stage probabilities |
+|---|---|---|---|
+| Legacy | `buildRows()` in `vpCompute.ts` | every screen except Forecast | `EMPIRICAL_STAGE` — vendor defaults, S1 8% … S6 90% |
+| Calibrated | `buildForecast()` in `forecastModel.ts` | Forecast screen | `CALIBRATION.stage` — measured P(win \| ever reached stage), S1 2% … S6 88% |
+
+The legacy weights run two to four times more optimistic than our own history. They stay in place because every existing view, narrative and past email is built on them; changing them silently would break continuity with what has already been reported. New forecast work uses `buildForecast()`.
+
+**`CALIBRATION` (in `vpCompute.ts`)** carries its own provenance: `measuredOn`, `window`, and per stage `p` (bounded), `raw` (as measured), `n` (resolved deals). Regenerate with `node scripts/calibrate.mjs` monthly and update the constant in the same commit. Stage 6 shows `raw: 1.000` on n=15 — that is why `p` is bounded to 0.88 rather than taken raw.
+
+### Bands
+
+- **Base case** = booked + Σ(pWin × value). The call.
+- **Commit** = booked + face value of commit-eligible deals. Commit-eligible = stage ≥ 5, a dated next meeting inside 30 days, a non-placeholder start date, a deal size, and no budget-blocked signal.
+- **Upside** = booked + all late-stage face + weighted early stage.
+
+Commit can sit below base — it is a stricter test, not a higher band. As of Sep 2026 commit equals booked for every vertical because no late-stage deal has a future next meeting date. `commitBlockers` on each `QuarterForecast` lists what is missing.
+
+### Gap decomposition
+
+- `coverageGap` = max(0, target − upside). No pipeline exists for this; it has to be sourced.
+- `conversionGap` = gap − coverageGap. Pipeline exists and has to convert.
+- `requiredNewPipeline` = coverageGap ÷ blended win rate (floored at 5%), and is only reported when `coverageGapAddressable` — i.e. a new deal entering today could still clear a full Capability-stage cycle before quarter end.
+
+### Data-quality guards
+
+- `detectPlaceholderDates()` — any `start_date` shared by five or more open deals is a data-entry default. Roughly two thirds of open deals trip this. Such deals are timed by median stage cycle time instead of their stated date.
+- `hygieneScore()` — value-weighted across four components (real dates, next steps, alive, sized). All-or-nothing scoring reads 0% for every vertical and tells you nothing.
+- Engagement signals re-rank deals through a **mean-preserving** normalisation bounded to [0.4, 1.15] with a 0.93 cap, so a signal moves probability between deals without inflating the stage total.
+
+### Basis
+
+`Basis` is `'bookings'` (full TCV credited in the quarter the deal starts) or `'recognized'` (TCV paced across delivery months). **Quarter targets are recognized-revenue targets** — the same basis `buildRows` paces against and the finance reconciliation uses. The Forecast screen defaults to recognized and warns when bookings is selected, because bookings against a paced target reads roughly 80% high.

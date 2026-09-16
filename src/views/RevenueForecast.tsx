@@ -506,6 +506,7 @@ export function RevenueForecast() {
           <div className="text-14 font-medium text-text-primary">Three-quarter horizon</div>
           <div className="text-12 text-text-secondary mt-0.5">
             {industry === 'Overall' ? 'All verticals' : industry} · {basis === 'bookings' ? 'bookings' : 'recognized revenue'} basis.
+            {' '}New pipeline needed is sized at current win rates.
           </div>
         </div>
         <table className="w-full text-13">
@@ -547,7 +548,7 @@ export function RevenueForecast() {
                       ? <span className="text-text-tertiary">none needed</span>
                       : r.addressable
                         ? formatCurrency(r.requiredNewPipeline)
-                        : <span className="text-text-tertiary">cannot be sourced in time</span>}
+                        : <span className="text-text-tertiary">—</span>}
                   </td>
                   <td className="pl-4 py-2.5 pr-[14px] text-text-secondary">
                     {r.coverageGap <= 0
